@@ -1,0 +1,40 @@
+{
+  "name": "usertest-report-automation",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "check:golden": "tsx scripts/check-golden-sample.ts",
+    "check:stage1": "tsx --env-file=.env.local scripts/check-stage1-fewshot.ts",
+    "check:qualitative": "tsx --env-file=.env.local scripts/run-qualitative-pipeline.ts",
+    "db:migrate": "tsx --env-file=.env.local scripts/db-migrate.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.15",
+    "@ai-sdk/react": "^4.0.30",
+    "@react-pdf/renderer": "^4.5.1",
+    "@vercel/blob": "^2.6.1",
+    "ai": "^7.0.28",
+    "next": "16.2.10",
+    "p-limit": "^7.3.0",
+    "postgres": "^3.4.9",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.1",
+    "typescript": "^5"
+  }
+}

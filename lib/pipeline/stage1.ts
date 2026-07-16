@@ -1,0 +1,213 @@
+// Stage 1 — 문장/절 분리 + 극성 판정 (PRD 6.2절). 문항 1개당 1콜, 응답자 전체를 한 번에 처리한다.
+//
+// PRD 4.4절은 "generateObject + Zod 스키마"라고 표현하지만, 이 프로젝트가 쓰는 AI SDK 버전에서는
+// generateObject/streamObject가 deprecated이고 generateText({ output: Output.object(...) })가
+// 후속 API다(node_modules/ai/docs/03-ai-sdk-core/60-telemetry.mdx 참고). 강제되는 구조·의미는
+// 동일하므로 여기서는 최신 API로 구현한다.
+import { anthropic } from "@ai-sdk/anthropic";
+import { generateText, Output } from "ai";
+import { z } from "zod";
+
+const STAGE1_MODEL = process.env.ANTHROPIC_STAGE1_MODEL ?? "claude-sonnet-5";
+
+export const PolaritySchema = z.enum(["positive", "negative", "neutral"]);
+export type Polarity = z.infer<typeof PolaritySchema>;
+
+export const ClauseSchema = z.object({
+  clause: z.string().describe("원문 그대로 복사한 절/문장. 의역·축약·맞춤법 교정 금지"),
+  polarity: PolaritySchema,
+  rationale: z.string().describe("판정근거 한 줄"),
+});
+
+export const Stage1OutputSchema = z.object({
+  results: z.array(
+    z.object({
+      respondent_id: z.number(),
+      score: z.number(),
+      clauses: z.array(ClauseSchema),
+    }),
+  ),
+});
+
+export type Stage1Output = z.infer<typeof Stage1OutputSchema>;
+
+export interface Stage1Input {
+  respondent_id: number;
+  score: number;
+  reason: string;
+}
+
+// PRD 6.2절 [SYSTEM] 프롬프트 원문. 절대 의역·축약하지 않는다(4.4절: "6장의 프롬프트 내용 자체는
+// 변경 없음" — 호출 방식만 구조화 출력으로 보강).
+const STAGE1_SYSTEM_PROMPT = `당신은 사용성테스트 주관식 응답을 분석하는 리서치 애널리스트입니다.
+아래 규칙에 따라 응답자들의 (점수, 이유) 데이터를 처리하세요.
+
+# 작업 순서
+1. 각 응답자의 "이유" 텍스트를 의미 단위(절 또는 문장)로 분리합니다.
+   한 응답 안에 서로 다른 주제나 서로 다른 극성(긍정/부정/중립)의 내용이
+   섞여 있으면 반드시 분리하세요. 하나의 응답이 여러 절로 나뉘어 서로 다른
+   카테고리·극성에 배치되는 것이 정상입니다.
+2. 분리된 각 단위에 극성을 판정합니다.
+3. 판정 근거를 한 줄로 남깁니다.
+
+# 극성 판정 기준 (가장 중요한 규칙)
+- positive: 만족감, 효과 체감, 편리함 등을 진술
+- negative: 문장 안에 **구체적인 부정적 결과**가 명시됨
+  (예: 시간 손실, 오작동, 신체적·물리적 불편, 명시적 기능 결함,
+  특정 상황에서 실제로 겪은 지장)
+- neutral: 결함에 대한 구체적 서술 없이 개선 제안·선호·정보요청형
+  의견만 존재. "불편하다", "아쉽다" 같은 표현이 있어도 구체적으로
+  어떤 손해·지장이 발생했는지 서술이 없으면 neutral로 분류할 수 있습니다.
+
+**표면적 어휘만으로 판단하지 마세요.** "불편하다"라는 단어가 있다고
+자동으로 negative가 아닙니다. 문장이 서술하는 내용의 성격
+(실제로 발생한 문제 vs 단순 선호/제안/비교)을 보고 판단하세요.
+점수(score)는 텍스트만으로 판단이 정말 애매할 때만 보조적으로
+참고하고, 텍스트 내용이 명확하면 점수와 무관하게 텍스트 기준으로
+판정하세요.
+
+# Few-shot 예시
+
+## 예시 1 — 순수 긍정
+입력: score=7, reason="위 기능에 대한 불편함은 못느낌"
+출력: [{"clause": "위 기능에 대한 불편함은 못느낌", "polarity": "positive",
+        "rationale": "결함 없음을 명시적으로 진술"}]
+
+## 예시 2 — 동일 점수, 반대 극성 (점수만으로 판단하면 안 되는 이유)
+입력: score=7, reason="그립감이 떨어지며 각도를 조정 잘 해야하는 불편함"
+출력: [{"clause": "그립감이 떨어지며 각도를 조정 잘 해야하는 불편함",
+        "polarity": "negative",
+        "rationale": "신체적 불편(그립감 저하)이라는 구체적 결과가 명시됨"}]
+
+## 예시 3 — 표면적으로 비슷한 "불편하다" 표현이 다르게 분류되는 경계 사례
+입력: score=7, reason="Body Shot 할때 부위가 넓어 일시정지없이 사용되있으면
+합니다 중간에 멈추니까 불편하고 시간이 너무 걸려요 / 페이스도 일시정지
+없이 게속하는게 좋을것 같아요 / 내가 원하는곳에 조금더 하고싶은데
+모드변경을 다시 제설정해야 되어 불편합니다"
+출력: [
+  {"clause": "Body Shot 할때 부위가 넓어 일시정지없이 사용되있으면 합니다
+             중간에 멈추니까 불편하고 시간이 너무 걸려요",
+   "polarity": "negative",
+   "rationale": "시간 손실이라는 구체적 결과가 명시됨"},
+  {"clause": "페이스도 일시정지 없이 게속하는게 좋을것 같아요",
+   "polarity": "neutral",
+   "rationale": "구체적 결과 서술 없이 기능 개선 선호만 표현"},
+  {"clause": "내가 원하는곳에 조금더 하고싶은데 모드변경을 다시
+             제설정해야 되어 불편합니다",
+   "polarity": "neutral",
+   "rationale": "'불편하다'는 표현이 있으나 구체적 손실이 없고
+                재설정 절차에 대한 선호 표현에 가까움"}
+]
+
+## 예시 4 — 한 응답이 3개 극성에 걸쳐 분리되는 사례
+입력: score=4, reason="시간, 거리 등이 나와서 정말 운동 앱 같은 느낌이다.
+상자를 먹을 때 어느정도까지 가까이 가야 먹을 수 있는지 확실하지 않다.
+제한 속도가 어느정도인진 모르겠으나, 타겜에 비해 좀 느슨한 편인 거 같다."
+출력: [
+  {"clause": "시간, 거리 등이 나와서 정말 운동 앱 같은 느낌이다",
+   "polarity": "positive", "rationale": "운동 효과 체감을 긍정적으로 진술"},
+  {"clause": "상자를 먹을 때 어느정도까지 가까이 가야 먹을 수 있는지
+             확실하지 않다",
+   "polarity": "negative",
+   "rationale": "상호작용 기준 불명확이라는 구체적 사용상 문제"},
+  {"clause": "제한 속도가 어느정도인진 모르겠으나, 타겜에 비해
+             좀 느슨한 편인 거 같다",
+   "polarity": "neutral",
+   "rationale": "타 서비스와의 단순 비교·관찰이며 본인이 겪은
+                구체적 불이익 서술이 없음"}
+]
+
+# 절대 규칙
+- clause 필드는 원문을 그대로 복사하세요. 절대 의역·축약·맞춤법 교정을
+  하지 마세요. (이 값은 보고서에 실제 고객 인용문으로 그대로 실립니다.)
+- 의미 있는 내용이 없는 응답("없음", "특별히 없음", 공백 등)은
+  clauses를 빈 배열 []로 두세요.
+- 오탈자나 비문이 있어도 원문 그대로 두세요.`;
+
+function toJsonl(inputs: Stage1Input[]): string {
+  return inputs
+    .map((i) =>
+      JSON.stringify({ respondent_id: i.respondent_id, score: i.score, reason: i.reason }),
+    )
+    .join("\n");
+}
+
+export async function runStage1({
+  questionLabel,
+  inputs,
+}: {
+  questionLabel: string;
+  inputs: Stage1Input[];
+}): Promise<Stage1Output> {
+  const { output } = await generateText({
+    model: anthropic(STAGE1_MODEL),
+    system: STAGE1_SYSTEM_PROMPT,
+    prompt: `다음은 '${questionLabel}' 문항에 대한 응답자 ${inputs.length}명의 (점수, 이유) 데이터입니다.\n\n${toJsonl(inputs)}`,
+    output: Output.object({ schema: Stage1OutputSchema }),
+    // maxOutputTokens를 지정하지 않으면 SDK가 매우 큰 기본값(실측 128,000)을 잡아, 응답이
+    // 끝나기 전까지 헤더조차 안 와서 undici 기본 300초 헤더 타임아웃에 걸린다(실측 확인 —
+    // check:qualitative를 처음 돌렸을 때 HeadersTimeoutError로 재현됨). 개선아이디어(가장 긴
+    // 원문, 16,826자)까지 감안해 여유 있게 잡는다.
+    maxOutputTokens: 16000,
+    // PRD 10장: 재현성 확보를 위해 temperature=0을 요구하지만, claude-sonnet-5는 temperature
+    // 파라미터 자체를 지원하지 않아(SDK가 무시하고 경고만 남김, 실측 확인) 이 모델에서는 효과가
+    // 없다. 다른 모델로 STAGE1_MODEL을 바꿀 경우를 대비해 남겨둔다 — CLAUDE.md 참고.
+    temperature: 0, // claude-sonnet-5는 무시함 — stage1.ts의 상세 주석 참고
+  });
+
+  return output;
+}
+
+/**
+ * PRD 6.6절 — 개선아이디어(58번 컬럼) 변형: 점수 없는 자유서술 단일 문항이라 극성 판정이
+ * 필요 없다. 문장 분리만 수행한다.
+ */
+export const Stage1ImprovementOutputSchema = z.object({
+  results: z.array(
+    z.object({
+      respondent_id: z.number(),
+      clauses: z.array(
+        z.object({
+          clause: z.string().describe("원문 그대로 복사한 절/문장"),
+        }),
+      ),
+    }),
+  ),
+});
+
+export type Stage1ImprovementOutput = z.infer<typeof Stage1ImprovementOutputSchema>;
+
+const STAGE1_IMPROVEMENT_SYSTEM_PROMPT = `당신은 사용성테스트 주관식 응답을 분석하는 리서치 애널리스트입니다.
+이 문항은 점수 없이 자유서술로 개선 아이디어를 받는 질문입니다.
+극성 판정 없이, 각 응답자의 텍스트를 의미 단위(절 또는 문장)로 분리하고
+주제별로만 표시하세요. (polarity 필드는 생략합니다)
+
+# 절대 규칙
+- clause 필드는 원문을 그대로 복사하세요. 절대 의역·축약·맞춤법 교정을
+  하지 마세요. (이 값은 보고서에 실제 고객 인용문으로 그대로 실립니다.)
+- 의미 있는 내용이 없는 응답("없음", "특별히 없음", 공백 등)은
+  clauses를 빈 배열 []로 두세요.
+- 오탈자나 비문이 있어도 원문 그대로 두세요.`;
+
+export async function runStage1ImprovementIdea({
+  questionLabel,
+  inputs,
+}: {
+  questionLabel: string;
+  inputs: { respondent_id: number; reason: string }[];
+}): Promise<Stage1ImprovementOutput> {
+  const jsonl = inputs
+    .map((i) => JSON.stringify({ respondent_id: i.respondent_id, reason: i.reason }))
+    .join("\n");
+
+  const { output } = await generateText({
+    model: anthropic(STAGE1_MODEL),
+    system: STAGE1_IMPROVEMENT_SYSTEM_PROMPT,
+    prompt: `다음은 '${questionLabel}' 문항에 대한 응답자 ${inputs.length}명의 자유서술 응답입니다.\n\n${jsonl}`,
+    output: Output.object({ schema: Stage1ImprovementOutputSchema }),
+    maxOutputTokens: 16000, // 위 runStage1과 동일한 이유 — 큰 기본값이 헤더 타임아웃을 유발함
+    temperature: 0, // claude-sonnet-5는 무시함 — stage1.ts의 상세 주석 참고
+  });
+
+  return output;
+}
