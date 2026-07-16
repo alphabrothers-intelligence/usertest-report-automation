@@ -10,6 +10,7 @@
     "check:golden": "tsx scripts/check-golden-sample.ts",
     "check:stage1": "tsx --env-file=.env.local scripts/check-stage1-fewshot.ts",
     "check:qualitative": "tsx --env-file=.env.local scripts/run-qualitative-pipeline.ts",
+    "check:qualitative-fidelity": "tsx --env-file=.env.local scripts/check-qualitative-fidelity.ts",
     "db:migrate": "tsx --env-file=.env.local scripts/db-migrate.ts"
   },
   "dependencies": {

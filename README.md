@@ -37,6 +37,11 @@ npm run dev
 | `npm run check:golden` | 정량 통계 골든 회귀 테스트(리바랩스 raw data 기준 89개 값 대조) | 무료 |
 | `npm run check:stage1` | Stage1 few-shot 재현 검증 | Claude API 과금 |
 | `npm run check:qualitative` | 14문항 정성 파이프라인 전체 실행·검증 | Claude API 과금(수십 회 호출) |
+| `npm run check:qualitative-fidelity` | 극성 판정 일치율 측정(실제 보고서 인용문 기준) | Claude API 과금(약 6회 호출) |
+
+GitHub Actions(`.github/workflows/ci.yml`)가 push/PR마다 typecheck·lint·build를 돌립니다.
+`check:golden`은 raw data가 CI에 없어서 자동 실행되지 않으니, 정량 로직을 건드릴 때는 로컬에서
+직접 돌려 확인하세요.
 
 ## 골든 테스트셋
 
