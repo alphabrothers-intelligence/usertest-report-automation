@@ -98,7 +98,8 @@ export async function runStage2({
     system: STAGE2_SYSTEM_PROMPT,
     prompt: `'${questionLabel}' 문항의 ${POLARITY_KR[polarity]} 응답 ${clauses.length}건입니다.\n\n${JSON.stringify(clauses)}`,
     output: Output.object({ schema: Stage2OutputSchema }),
-    maxOutputTokens: 8000, // 큰 기본값이 헤더 타임아웃을 유발함 — stage1.ts의 상세 주석 참고
+    maxOutputTokens: 16000, // 큰 기본값이 헤더 타임아웃을 유발함 — stage1.ts의 상세 주석 참고
+    reasoning: "none", // reasoning이 토큰 예산을 먼저 소비한다 — stage1.ts의 상세 주석 참고. 절대 지우지 말 것
     temperature: 0, // claude-sonnet-5는 무시함 — stage1.ts의 상세 주석 참고
   });
 
@@ -147,7 +148,8 @@ export async function runStage2ImprovementIdea({
     system: STAGE2_IMPROVEMENT_SYSTEM_PROMPT,
     prompt: `'${questionLabel}' 문항의 개선 아이디어 응답 ${clauses.length}건입니다.\n\n${JSON.stringify(clauses)}`,
     output: Output.object({ schema: Stage2ImprovementOutputSchema }),
-    maxOutputTokens: 8000, // 큰 기본값이 헤더 타임아웃을 유발함 — stage1.ts의 상세 주석 참고
+    maxOutputTokens: 16000, // 큰 기본값이 헤더 타임아웃을 유발함 — stage1.ts의 상세 주석 참고
+    reasoning: "none", // reasoning이 토큰 예산을 먼저 소비한다 — stage1.ts의 상세 주석 참고. 절대 지우지 말 것
     temperature: 0, // claude-sonnet-5는 무시함 — stage1.ts의 상세 주석 참고
   });
 

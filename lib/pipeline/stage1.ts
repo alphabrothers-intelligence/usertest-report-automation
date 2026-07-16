@@ -146,9 +146,17 @@ export async function runStage1({
     output: Output.object({ schema: Stage1OutputSchema }),
     // maxOutputTokens를 지정하지 않으면 SDK가 매우 큰 기본값(실측 128,000)을 잡아, 응답이
     // 끝나기 전까지 헤더조차 안 와서 undici 기본 300초 헤더 타임아웃에 걸린다(실측 확인 —
-    // check:qualitative를 처음 돌렸을 때 HeadersTimeoutError로 재현됨). 개선아이디어(가장 긴
-    // 원문, 16,826자)까지 감안해 여유 있게 잡는다.
-    maxOutputTokens: 16000,
+    // check:qualitative를 처음 돌렸을 때 HeadersTimeoutError로 재현됨). 100명 전체를 한 번에
+    // 처리하는 가장 큰 문항 기준으로 32000까지 올려야 finishReason이 "length"(중간에 잘림)가
+    // 아니라 "stop"으로 끝난다(실측 확인, 2026-07-16 — check:category-coverage 실패로 발견).
+    maxOutputTokens: 32000,
+    // **claude-sonnet-5는 reasoning(내부 사고)이 기본값(provider-default)으로 켜져 있고,
+    // reasoning 토큰이 maxOutputTokens 예산을 먼저 소비한다.** 이 문항 하나만 재현했을 때
+    // reasoning을 안 끄면 16000토큰을 전부 써버리고도 응답자 1명분(371자)만 출력하고 잘렸다 —
+    // 끄니 같은 예산으로 응답자 100명 전체(22000자+)를 다 처리했다. Stage1/Stage2는 few-shot
+    // 예시로 규칙이 이미 명시된 분류·추출 작업이라 깊은 추론이 필요 없다 — **이 옵션을 절대
+    // 지우지 말 것.** 지우면 다시 대용량 문항에서 잘림/타임아웃이 재현된다.
+    reasoning: "none",
     // PRD 10장: 재현성 확보를 위해 temperature=0을 요구하지만, claude-sonnet-5는 temperature
     // 파라미터 자체를 지원하지 않아(SDK가 무시하고 경고만 남김, 실측 확인) 이 모델에서는 효과가
     // 없다. 다른 모델로 STAGE1_MODEL을 바꿀 경우를 대비해 남겨둔다 — CLAUDE.md 참고.
@@ -205,7 +213,8 @@ export async function runStage1ImprovementIdea({
     system: STAGE1_IMPROVEMENT_SYSTEM_PROMPT,
     prompt: `다음은 '${questionLabel}' 문항에 대한 응답자 ${inputs.length}명의 자유서술 응답입니다.\n\n${jsonl}`,
     output: Output.object({ schema: Stage1ImprovementOutputSchema }),
-    maxOutputTokens: 16000, // 위 runStage1과 동일한 이유 — 큰 기본값이 헤더 타임아웃을 유발함
+    maxOutputTokens: 32000, // 위 runStage1과 동일한 이유
+    reasoning: "none", // 위 runStage1과 동일한 이유 — 절대 지우지 말 것
     temperature: 0, // claude-sonnet-5는 무시함 — stage1.ts의 상세 주석 참고
   });
 
