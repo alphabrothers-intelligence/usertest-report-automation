@@ -141,7 +141,20 @@ export async function runStage1({
 }): Promise<Stage1Output> {
   const { output } = await generateText({
     model: anthropic(STAGE1_MODEL),
-    system: STAGE1_SYSTEM_PROMPT,
+    // 표준 문항(6+4+1+1+1=13개)마다 이 함수가 호출되는데 시스템 프롬프트(few-shot 포함)가
+    // 매번 동일하다. **이 AI SDK 버전은 `system` 단축 파라미터를 지원하지 않는다** — 넣으면
+    // "System messages are not allowed in the prompt or messages fields. Use the instructions
+    // option instead."로 즉시 에러가 난다(실측 확인, 2026-07-16). `@ai-sdk/anthropic`의 캐싱
+    // 문서 예제(messages 배열에 role:"system")는 이 AI SDK 코어 버전 기준 최신이 아니다 —
+    // node_modules/ai/docs/02-foundations/03-prompts.mdx "Provider Options > Message Level"
+    // 안내대로 `instructions` 옵션에 객체 형태로 providerOptions를 붙여야 한다. ttl을 1h로 잡은
+    // 이유: 파이프라인 1회 실행이 실측 900초+ 걸릴 수 있어(check:category-coverage) 기본 5분
+    // TTL로는 뒷문항이 캐시 만료 후 호출될 수 있다.
+    instructions: {
+      role: "system",
+      content: STAGE1_SYSTEM_PROMPT,
+      providerOptions: { anthropic: { cacheControl: { type: "ephemeral", ttl: "1h" } } },
+    },
     prompt: `다음은 '${questionLabel}' 문항에 대한 응답자 ${inputs.length}명의 (점수, 이유) 데이터입니다.\n\n${toJsonl(inputs)}`,
     output: Output.object({ schema: Stage1OutputSchema }),
     // maxOutputTokens를 지정하지 않으면 SDK가 매우 큰 기본값(실측 128,000)을 잡아, 응답이

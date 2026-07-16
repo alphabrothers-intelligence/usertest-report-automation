@@ -121,6 +121,33 @@
   판정 일치율 기준(긍정 vs 나머지 90%+, 부정 vs 중립 75%+)을 실측 검증할 때 이 비율을
   참고하되, 위 "골든 테스트셋" 절의 원칙대로 **exact-match를 강제하는 골든 체크로 만들지는
   말 것** — 카테고리·인사이트는 사람이 다듬는 영역이라 정량 체크와 검증 강도가 다르다.
+- **`claude-sonnet-5`는 기본적으로 reasoning(내부 사고)이 켜져 있고, reasoning 토큰이
+  `maxOutputTokens` 예산을 먼저 소비한다.** 100명 전체를 한 번에 처리하는 큰 문항에서 이걸
+  모르고 `maxOutputTokens: 16000`만 주면, 토큰 예산을 거의 다 "생각"에 써버리고 실제 응답은
+  응답자 1명분(371자)만 나오다 잘린다(`NoOutputGeneratedError`/`finishReason:"length"`로
+  재현됨, 2026-07-16). `stage1.ts`/`stage2.ts`의 모든 `generateText` 호출에 반드시
+  `reasoning: "none"`(같은 예산으로 100명 전체 처리 가능해짐, 실측 확인)과 충분한
+  `maxOutputTokens`(Stage1 32000 / Stage2 16000)를 같이 준다 — **`reasoning: "none"`을
+  지우지 말 것**. 이 fix 이후 `check:qualitative-fidelity`로 재검증한 결과 극성 판정 정확도가
+  오히려 개선됐다(긍정 95.8%→100%, 부정/중립 71.4%→85.7%) — Stage1/2는 few-shot으로 규칙이 이미
+  명시된 분류·추출 작업이라 별도 reasoning이 불필요하고, 꺼두는 게 (예산을 다 뺏기지 않으므로)
+  오히려 결과 품질에 유리하다.
+- **프롬프트 캐싱**: Stage1/Stage2의 시스템 프롬프트(few-shot 포함)는 표준 문항마다 동일한
+  텍스트가 반복 전송된다(Stage1은 문항당 1회 = 최대 13회, Stage2는 문항×극성당 1회 = 최대
+  39회). **이 프로젝트가 쓰는 AI SDK 버전은 `generateText`의 `system` 단축 파라미터를 아예
+  지원하지 않는다** — 넣으면 "System messages are not allowed in the prompt or messages
+  fields. Use the instructions option instead."로 즉시 에러가 난다(실측 확인, 2026-07-16).
+  `@ai-sdk/anthropic`의 캐싱 문서(`node_modules/@ai-sdk/anthropic/docs/05-anthropic.mdx`)가
+  보여주는 "messages 배열에 role:\"system\"" 예제도 이 AI SDK 코어 버전 기준으로는 틀렸다 —
+  실제로는 `node_modules/ai/docs/02-foundations/03-prompts.mdx`의 "Provider Options >
+  Message Level" 안내대로 `instructions: { role: "system", content, providerOptions:
+  { anthropic: { cacheControl: { type: "ephemeral", ttl: "1h" } } } }` 형태로 줘야 한다.
+  ttl을 기본값(5분)이 아니라 1h로 잡은 이유는 파이프라인 1회 실행이 실측 900초+ 걸릴 수 있어서
+  (`check:category-coverage`), 5분 TTL이면 뒤쪽 문항이 캐시가 만료된 뒤 호출될 수 있기 때문.
+  최소 작업 스크립트로 직접 검증(2026-07-16): 동일 시스템 프롬프트로 2회 연속 호출 시 1차는
+  `cacheWriteTokens`, 2차는 `cacheReadTokens`가 찍히는 것을 확인했다. 개선아이디어 변형
+  (`runStage1ImprovementIdea`/`runStage2ImprovementIdea`)은 문항당 1회만 호출되므로(58번
+  컬럼 단일 문항) 캐싱 이득이 없어 일부러 적용하지 않았다.
 
 ## DB 스키마 + 체크포인트 A/B (`lib/db/`, `components/PolarityReview.tsx`,
 ## `components/InsightEditor.tsx`, Phase 5)

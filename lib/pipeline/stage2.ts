@@ -95,7 +95,14 @@ export async function runStage2({
 }): Promise<Stage2Output> {
   const { output } = await generateText({
     model: anthropic(STAGE2_MODEL),
-    system: STAGE2_SYSTEM_PROMPT,
+    // 표준 문항 13개 × 극성 최대 3개 = 최대 39회 호출되는데 시스템 프롬프트가 매번 동일하다.
+    // `instructions` 옵션 사용 이유는 stage1.ts의 상세 주석 참고(`system` 단축 파라미터는 이
+    // AI SDK 버전에서 아예 지원 안 함 — 실측 확인).
+    instructions: {
+      role: "system",
+      content: STAGE2_SYSTEM_PROMPT,
+      providerOptions: { anthropic: { cacheControl: { type: "ephemeral", ttl: "1h" } } },
+    },
     prompt: `'${questionLabel}' 문항의 ${POLARITY_KR[polarity]} 응답 ${clauses.length}건입니다.\n\n${JSON.stringify(clauses)}`,
     output: Output.object({ schema: Stage2OutputSchema }),
     maxOutputTokens: 16000, // 큰 기본값이 헤더 타임아웃을 유발함 — stage1.ts의 상세 주석 참고
