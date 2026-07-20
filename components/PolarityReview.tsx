@@ -47,10 +47,10 @@ function ReviewRow({ item, onDone }: { item: PolarityReviewItem; onDone: (id: st
   }
 
   return (
-    <div className="rounded-md border border-zinc-200 p-3 text-sm dark:border-zinc-800">
-      <p className="text-xs text-zinc-500">{item.question_label} · 응답자 #{item.respondent_id}</p>
-      <p className="mt-1">&ldquo;{item.clause}&rdquo;</p>
-      <p className="mt-1 text-xs text-zinc-500">
+    <div className="rounded-md border border-zinc-200 p-4 text-base dark:border-zinc-800">
+      <p className="text-sm text-zinc-500">{item.question_label} · 응답자 #{item.respondent_id}</p>
+      <p className="mt-1.5">&ldquo;{item.clause}&rdquo;</p>
+      <p className="mt-1 text-sm text-zinc-500">
         현재 판정: <span className="font-medium">{POLARITY_LABEL[item.polarity]}</span> — {item.rationale}
       </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -58,7 +58,7 @@ function ReviewRow({ item, onDone }: { item: PolarityReviewItem; onDone: (id: st
           type="button"
           disabled={busy}
           onClick={() => handle("approve")}
-          className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-50 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+          className="rounded-full bg-zinc-900 px-3 py-1 text-sm font-medium text-zinc-50 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
         >
           승인
         </button>
@@ -70,13 +70,13 @@ function ReviewRow({ item, onDone }: { item: PolarityReviewItem; onDone: (id: st
               type="button"
               disabled={busy}
               onClick={() => handle(p)}
-              className="rounded-full border border-zinc-300 px-3 py-1 text-xs text-zinc-700 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200"
+              className="rounded-full border border-zinc-300 px-3 py-1 text-sm text-zinc-700 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200"
             >
               {POLARITY_LABEL[p]}로 변경
             </button>
           ))}
       </div>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
     </div>
   );
 }
@@ -93,11 +93,11 @@ export function PolarityReview({ items }: { items: PolarityReviewItem[] }) {
   }
 
   return (
-    <div className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-      <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
+    <div className="w-full rounded-lg border border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <p className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
         체크포인트 A — 극성 판정 검수 ({remaining.length}건)
       </p>
-      <div className="mt-2 space-y-2">
+      <div className="mt-3 space-y-3">
         {remaining.map((item) => (
           <ReviewRow
             key={item.id}
