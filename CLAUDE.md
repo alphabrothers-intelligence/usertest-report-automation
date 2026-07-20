@@ -253,13 +253,20 @@
   2026-07-20). **"주요 기능 목록"(기능명+설명+이미지 리스트, 5.0절 세 번째 필드)은 이미지 첨부
   흐름까지 필요해서 범위에서 뺐다** — 텍스트 필드 10개만 지원. PPT(.pptx) 첨부 지원도 아직 없다
   (PDF/워드/텍스트만) — 둘 다 알려진 갭.
-- **`assembleReport`의 최종 PDF 업로드(`put(..., { access: "public" })`)가 지금 구조에서는
-  실패한다** — Blob 스토어가 private 전용으로 설정된 이후(2026-07-19, FileUploadButton 참고)
-  같은 스토어에 public 블롭을 못 만든다. raw data 업로드는 `access:"private"`로 고쳤지만
-  이 부분은 아직 안 고쳤다. private로 바꾸면 채팅에 주는 링크를 사용자가 그냥 클릭해서 열 수
-  없다는 문제가 생기므로(private 블롭은 토큰 인증 필요), 단순 access 변경이 아니라 서버가
-  토큰으로 대신 읽어서 스트리밍해주는 프록시 다운로드 라우트(`/api/download/[id]`류)가
-  필요하다 — PDF 조립 단계까지 실사용 테스트할 때 반드시 먼저 고칠 것.
+- **최종 PDF 다운로드 링크 버그(2026-07-19 발견)는 2026-07-20 수정 완료.** Blob 스토어가
+  private 전용이라 `assembleReport`의 `put(..., { access: "public" })`이 실패했던 문제를,
+  ① 업로드 자체를 `access: "private"`로 바꾸고 ② `app/api/download/route.ts` 프록시 라우트를
+  새로 만들어 해결했다. 이 라우트는 `?u=<블롭 URL>&name=<파일명>` 쿼리를 받아 서버가
+  `BLOB_READ_WRITE_TOKEN`으로 대신 읽어서 스트리밍해주므로, 사용자에게 주는 링크는 원본 private
+  블롭 URL이 아니라 이 프록시 URL이다(`assembleReport`가 반환하는 `pdfUrl`이 이미 프록시
+  URL 형태). **`u` 파라미터는 반드시 `*.private.blob.vercel-storage.com` 호스트인지 검증한다**
+  — 이 라우트가 임의 URL을 대신 가져와주는 오픈 프록시가 되는 걸 막기 위한 안전장치이니 이
+  검증을 지우지 말 것. 실측 검증(2026-07-20): 실제 DB의 report(정성 분석 없이 quant_stats만
+  있는 상태 — 체크포인트 대상이 0건이라 게이트를 그대로 통과함을 활용해 무료로 테스트)로
+  `assembleReport`를 직접 호출해 진짜 10페이지 PDF를 생성하고, 반환된 프록시 URL을 실제
+  로컬 서버에 curl로 요청해 원본과 동일한 PDF 바이트가 내려오는 것과 Ⅰ장 10개 필드가 전부
+  올바르게 렌더링되는 것을 확인했다. 허용되지 않은 호스트·누락된 파라미터에 대한 400 거부도
+  같이 검증했다.
 
 ## CI + 정성 파이프라인 fidelity 측정 (`.github/workflows/ci.yml`,
 ## `scripts/check-qualitative-fidelity.ts`, Phase 8)
@@ -300,8 +307,9 @@
 - 알려진 기능 갭: 제품 정보 중 "주요 기능 목록"(기능명+설명+이미지, 5.0절)은 텍스트 필드만
   지원하고 이미지 첨부 흐름은 없음, 기업소개 파일에서 PPT(.pptx)는 아직 지원 안 함(PDF/워드/
   텍스트만), Tier 2/3 입력 경로(구조화된 요약본·자유서술 요약, 5.2·5.3절 — v1은 Tier 1 raw
-  data 경로만 구현), 자유형식 요약 추출용 체크포인트 0(7.0절), **최종 PDF 다운로드가 private
-  Blob 스토어에서 깨지는 버그**(위 PDF 조립 절 참고 — 실사용 전 반드시 고칠 것).
+  data 경로만 구현), 자유형식 요약 추출용 체크포인트 0(7.0절). (최종 PDF 다운로드가 private
+  Blob 스토어에서 깨지던 버그는 2026-07-20 프록시 다운로드 라우트로 수정 완료 — 위 PDF 조립
+  절 참고.)
 - `.env.local`은 각자 로컬에 생성해야 한다(`.env.local.example` 참고). `ANTHROPIC_API_KEY`
   없이는 `/api/chat`이 스트리밍 에러를 반환하고, `DATABASE_URL` 없이는 `computeQuantStats`
   이후 모든 도구가 실패한다(정상 동작 — 서버가 죽지는 않음). `check:stage1`·`check:qualitative`도
