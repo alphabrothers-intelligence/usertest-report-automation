@@ -333,6 +333,68 @@
   Mode 때문이라고 오판할 뻔했다). **이런 종류의 "반복 호출·중복 렌더링" 버그를 조사할 때는
   반드시 프로덕션 빌드로 재현되는지부터 확인할 것.**
 
+## 파일 업로드 신뢰성 + 채팅 입력창 개선 (`lib/blob/getWithRetry.ts`, `components/FileUploadButton.tsx`,
+## `app/page.tsx`, `components/ChatMarkdown.tsx`, 2026-07-20)
+
+- **"파일을 찾을 수 없음" 에러 — 진짜 원인은 `onUploadCompleted` 콜백(중요)**: 담당자가 실사용
+  중 raw data 업로드 직후 validateInput이 이 에러로 실패하는 걸 실제로 겪었다(스크린샷으로 재현
+  확인). 처음에는 `@vercel/blob`의 `get()`이 404를 예외가 아니라 `null`로 반환하는 걸 보고
+  (`node_modules/@vercel/blob/dist/index.js` 확인) 업로드 직후 곧바로 읽을 때 생기는 전파 지연
+  (eventual consistency)이라 판단해 `lib/blob/getWithRetry.ts`로 재시도(최대 4회, ~6초)를
+  추가했는데 — **여전히 재현됐다.** 서버 로그에 재시도 5번 전부 MISS가 찍히는 걸 보고서야
+  타이밍 문제가 아니라는 게 확실해졌다. 직접 진단 스크립트로 서버사이드 `put()` → 즉시 `get()`을
+  해보니 100% 즉시 성공했는데, 앱이 실제로 쓰는 **클라이언트 업로드 토큰 방식**(브라우저가
+  `@vercel/blob/client`의 `upload()`로 직접 Blob에 쓰고, `app/api/upload/route.ts`의
+  `handleUpload`가 완료 후 `onUploadCompleted` 콜백을 받는 구조)만 재현이 됐다. 로컬 dev
+  (`localhost:3000`)는 외부에서 도달 가능한 URL이 없어서 "onUploadCompleted provided but no
+  callbackUrl could be determined" 경고가 매 업로드마다 찍혔는데, **이 콜백이 도달하지 못하면
+  private 블롭이 완전히 커밋되지 않는 것으로 보인다** — `onUploadCompleted`를 아예 제거하니
+  (원래 내용도 빈 함수였다 — 체크포인트 상태 저장은 `lib/db/reports.ts`가 무관하게 처리) 같은
+  파일로 즉시(`attempt=0 hit`, 재시도 0회) 성공했다. **`app/api/upload/route.ts`에
+  `onUploadCompleted`를 다시 추가하지 말 것** — 뭔가를 하고 싶어지면(예: 업로드 완료 시점에
+  DB 기록) 콜백 대신 클라이언트가 업로드 성공 후 별도로 서버를 호출하는 방식을 쓸 것. 이 사건은
+  **"에러 메시지가 그럴듯해 보이는 첫 가설(eventual consistency)에 안주하지 말고, 재시도를
+  걸어도 여전히 실패하면 즉시 다음 가설로 넘어가 직접 진단 스크립트로 격리해봐야 한다"**는
+  교훈으로 남긴다 — 재시도 자체는 틀린 처방이 아니었지만(실제로 순수 타이밍 이슈에 대한 안전망
+  가치는 있다) 근본 원인이 아니었다.
+- **Blob 404 재시도 (`lib/blob/getWithRetry.ts`)**: 위 근본 원인과는 별개로, 업로드 직후 곧바로
+  읽는 경로는 여전히 이론상 진짜 eventual-consistency 타이밍 이슈에 노출될 수 있어 안전망으로
+  남겨뒀다. 최대 4회(400ms~3.2s 지수 백오프, 총 ~6초)까지 재시도한 뒤에도 안 되면 에러로 취급한다.
+  `lib/walla/loadFromUrl.ts`(raw data), `lib/productInfo/extractText.ts`(기업소개 파일),
+  `app/api/download/route.ts`(완성된 PDF) 세 곳 모두 이 공유 헬퍼를 쓴다 — 셋 다 "방금
+  업로드/생성된 blob을 바로 읽는다"는 같은 위험 패턴이기 때문.
+- **다중 파일 첨부**: `FileUploadButton`이 `<input multiple>`로 여러 파일을 한 번에 업로드하고
+  (병렬 `Promise.all`), `app/page.tsx`의 `attachedFiles`가 배열로 바뀌었다 — raw data 파일과
+  기업소개 파일을 한 메시지에 같이 첨부하는 흐름을 지원한다.
+- **업로드 도중 전송 막기(중요)**: 다중 첨부를 만들고 나서 실측으로 발견한 문제 — 파일마다
+  업로드 완료 시점이 다른데(작은 파일이 먼저 끝남), 전송 버튼이 "아직 업로드 중인 파일이
+  있다"를 몰라서 큰 파일이 채 안 끝났는데 전송하면 그 파일이 통째로 메시지에서 빠진 채 나가는
+  게 재현됐다. `FileUploadButton`이 `onUploadingChange` 콜백으로 업로드 상태를 부모에 올리고,
+  `app/page.tsx`가 업로드 중에는 전송 버튼을 비활성화하고 "파일 업로드 중..." 표시를 띄운다.
+- **입력창을 `<input>`에서 `<textarea>`로 교체(중요, 근본 원인)**: 사용자 피드백 중
+  "여러 줄로 붙여넣은 긴 요구사항이 화면을 다 채운다, Claude처럼 접어달라"를 처리하려고
+  긴 사용자 메시지 접기(`CollapsibleChatMarkdown`)를 만들었는데, Playwright로 검증하다가
+  접기가 전혀 작동하지 않는 게 발견됐다. 원인은 HTML 스펙의 "value sanitization algorithm"—
+  `<input type="text">`는 값에 들어있는 개행 문자를 렌더링 이전에 자동으로 제거한다. 즉 기존
+  입력창은 애초에 여러 줄 텍스트를 보낼 수 없는 구조였다(사용자가 여러 줄을 붙여넣어도 한 줄로
+  뭉개져서 전송됨) — 접기 기능 이전에 이미 있던, 별개의 잠재 버그였다. `<textarea>`로 바꾸고
+  Enter=전송/Shift+Enter=줄바꿈(Claude/ChatGPT 컨벤션)으로 만들었고, 입력 길이에 따라
+  높이가 자동으로 늘어나다 200px에서 스크롤되게 했다(`onChange`에서 `scrollHeight` 기반으로
+  인라인 `style.height` 조정, 전송 시 `ref`로 리셋).
+- **사용자 말풍선에서 원문 URL 숨기기**: `buildMessageText`가 모델이 fileUrl을 읽을 수 있도록
+  `[업로드된 파일]\n파일명: ...\nURL: ...` 블록을 채팅 텍스트에 그대로 심어 보내는데, 기존에는
+  이 블록이 화면에도 원문 그대로(긴 blob URL 포함) 다시 보였다. 모델에게 보내는 실제 텍스트는
+  그대로 두고(도구 호출에 URL이 필요하므로), **렌더링 직전에만** `extractFileBlocks()`로 파일
+  블록을 분리해 작은 칩(📎 파일명)으로 보여주고, 나머지 사용자 타이핑 텍스트만
+  `CollapsibleChatMarkdown`으로 표시한다(`app/page.tsx`). 이 접기는 사용자 메시지에만
+  적용한다 — 어시스턴트 텍스트는 카드 요약을 우선하는 기존 원칙 때문에 대체로 짧다.
+- 다중 파일 첨부·업로드 중 전송 차단·textarea 전환·URL 숨김/긴 메시지 접기는 프로덕션 빌드
+  (`next build && next start`) 대상 Playwright 라이브 테스트로 검증했다(다중 파일 첨부 →
+  업로드 완료까지 대기 → 긴 텍스트 전송 → 칩 2개 노출·원문 URL 비노출·6줄 초과 시 "더보기"
+  접힘·펼치면 전체 노출, 2026-07-20). `onUploadCompleted` 제거는 dev 서버(`next dev`)에서
+  서버 로그의 재시도 attempt별 hit/miss를 직접 찍어보며 확정했다 — 재시도 로직만으로는 안 되고
+  콜백 제거 후에야 `attempt=0 hit`으로 즉시 성공하는 걸 확인했다.
+
 ## 현재 구현 범위 (Phase 7까지 — v1 로드맵 핵심 기능 전체 + Phase 8 일부)
 
 - 채팅 셸 + raw data 업로드 + 정량 통계 + 정성 분석(14문항 병렬) + 체크포인트 A/B(극성·인사이트·

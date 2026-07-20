@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FileUploadButton, type UploadedFile } from "@/components/FileUploadButton";
 import { AttachHintBubble } from "@/components/AttachHintBubble";
 import type { QuantStats } from "@/lib/quant/compute";
@@ -14,7 +14,7 @@ import {
   type ProductInfoSavedOutput,
 } from "@/components/ProductInfoCard";
 import { ProductInfoPromptCard } from "@/components/ProductInfoPromptCard";
-import { ChatMarkdown } from "@/components/ChatMarkdown";
+import { ChatMarkdown, CollapsibleChatMarkdown } from "@/components/ChatMarkdown";
 import { PRODUCT_INFO_FIELD_LABELS, type ProductInfo } from "@/lib/productInfo/types";
 import type { PipelineResult } from "@/lib/pipeline/orchestrate";
 import { QualitativeResultsAccordion } from "@/components/QualitativeResults";
@@ -407,18 +407,43 @@ function AssembleReportCard({ state, output }: { state: string; output?: Assembl
  * 메시지를 입력해서 보낼 때 이루어진다(ChatGPT/Claude와 동일한 UX) — 사용자가 어떤 말을
  * 하든 자유롭게 대화할 수 있어야 한다는 피드백 반영. 사용자가 아무 텍스트도 안 쓰고 파일만
  * 첨부한 채 전송하면, 기존 동작과 동일하게 "검증해줘" 기본 문구를 붙여 보낸다.
+ *
+ * raw data 파일 하나 + 기업소개 파일 하나처럼 여러 개를 한 메시지에 같이 첨부할 수 있다
+ * (2026-07-20 피드백) — 모델이 fileUrl을 알아야 하므로 각 파일을 블록으로 이어붙인다.
  */
-function buildMessageText(file: UploadedFile | null, userText: string): string {
+function buildMessageText(files: UploadedFile[], userText: string): string {
   const trimmed = userText.trim();
-  if (!file) return trimmed;
-  const fileBlock = `[업로드된 파일]\n파일명: ${file.name}\nURL: ${file.url}`;
-  return trimmed ? `${fileBlock}\n\n${trimmed}` : `${fileBlock}\n\n이 raw data 파일을 검증해줘.`;
+  if (files.length === 0) return trimmed;
+  const fileBlocks = files
+    .map((f) => `[업로드된 파일]\n파일명: ${f.name}\nURL: ${f.url}`)
+    .join("\n\n");
+  return trimmed ? `${fileBlocks}\n\n${trimmed}` : `${fileBlocks}\n\n이 파일을 확인해줘.`;
+}
+
+const FILE_BLOCK_RE = /\[업로드된 파일\]\n파일명: (.+)\nURL: (\S+)\n*/g;
+
+/**
+ * buildMessageText가 채팅 텍스트에 심어 보낸 파일 블록(모델이 fileUrl을 읽는 데 필요)을
+ * 화면에는 원문 URL까지 그대로 다시 보여줄 필요가 없어서(2026-07-20 피드백 — Claude처럼
+ * 첨부는 작은 칩으로만, 사용자가 쓴 텍스트는 텍스트대로), 렌더링 직전에만 분리해낸다.
+ * 모델에게 보내는 실제 메시지 텍스트는 그대로 두고 표시만 바꾸는 것이라 안전하다.
+ */
+function extractFileBlocks(text: string): { files: UploadedFile[]; remainder: string } {
+  const files: UploadedFile[] = [];
+  const remainder = text
+    .replace(FILE_BLOCK_RE, (_match, name: string, url: string) => {
+      files.push({ name, url });
+      return "";
+    })
+    .trimStart();
+  return { files, remainder };
 }
 
 export default function Chat() {
   const [input, setInput] = useState("");
   const [showAttachHint, setShowAttachHint] = useState(true);
-  const [attachedFile, setAttachedFile] = useState<UploadedFile | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<UploadedFile[]>([]);
+  const [isUploadingFiles, setIsUploadingFiles] = useState(false);
   const { messages: rawMessages, sendMessage, status } = useChat();
   // useChat이 드물게 같은 id의 메시지를 두 번 내보내는 게 실측으로 확인됐다(React "Encountered
   // two children with the same key" 경고, 2026-07-20 라이브 테스트 — 목차 동의로 넘어가는
@@ -430,52 +455,99 @@ export default function Chat() {
 
   function handleUploaded(file: UploadedFile) {
     setShowAttachHint(false);
-    setAttachedFile(file);
+    setAttachedFiles((prev) => [...prev, file]);
+  }
+
+  function removeAttachedFile(url: string) {
+    setAttachedFiles((prev) => prev.filter((f) => f.url !== url));
+  }
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function submitComposer() {
+    // 파일이 아직 업로드 중일 때 전송하면 그 파일이 통째로 누락된 채 메시지가 나가는
+    // 문제가 실측으로 확인됐다(여러 파일을 동시 첨부하면 업로드 완료 시점이 서로 달라서
+    // 벌어짐, 2026-07-20) — 업로드 중에는 전송 자체를 막는다.
+    if (isUploadingFiles) return;
+    if (!input.trim() && attachedFiles.length === 0) return;
+    sendMessage({ text: buildMessageText(attachedFiles, input) });
+    setInput("");
+    setAttachedFiles([]);
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
   }
 
   const composerForm = (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (!input.trim() && !attachedFile) return;
-        sendMessage({ text: buildMessageText(attachedFile, input) });
-        setInput("");
-        setAttachedFile(null);
+        submitComposer();
       }}
       className="w-full max-w-4xl px-4"
     >
       <div className="rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-        {attachedFile && (
+        {attachedFiles.length > 0 && (
           <div className="flex flex-wrap gap-2 px-4 pt-3">
-            <div className="flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
-              <span aria-hidden>📎</span>
-              <span>{attachedFile.name}</span>
-              <button
-                type="button"
-                onClick={() => setAttachedFile(null)}
-                aria-label="첨부 제거"
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+            {attachedFiles.map((file) => (
+              <div
+                key={file.url}
+                className="flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
               >
-                ×
-              </button>
-            </div>
+                <span aria-hidden>📎</span>
+                <span>{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeAttachedFile(file.url)}
+                  aria-label="첨부 제거"
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           </div>
         )}
-        <input
+        <textarea
+          ref={textareaRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value);
+            // Claude/ChatGPT처럼 입력 길이에 맞춰 늘어나되 일정 높이 이상은 스크롤되게 한다.
+            e.target.style.height = "auto";
+            e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+          }}
+          onKeyDown={(e) => {
+            // Enter로 전송, Shift+Enter로 줄바꿈 — 여러 줄 요구사항을 붙여넣어도 그대로
+            // 살아있어야 "더보기" 접기가 의미가 있다(단일 줄 input은 줄바꿈을 브라우저가
+            // 자동으로 지워버려서 여러 줄 메시지 자체가 불가능했다 — 2026-07-20 실측 확인).
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submitComposer();
+            }
+          }}
           placeholder="오늘 어떤 보고서를 만들어드릴까요?"
           disabled={status !== "ready"}
-          className="w-full bg-transparent px-5 pb-2 pt-4 text-base outline-none placeholder:text-zinc-400 disabled:opacity-50 dark:placeholder:text-zinc-500"
+          rows={1}
+          className="max-h-[200px] w-full resize-none bg-transparent px-5 pb-2 pt-4 text-base outline-none placeholder:text-zinc-400 disabled:opacity-50 dark:placeholder:text-zinc-500"
         />
         <div className="flex items-center justify-between px-3 pb-3">
           <div className="relative">
             {showAttachHint && <AttachHintBubble onDismiss={() => setShowAttachHint(false)} />}
-            <FileUploadButton onUploaded={handleUploaded} disabled={status !== "ready"} />
+            <FileUploadButton
+              onUploaded={handleUploaded}
+              onUploadingChange={setIsUploadingFiles}
+              disabled={status !== "ready"}
+            />
           </div>
+          {isUploadingFiles && (
+            <span className="text-sm text-zinc-400 dark:text-zinc-500">파일 업로드 중...</span>
+          )}
           <button
             type="submit"
-            disabled={status !== "ready" || (!input.trim() && !attachedFile)}
+            disabled={
+              status !== "ready" ||
+              isUploadingFiles ||
+              (!input.trim() && attachedFiles.length === 0)
+            }
             aria-label="전송"
             className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-zinc-50 disabled:opacity-30 dark:bg-zinc-100 dark:text-zinc-900"
           >
@@ -521,7 +593,31 @@ export default function Chat() {
             >
               {message.parts.map((part, i) => {
                 if (part.type === "text") {
-                  return <ChatMarkdown key={i} text={part.text} />;
+                  if (message.role !== "user") {
+                    return <ChatMarkdown key={i} text={part.text} />;
+                  }
+                  // 사용자 메시지는 buildMessageText가 심어 보낸 [업로드된 파일] 블록(모델용)을
+                  // 그대로 다시 보여주지 않고 작은 칩으로만 표시하고, 긴 텍스트는 접어둔다
+                  // (2026-07-20 피드백 — Claude.ai 벤치마킹).
+                  const { files, remainder } = extractFileBlocks(part.text);
+                  return (
+                    <div key={i}>
+                      {files.length > 0 && (
+                        <div className="mb-1.5 flex flex-wrap gap-1.5">
+                          {files.map((f) => (
+                            <span
+                              key={f.url}
+                              className="flex items-center gap-1 rounded-full border border-current/20 bg-current/5 px-2.5 py-0.5 text-sm"
+                            >
+                              <span aria-hidden>📎</span>
+                              {f.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {remainder && <CollapsibleChatMarkdown text={remainder} />}
+                    </div>
+                  );
                 }
                 if (part.type === "tool-presentProductInfoPrompt") {
                   if (part.state !== "output-available") {

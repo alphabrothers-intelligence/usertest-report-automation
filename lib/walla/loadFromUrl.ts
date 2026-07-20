@@ -1,4 +1,4 @@
-import { get } from "@vercel/blob";
+import { getBlobWithRetry } from "@/lib/blob/getWithRetry";
 import { parseWallaWorkbook, type ParsedWorkbook } from "./parse";
 import { validateWallaHeaderRow, type ValidationResult } from "./schema";
 
@@ -16,10 +16,10 @@ export interface LoadResult {
  * raw data는 응답자 개인정보 때문에 private 스토어에 업로드된다(components/FileUploadButton.tsx
  * 참고) — private 블롭은 인증 없는 일반 fetch()로 못 읽으므로, BLOB_READ_WRITE_TOKEN으로
  * 인증하는 @vercel/blob의 get()을 반드시 써야 한다(실측 확인, 2026-07-19: 일반 fetch로는
- * 403이 남).
+ * 403이 남). 업로드 직후 읽을 때의 404 재시도는 lib/blob/getWithRetry.ts 참고.
  */
 export async function loadWallaFromUrl(fileUrl: string): Promise<LoadResult> {
-  const result = await get(fileUrl, { access: "private" });
+  const result = await getBlobWithRetry(fileUrl);
   if (!result) {
     return { ok: false, fetchError: "파일을 내려받지 못했습니다 (파일을 찾을 수 없음)" };
   }

@@ -1,5 +1,5 @@
-import { get } from "@vercel/blob";
 import { NextResponse } from "next/server";
+import { getBlobWithRetry } from "@/lib/blob/getWithRetry";
 
 // Blob 스토어가 private 전용이라(2026-07-19, FileUploadButton 참고) 완성된 PDF도 private로
 // 올라간다. private 블롭은 토큰 인증 없이 못 열리므로, 채팅에 주는 다운로드 링크는 이 라우트를
@@ -30,7 +30,7 @@ export async function GET(request: Request): Promise<NextResponse | Response> {
     return NextResponse.json({ error: "허용되지 않은 URL입니다." }, { status: 400 });
   }
 
-  const result = await get(blobUrl, { access: "private" });
+  const result = await getBlobWithRetry(blobUrl);
   if (!result) {
     return NextResponse.json({ error: "파일을 찾을 수 없습니다." }, { status: 404 });
   }

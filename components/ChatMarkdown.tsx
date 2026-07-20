@@ -3,7 +3,7 @@
 // 시스템 프롬프트)은 그대로 유지하되, 실제로 쓰이는 설명 문구(예: "다음 단계로 넘어갈까요?")는
 // 볼드 등 최소한의 서식을 지원해 Claude.ai 채팅처럼 읽기 편하게 한다. dangerouslySetInnerHTML을
 // 쓰지 않고 순수 React 노드만 만들어서 별도 sanitize 없이도 안전하다.
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 
 function renderInline(text: string, keyPrefix: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g).filter((p) => p !== "");
@@ -34,6 +34,36 @@ export function ChatMarkdown({ text }: { text: string }) {
         }
         return <div key={i}>{renderInline(line, `${i}`)}</div>;
       })}
+    </div>
+  );
+}
+
+const COLLAPSE_LINE_THRESHOLD = 6;
+
+/**
+ * 사용자가 긴 메시지를 보내면 채팅창이 그 텍스트로 다 채워져 아래 카드들을 보려면 한참
+ * 스크롤해야 하는 문제(2026-07-20 피드백, Claude.ai 벤치마킹) — 일정 줄 수를 넘으면
+ * "더보기"/"접기"로 접어둔다. 어시스턴트 메시지는 이미 카드 요약을 우선하는 원칙이 있어
+ * 대체로 짧으므로, 사용자 메시지 렌더링에만 쓴다.
+ */
+export function CollapsibleChatMarkdown({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const lines = text.split("\n");
+  const isLong = lines.length > COLLAPSE_LINE_THRESHOLD;
+  const shown = expanded || !isLong ? text : lines.slice(0, COLLAPSE_LINE_THRESHOLD).join("\n");
+
+  return (
+    <div>
+      <ChatMarkdown text={shown} />
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-sm text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+        >
+          {expanded ? "접기" : "더보기"}
+        </button>
+      )}
     </div>
   );
 }

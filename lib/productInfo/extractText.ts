@@ -1,7 +1,7 @@
 // 기업/제품 소개 파일(raw data가 아닌 별도 첨부, PDF/워드/텍스트)에서 원문 텍스트를 뽑아낸다.
 // raw data와 마찬가지로 private 스토어에 업로드되므로 인증된 get()으로 읽는다
 // (lib/walla/loadFromUrl.ts와 동일한 이유 — 실측 확인, 2026-07-19).
-import { get } from "@vercel/blob";
+import { getBlobWithRetry } from "@/lib/blob/getWithRetry";
 
 function extensionOf(fileUrl: string): string {
   const withoutQuery = fileUrl.split("?")[0];
@@ -9,7 +9,7 @@ function extensionOf(fileUrl: string): string {
 }
 
 export async function extractTextFromDocument(fileUrl: string): Promise<string> {
-  const result = await get(fileUrl, { access: "private" });
+  const result = await getBlobWithRetry(fileUrl);
   if (!result) {
     throw new Error("파일을 찾을 수 없습니다.");
   }
