@@ -36,8 +36,9 @@ export function ReportPlanCard({
     <div className="w-full rounded-lg border border-amber-200 bg-amber-50 px-5 py-4 text-base text-zinc-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-zinc-100">
       <p className="text-lg font-bold">이런 목차·섹션으로 보고서를 구성할 예정입니다</p>
       <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">
-        동의하시면 정성 분석(문항 {output.qualitativeQuestionCount}개, 시간·비용이 드는 작업)을
-        진행합니다. 다른 방향을 원하시면 버튼 대신 채팅으로 말씀해주세요.
+        동의하시면 이 목차·섹션에 들어갈 정량 통계를 raw data로 분석합니다. 정성 분석(문항{" "}
+        {output.qualitativeQuestionCount}개, 시간·비용이 드는 작업)은 정량 통계 이후에 따로
+        진행 여부를 여쭤볼게요. 다른 방향을 원하시면 버튼 대신 채팅으로 말씀해주세요.
       </p>
       <div className="mt-3 divide-y divide-amber-200/70 rounded-md border border-amber-200/70 dark:divide-amber-900/60 dark:border-amber-900/60">
         {output.sections.map((sec) => (

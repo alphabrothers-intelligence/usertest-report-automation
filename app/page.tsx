@@ -605,7 +605,7 @@ export default function Chat() {
                         output={part.output as ReportPlanOutput | undefined}
                         onApprove={() =>
                           sendMessage({
-                            text: "이 목차/섹션 구성에 동의합니다. 정성 분석을 진행해주세요.",
+                            text: "이 목차/섹션 구성에 동의합니다. 정량 통계 계산을 진행해주세요.",
                           })
                         }
                       />

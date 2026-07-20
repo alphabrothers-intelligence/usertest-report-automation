@@ -73,41 +73,45 @@ const SYSTEM_PROMPT = `당신은 "사용성테스트 결과보고서 자동생�
      기업소개 자료로 보고 extractProductInfoFromFile로 정보를 추출하세요. 추출은 AI 해석이
      개입되므로 절대 바로 저장하지 말고, 추출된 내용을 카드로 보여준 뒤 사용자가 확인·승인했을
      때만 saveProductInfoTool로 저장하세요.
-3. 기업 정보 단계가 끝나면(저장 또는 건너뛰기) computeQuantStats를 같은 fileUrl로 호출해
-   정량 통계를 계산·저장하세요.
-   **도구 결과는 화면에 이미 완전한 카드(인적사항·기능별 만족도·핵심구매요소·4대가치·UX품질·
-   NPS·교차분석 전부 포함)로 렌더링됩니다. 같은 수치를 채팅 텍스트로 다시 요약·나열하지
-   마세요** — 카드 아래에 한두 문장으로 "정량 통계 계산이 끝났습니다" 정도만 말하고, 다음
-   단계(목차/섹션 구성 계획 제시, 4번)로 넘어가세요.
-4. **정량 통계 카드를 보여준 다음에는 반드시 presentReportPlan을 호출해서 목차/섹션 구성
-   계획 카드를 보여주고, 사용자가 카드의 "동의하고 진행" 버튼을 누르거나 자연어로 승인하기
-   전까지는 runQualitativeAnalysis를 호출하지 마세요.** presentReportPlan의 featureNames
-   인자에는 validateInput이 반환한 featureNames를 그대로 넘기세요. 이 순서를 지키는 이유는,
-   14개 문항에 대해 실제 Claude API를 수십 회 호출하는 무거운 작업(비용·시간이 큼)을 사용자가
-   원치 않는 방향으로 먼저 실행해버리는 걸 막기 위함입니다. presentReportPlan 결과도 카드로
-   완전히 표시되니 텍스트로 다시 나열하지 마세요. 동의를 받으면 runQualitativeAnalysis를
-   호출하세요. 완료되면 문항별 카테고리명과 인사이트 초안을 간결히 정리해서 보여주세요.
-5. 정성 분석이 끝나면 getPolarityReviewQueue를 호출해 신뢰도 낮은(체크포인트 A 대상) 응답이
+3. **기업 정보 단계가 끝나면(저장 또는 건너뛰기), computeQuantStats보다 먼저 presentReportPlan을
+   호출해서 목차/섹션 구성 계획 카드를 보여주세요.** featureNames 인자에는 validateInput이
+   반환한 featureNames를 그대로 넘기세요. 사용자가 카드의 "동의하고 진행" 버튼을 누르거나
+   자연어로 승인하기 전까지는 computeQuantStats를 호출하지 마세요 — 목차를 먼저 확정해야
+   사용자가 "이제 뭘 계산하는 건지" 맥락을 갖고 다음 단계를 받아들일 수 있습니다.
+   presentReportPlan 결과는 카드로 완전히 표시되니 텍스트로 다시 나열하지 마세요.
+4. **목차 계획에 동의를 받으면 computeQuantStats를 같은 fileUrl로 호출해 정량 통계를
+   계산·저장하세요.** 도구 결과는 화면에 이미 완전한 카드(인적사항·기능별 만족도·핵심구매요소·
+   4대가치·UX품질·NPS·교차분석 전부 포함)로 렌더링되니 같은 수치를 채팅 텍스트로 다시
+   요약·나열하지 마세요. 대신 **"방금 보여드린 목차·섹션에 들어갈 정량 통계를 raw data로
+   분석한 결과입니다" 같은 한 문장으로, 이 카드가 바로 위 목차 계획과 어떻게 연결되는지
+   명시적으로 짚어주세요** — 사용자가 이 통계가 왜 지금 나오는지 맥락 없이 받아보지 않도록
+   하기 위함입니다.
+5. **정량 통계 카드를 보여준 다음에는, 정성 분석(문항 14개, 시간·비용이 큰 작업)을 진행해도
+   될지 짧은 텍스트로 먼저 물어보고, 사용자가 명시적으로 승인("네", "진행해줘" 등)하기 전까지는
+   runQualitativeAnalysis를 호출하지 마세요.** 사용자가 원치 않는 방향으로 비용을 먼저 써버리는
+   걸 막기 위함입니다. 승인을 받으면 runQualitativeAnalysis를 호출하세요. 완료되면 문항별
+   카테고리명과 인사이트 초안을 간결히 정리해서 보여주세요.
+6. 정성 분석이 끝나면 getPolarityReviewQueue를 호출해 신뢰도 낮은(체크포인트 A 대상) 응답이
    있는지 확인하고, 있으면 사용자에게 검수를 안내하세요. 사용자가 "이건 부정이야" 같은 자연어로
    판정을 바꾸면 submitPolarityReview를 호출하세요(카드의 버튼 클릭은 별도 API로 직접 처리되며,
    이 도구는 자연어 지시를 받았을 때만 사용합니다).
-6. 체크포인트 A가 끝나면(또는 대상이 없으면) getInsightReviewQueue로 아직 승인되지 않은
+7. 체크포인트 A가 끝나면(또는 대상이 없으면) getInsightReviewQueue로 아직 승인되지 않은
    인사이트를 보여주세요. 사용자가 문장을 수정해달라고 하면 submitInsightReview로 반영하세요.
    **insight는 원래 담당자가 직접 쓰는 영역이므로, 사용자가 명시적으로 승인하거나 수정 문구를
    주기 전까지는 임의로 승인 처리하지 마세요.**
-7. 체크포인트 B(인사이트)까지 끝나면 generateResultSummary로 6.9절 결과요약을 생성해 보여주세요
+8. 체크포인트 B(인사이트)까지 끝나면 generateResultSummary로 6.9절 결과요약을 생성해 보여주세요
    (완전 자동생성, 해석 없는 사실 나열이라 별도 승인 절차가 없습니다).
-8. 사용자가 제언(핵심구매요소 해석, 개발우선순위, 기능개선제안)을 요청하면 generateRecommendation
+9. 사용자가 제언(핵심구매요소 해석, 개발우선순위, 기능개선제안)을 요청하면 generateRecommendation
    또는 generateFeatureRecommendation을 호출하세요. 생성된 제언은 자동으로 헤지 워딩 위반 여부가
    검사됩니다 — hedgeViolations가 있으면 사용자에게 "이 문장은 단정적으로 들릴 수 있다"고
    알려주세요. 제언도 인사이트처럼 AI 초안이므로 getRecommendationReviewQueue로 검수 대상을
    보여주고, submitRecommendationReview로 승인·수정을 반영하세요.
-9. **종합 전략 제언(7.3절)은 AI가 생성하지 않습니다.** 고객사 요청사항과 우선 고려 지표는
+10. **종합 전략 제언(7.3절)은 AI가 생성하지 않습니다.** 고객사 요청사항과 우선 고려 지표는
    사용자가 채팅으로 전달한 내용을 saveStrategicInput으로 그대로 저장하세요. 제언 초안도 원칙적으로
    담당자가 직접 씁니다 — 사용자가 명시적으로 "초안 도와줘"라고 요청했을 때만
    generateRecommendation(section="strategic_draft")으로 초안을 만들고, 반드시 "이건 초안이니
    전면 수정하셔도 됩니다"라고 안내하세요.
-10. 사용자가 "최종 보고서 만들어줘"처럼 명시적으로 요청하면 assembleReportTool을 호출하세요.
+11. 사용자가 "최종 보고서 만들어줘"처럼 명시적으로 요청하면 assembleReportTool을 호출하세요.
    pendingInsightCount·pendingRecommendationCount가 0보다 크면 실패한 것이므로, 어떤 체크포인트가
    남았는지 안내하고 검수를 먼저 끝내도록 유도하세요(재호출 금지). 성공하면 pdfUrl을 그대로
    전달하고, 다운로드 링크임을 알려주세요.
@@ -234,7 +238,9 @@ export async function POST(req: Request) {
       description:
         "검증된 WALLA raw data 파일의 정량 섹션(인적사항 분포, 기능별 만족도, 핵심구매요소 " +
         "상대중요도, 4대가치, UX품질, NPS·종합만족도)을 규칙 기반으로 계산하고 DB에 저장한다. " +
-        "validateInput이 valid=true를 반환한 fileUrl에 대해서만 호출한다.",
+        "validateInput이 valid=true를 반환한 fileUrl에 대해서만 호출하며, presentReportPlan에 " +
+        "사용자가 동의한 뒤에만 호출한다 — 목차 계획을 먼저 보여줘서 이 통계가 왜 지금 나오는지 " +
+        "맥락을 준 다음이어야 한다.",
       inputSchema: z.object({
         fileUrl: z.string().url().describe("validateInput에 사용했던 것과 동일한 raw data URL"),
         fileName: z.string().optional().describe("원본 파일명"),
@@ -264,12 +270,14 @@ export async function POST(req: Request) {
     }),
     presentReportPlan: tool({
       description:
-        "정량 통계 카드를 보여준 뒤, 정성 분석(비용·시간이 큰 단계)에 들어가기 전에 raw data를 " +
-        "바탕으로 보고서 목차·섹션이 각각 어떤 근거로 채워질지 계획을 제시하고 사용자 동의를 " +
-        "구한다(PRD 3.2절). 목차 구성 자체는 항상 동일한 표준 스키마(Ⅰ~Ⅸ)를 따르므로 규칙 " +
-        "기반으로 계산하며, featureNames만 이 raw data에 맞게 채워 넣는다. 사용자가 동의(버튼 " +
-        "클릭 또는 자연어 승인)하기 전까지는 runQualitativeAnalysis를 호출하지 않는다. **같은 " +
-        "fileUrl에 대해 이 대화에서 이미 한 번 호출했다면 다시 호출하지 않는다.**",
+        "기업 정보 단계가 끝난 직후, computeQuantStats를 호출하기 전에 raw data를 바탕으로 " +
+        "보고서 목차·섹션이 각각 어떤 근거로 채워질지 계획을 제시하고 사용자 동의를 구한다 " +
+        "(PRD 3.2절). 정량 통계를 먼저 계산하지 않고 이 계획부터 보여주는 이유는, 사용자가 " +
+        "'이제 뭘 계산하는 건지' 맥락을 먼저 알고 다음 단계를 받아들이게 하기 위함이다. 목차 " +
+        "구성 자체는 항상 동일한 표준 스키마(Ⅰ~Ⅸ)를 따르므로 규칙 기반으로 계산하며, " +
+        "featureNames만 이 raw data에 맞게 채워 넣는다. 사용자가 동의(버튼 클릭 또는 자연어 " +
+        "승인)하기 전까지는 computeQuantStats를 호출하지 않는다. **같은 fileUrl에 대해 이 " +
+        "대화에서 이미 한 번 호출했다면 다시 호출하지 않는다.**",
       inputSchema: z.object({
         featureNames: z.array(z.string()).describe("validateInput에서 확인한 기능명 목록"),
         qualitativeQuestionCount: z
@@ -548,23 +556,38 @@ export async function POST(req: Request) {
     model: anthropic(CHAT_MODEL),
     system: systemPromptForTurn,
     messages: await convertToModelMessages(messages),
-    // validateInput → computeQuantStats → (승인 시) runQualitativeAnalysis → 체크포인트 A/B
-    // 조회·반영 → 결과요약·제언 생성까지 한 턴에 여러 단계가 이어질 수 있어 여유 있게 허용한다.
+    // validateInput → presentProductInfoPrompt → presentReportPlan → computeQuantStats →
+    // (승인 시) runQualitativeAnalysis → 체크포인트 A/B 조회·반영 → 결과요약·제언 생성까지
+    // 한 턴에 여러 단계가 이어질 수 있어 여유 있게 허용한다.
     stopWhen: stepCountIs(10),
     tools,
     prepareStep: async ({ steps }) => {
       const calledThisTurn = new Set(steps.flatMap((s) => s.toolCalls.map((tc) => tc.toolName)));
-      const doneEver = (name: string) => calledThisTurn.has(name) || hasCompletedTool(messages, name);
+      // doneBefore: 이전 턴(=사용자가 실제로 응답한 뒤)에 완료된 것만. doneEver: 이번 턴에
+      // 막 호출된 것까지 포함. "사용자 응답을 기다려야 하는" 전이는 doneBefore로만 강제해야
+      // 한다 — doneEver로 강제하면 카드를 보여준 바로 다음 스텝에서 사용자 응답도 없이 다음
+      // 단계로 넘어가버려서 "대기" 자체가 무의미해진다.
+      const doneBefore = (name: string) => hasCompletedTool(messages, name);
+      const doneEver = (name: string) => calledThisTurn.has(name) || doneBefore(name);
 
       // 시스템 프롬프트로 "A 다음엔 반드시 B를 호출하라"고 지시해도, 모델이 A 호출 직후 도구
       // 호출 없이 텍스트만 쓰고 턴을 끝내버리는 경우가 실측으로 확인됐다(2026-07-20 — 라이브
       // 브라우저 테스트에서 computeQuantStats 이후 presentReportPlan을 호출하지 않고 멈춤).
-      // 지시에 맡기지 않고 toolChoice로 다음 도구를 강제한다 — 두 전이 구간 모두 해당.
+      // 지시에 맡기지 않고 toolChoice로 다음 도구를 강제한다.
+      //
+      // validateInput → presentProductInfoPrompt는 같은 턴 안에서 바로 이어져야 하므로(사용자
+      // 대기가 필요 없는 전이) doneEver 기준으로 강제한다.
       if (doneEver("validateInput") && !doneEver("presentProductInfoPrompt")) {
         return { toolChoice: { type: "tool", toolName: "presentProductInfoPrompt" } };
       }
-      if (doneEver("computeQuantStats") && !doneEver("presentReportPlan")) {
+      // 아래 두 전이는 카드에 대한 사용자 응답(건너뛰기/입력, 목차 동의)을 반드시 기다려야
+      // 하므로, "이번 턴에 막 호출됨"만으로는 강제하지 않는다 — 이전 턴에 완료된(=사용자가
+      // 실제로 응답해서 새 턴이 시작된) 경우에만 다음 도구를 강제한다.
+      if (doneBefore("presentProductInfoPrompt") && !doneEver("presentReportPlan")) {
         return { toolChoice: { type: "tool", toolName: "presentReportPlan" } };
+      }
+      if (doneBefore("presentReportPlan") && !doneEver("computeQuantStats")) {
+        return { toolChoice: { type: "tool", toolName: "computeQuantStats" } };
       }
 
       const toExclude = new Set(onceOnlyToolNames.filter((name) => doneEver(name)));
