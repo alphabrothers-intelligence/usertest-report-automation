@@ -18,6 +18,8 @@ import { runRecommendation } from "@/lib/pipeline/recommendation";
 import { runResultSummary } from "@/lib/pipeline/summary";
 import { checkHedgeWording } from "@/lib/pipeline/hedgeCheck";
 import { assembleReport } from "@/lib/pdf/assemble";
+import { extractTextFromDocument } from "@/lib/productInfo/extractText";
+import { runProductInfoExtraction } from "@/lib/productInfo/extract";
 import {
   upsertReportQuantStats,
   getReportByFileUrl,
@@ -32,6 +34,7 @@ import {
   getCategoriesForQuestion,
   saveStrategicInput,
   getStrategicInput,
+  saveProductInfo,
 } from "@/lib/db/reports";
 
 export const maxDuration = 300; // Vercel Fluid Compute 기본 실행시간 (PRD 10장)
@@ -39,16 +42,29 @@ export const maxDuration = 300; // Vercel Fluid Compute 기본 실행시간 (PRD
 const CHAT_MODEL = process.env.ANTHROPIC_CHAT_MODEL ?? "claude-sonnet-5";
 
 const SYSTEM_PROMPT = `당신은 "사용성테스트 결과보고서 자동생성" 챗봇입니다. 담당자가 raw data(xlsx/csv)를
-채팅에 첨부하면, 보고서 생성 파이프라인을 안내합니다.
+채팅에 첨부하면, 보고서 생성 파이프라인을 안내합니다. 기업/제품 소개 파일(PDF/워드/텍스트)이나
+채팅으로 직접 알려주는 기업 정보도 받을 수 있습니다.
 
 # 현재 지원 범위 (Phase 7)
 - raw data 업로드 접수, WALLA 표준 59컬럼 스키마 검증, 정량 통계 계산, 정성 응답 분석(14개 문항),
   체크포인트 A(극성 판정 검수)·체크포인트 B(인사이트·제언 검수), 결과요약·제언 생성, 종합전략제언
-  입력, 최종 PDF 보고서 조립까지 전부 지원합니다.
+  입력, 기업/제품 정보 입력(직접 입력 또는 파일 추출), 최종 PDF 보고서 조립까지 전부 지원합니다.
 - 정량 계산은 규칙 기반 도구가 수행하며, 당신은 그 결과를 임의로 재계산하거나 반올림을
   바꾸지 않습니다. raw data 없이 수치를 추정하거나 지어내지 마세요.
 
 # 도구 사용 규칙 — 순서대로
+0. **기업/제품 정보(PRD 5.0절, 전부 선택 입력)**를 아래 두 경로로 처리하세요:
+   - 사용자가 채팅 텍스트로 직접 알려주면(예: "우리 회사는 OO이고 서비스는 OO입니다")
+     saveProductInfoTool로 사용자가 준 값 그대로 저장하세요. 당신이 해석·추정해서 채우지 마세요.
+   - **raw data(xlsx/csv)가 아닌** PDF/워드/텍스트 파일이 첨부되면 기업소개 자료로 보고
+     extractProductInfoFromFile로 정보를 추출하세요. 추출은 AI 해석이 개입되므로 절대 바로
+     저장하지 말고, 추출된 내용을 카드로 보여준 뒤 사용자가 확인·승인했을 때만
+     saveProductInfoTool로 저장하세요.
+   - saveProductInfoTool은 raw data의 fileUrl이 있어야 호출할 수 있습니다. raw data를 아직 안
+     받았다면 도구를 호출하지 말고, 사용자가 준 정보를 대화 맥락에 기억해뒀다가 raw data가
+     첨부되어 fileUrl을 알게 된 뒤에 저장하세요.
+   - 대화 시작 시 한 번 정도 물어봐도 좋지만, 사용자가 건너뛰겠다고 하면 강요하지 말고
+     바로 다음 단계로 진행하세요.
 1. 파일 URL이 첨부되면 validateInput으로 WALLA 59컬럼 스키마를 확인하세요. 실패하면 이유를
    설명하고 멈추세요.
 2. 검증에 성공하면 computeQuantStats를 같은 fileUrl로 호출해 정량 통계를 계산·저장하세요.
@@ -109,6 +125,48 @@ export async function POST(req: Request) {
     // 조회·반영 → 결과요약·제언 생성까지 한 턴에 여러 단계가 이어질 수 있어 여유 있게 허용한다.
     stopWhen: stepCountIs(10),
     tools: {
+      extractProductInfoFromFile: tool({
+        description:
+          "raw data(xlsx/csv)가 아닌 기업/제품 소개 파일(PDF/워드/텍스트)에서 기업 정보(PRD 5.0절 " +
+          "필드)를 추출한다. 문서에 없는 내용은 채우지 않는다. 이 결과는 AI 해석이 개입되므로 " +
+          "바로 저장하지 말고 사용자에게 확인받은 뒤 saveProductInfoTool로 저장할 것.",
+        inputSchema: z.object({
+          fileUrl: z.string().url().describe("기업소개 파일의 URL (raw data 파일 URL이 아님)"),
+        }),
+        execute: async ({ fileUrl }) => {
+          try {
+            const text = await extractTextFromDocument(fileUrl);
+            const extracted = await runProductInfoExtraction(text);
+            return { ok: true, extracted };
+          } catch (err) {
+            return { ok: false, error: err instanceof Error ? err.message : "추출에 실패했습니다." };
+          }
+        },
+      }),
+      saveProductInfoTool: tool({
+        description:
+          "기업/제품 정보(PRD 5.0절)를 저장한다. 사용자가 채팅으로 직접 알려준 값이거나, " +
+          "extractProductInfoFromFile로 추출한 뒤 사용자가 확인·승인한 값만 넘길 것 — " +
+          "AI가 임의로 추정한 값을 넣지 않는다. 여러 번 나눠 호출해도 이전에 저장된 필드는 " +
+          "유지되고 새 필드만 덧붙는다. fileUrl은 raw data 파일의 URL이다(기업소개 파일 URL 아님).",
+        inputSchema: z.object({
+          fileUrl: z.string().url().describe("raw data 파일의 URL — 이 report에 정보를 귀속시키는 키"),
+          companyName: z.string().optional(),
+          homepage: z.string().optional(),
+          representative: z.string().optional(),
+          contactPerson: z.string().optional(),
+          serviceName: z.string().optional(),
+          serviceSummary: z.string().optional(),
+          businessArea: z.string().optional(),
+          industry: z.string().optional(),
+          operatingEnvironment: z.string().optional(),
+          businessStage: z.string().optional(),
+        }),
+        execute: async ({ fileUrl, ...productInfo }) => {
+          await saveProductInfo({ fileUrl, productInfo });
+          return { ok: true, saved: productInfo };
+        },
+      }),
       validateInput: tool({
         description:
           "채팅에 첨부된 xlsx/csv raw data 파일이 WALLA 표준 59컬럼 스키마(SW/App형)와 일치하는지 검증한다. " +

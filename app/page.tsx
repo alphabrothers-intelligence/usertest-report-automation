@@ -7,6 +7,12 @@ import { AttachHintBubble } from "@/components/AttachHintBubble";
 import type { QuantStats } from "@/lib/quant/compute";
 import { QuantStatsSummary } from "@/components/QuantStatsSummary";
 import { ReportPlanCard, type ReportPlanOutput } from "@/components/ReportPlanCard";
+import {
+  ProductInfoExtractedCard,
+  ProductInfoSavedCard,
+  type ProductInfoExtractedOutput,
+  type ProductInfoSavedOutput,
+} from "@/components/ProductInfoCard";
 import type { PipelineResult } from "@/lib/pipeline/orchestrate";
 import { QualitativeResultsAccordion } from "@/components/QualitativeResults";
 import { PolarityReview, type PolarityReviewItem } from "@/components/PolarityReview";
@@ -506,6 +512,31 @@ export default function Chat() {
               {message.parts.map((part, i) => {
                 if (part.type === "text") {
                   return <div key={i}>{part.text}</div>;
+                }
+                if (part.type === "tool-extractProductInfoFromFile") {
+                  return (
+                    <div key={i} className="mt-2 w-full">
+                      <ProductInfoExtractedCard
+                        state={part.state}
+                        output={part.output as ProductInfoExtractedOutput | undefined}
+                        onApprove={() =>
+                          sendMessage({
+                            text: "확인했어요, 이 기업 정보로 저장해주세요.",
+                          })
+                        }
+                      />
+                    </div>
+                  );
+                }
+                if (part.type === "tool-saveProductInfoTool") {
+                  return (
+                    <div key={i} className="mt-2 w-full">
+                      <ProductInfoSavedCard
+                        state={part.state}
+                        output={part.output as ProductInfoSavedOutput | undefined}
+                      />
+                    </div>
+                  );
                 }
                 if (part.type === "tool-validateInput") {
                   return (

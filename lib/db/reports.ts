@@ -2,6 +2,7 @@ import { sql } from "./client";
 import type { QuantStats } from "@/lib/quant/compute";
 import type { PipelineResult } from "@/lib/pipeline/orchestrate";
 import type { Polarity } from "@/lib/pipeline/stage1";
+import type { ProductInfo } from "@/lib/productInfo/types";
 
 export interface ReportRow {
   id: string;
@@ -9,8 +10,36 @@ export interface ReportRow {
   file_name: string | null;
   respondent_count: number | null;
   quant_stats: QuantStats | null;
+  product_info: ProductInfo | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * 제품 정보(PRD 5.0절)는 raw data 업로드보다 먼저 대화에 나올 수 있어, quant_stats와
+ * 마찬가지로 file_url에 upsert한다 — 어느 쪽이 먼저 저장되든 reports 행이 생기고
+ * 나머지 컬럼은 나중에 채워진다. jsonb `||` 병합이라 이미 저장된 필드는 이번 호출에
+ * 없으면 그대로 유지된다(부분 필드만 여러 번 나눠 보내도 누적, saveStrategicInput과 동일한
+ * coalesce 원칙).
+ */
+export async function saveProductInfo(params: {
+  fileUrl: string;
+  productInfo: ProductInfo;
+}): Promise<void> {
+  await sql`
+    insert into reports (file_url, product_info, updated_at)
+    values (${params.fileUrl}, ${sql.json(JSON.parse(JSON.stringify(params.productInfo)))}, now())
+    on conflict (file_url) do update set
+      product_info = coalesce(reports.product_info, '{}'::jsonb) || excluded.product_info,
+      updated_at = now()
+  `;
+}
+
+export async function getProductInfoByFileUrl(fileUrl: string): Promise<ProductInfo | null> {
+  const [row] = await sql<{ product_info: ProductInfo | null }[]>`
+    select product_info from reports where file_url = ${fileUrl}
+  `;
+  return row?.product_info ?? null;
 }
 
 /** raw data 파일 하나당 report 하나. 같은 fileUrl로 재검증하면 정량 통계를 덮어쓴다. */

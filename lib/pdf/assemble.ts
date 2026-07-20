@@ -59,6 +59,7 @@ export async function assembleReport(fileUrl: string): Promise<AssembleResult> {
       recommendations,
       strategicInput,
       resultSummary,
+      productInfo: report.product_info ?? undefined,
     }),
   );
 

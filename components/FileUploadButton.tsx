@@ -48,8 +48,8 @@ export function FileUploadButton({
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={disabled || uploading}
-        title="raw data 첨부"
-        aria-label="raw data 첨부"
+        title="파일 첨부 (raw data 또는 기업소개 자료)"
+        aria-label="파일 첨부"
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg text-zinc-500 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-zinc-800"
       >
         {uploading ? (
@@ -61,7 +61,7 @@ export function FileUploadButton({
       <input
         ref={inputRef}
         type="file"
-        accept=".xlsx,.csv"
+        accept=".xlsx,.csv,.pdf,.docx,.txt"
         onChange={handleChange}
         className="hidden"
       />

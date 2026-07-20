@@ -4,6 +4,9 @@ import { View, Text } from "@react-pdf/renderer";
 import { styles, colors } from "./theme";
 import { BarChart, DivergingBarChart } from "./charts";
 import type { QuantStats } from "@/lib/quant/compute";
+import type { ProductInfo } from "@/lib/productInfo/types";
+
+export type { ProductInfo };
 
 export function SectionHeader({ numeral, title }: { numeral: string; title: string }) {
   return (
@@ -27,24 +30,25 @@ function FieldRow({ label, value }: { label: string; value: string | null | unde
   );
 }
 
-export interface ProductInfo {
-  companyName?: string;
-  homepage?: string;
-  serviceName?: string;
-  serviceSummary?: string;
-}
-
-/** Ⅰ. 개요 — PRD 5.0절 제품 정보는 이 프로젝트에서 아직 입력 UI가 없어 전부 "입력 필요"로
- * 남긴다(AI가 임의로 채우지 않는다는 원칙, 5.0절). */
-export function SectionOverview({ productInfo }: { productInfo?: ProductInfo }) {
+/** Ⅰ. 개요 — PRD 5.0절 제품 정보. 전부 선택 입력이라 채워지지 않은 필드는 "입력 필요"로
+ * 남긴다(AI가 임의로 채우지 않는다는 원칙, 5.0절). v1.4부터 채팅에서 직접 입력하거나
+ * 기업소개 파일에서 추출해 채울 수 있다(lib/productInfo/). */
+export function SectionOverview({ productInfo }: { productInfo?: ProductInfo | null }) {
   return (
     <View>
       <SectionHeader numeral="I" title="개요" />
-      <Text style={styles.subheading}>1. 제품 소개</Text>
+      <Text style={styles.subheading}>1. 기업 개요</Text>
       <FieldRow label="기업명" value={productInfo?.companyName} />
       <FieldRow label="홈페이지" value={productInfo?.homepage} />
+      <FieldRow label="대표자" value={productInfo?.representative} />
+      <FieldRow label="업무담당자" value={productInfo?.contactPerson} />
+      <Text style={[styles.subheading, { marginTop: 8 }]}>2. 제품·서비스 개요</Text>
       <FieldRow label="서비스명" value={productInfo?.serviceName} />
       <FieldRow label="서비스 요약" value={productInfo?.serviceSummary} />
+      <FieldRow label="사업영역" value={productInfo?.businessArea} />
+      <FieldRow label="산업분야" value={productInfo?.industry} />
+      <FieldRow label="운영환경" value={productInfo?.operatingEnvironment} />
+      <FieldRow label="사업화단계" value={productInfo?.businessStage} />
     </View>
   );
 }

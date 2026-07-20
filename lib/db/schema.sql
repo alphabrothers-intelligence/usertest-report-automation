@@ -15,6 +15,11 @@ create table if not exists reports (
 -- raw data 파일 하나당 하나의 report만 유지한다 (재검증 시 덮어씀).
 create unique index if not exists reports_file_url_key on reports (file_url);
 
+-- 제품 정보(PRD 5.0절, v1.4 신규)는 raw data 업로드보다 먼저 대화에서 나올 수 있다.
+-- quant_stats와 마찬가지로 file_url에 upsert하므로, 둘 중 어느 쪽이 먼저 저장되든
+-- reports 행이 생성되고 나머지 컬럼은 나중에 채워진다.
+alter table reports add column if not exists product_info jsonb;
+
 -- 정성 처리 대상 14개 문항 (PRD 6.1절).
 create table if not exists questions (
   id uuid primary key default gen_random_uuid(),
