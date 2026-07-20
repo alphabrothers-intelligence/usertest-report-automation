@@ -13,6 +13,9 @@ import {
   type ProductInfoExtractedOutput,
   type ProductInfoSavedOutput,
 } from "@/components/ProductInfoCard";
+import { ProductInfoPromptCard } from "@/components/ProductInfoPromptCard";
+import { ChatMarkdown } from "@/components/ChatMarkdown";
+import { PRODUCT_INFO_FIELD_LABELS, type ProductInfo } from "@/lib/productInfo/types";
 import type { PipelineResult } from "@/lib/pipeline/orchestrate";
 import { QualitativeResultsAccordion } from "@/components/QualitativeResults";
 import { PolarityReview, type PolarityReviewItem } from "@/components/PolarityReview";
@@ -416,7 +419,14 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [showAttachHint, setShowAttachHint] = useState(true);
   const [attachedFile, setAttachedFile] = useState<UploadedFile | null>(null);
-  const { messages, sendMessage, status } = useChat();
+  const { messages: rawMessages, sendMessage, status } = useChat();
+  // useChat이 드물게 같은 id의 메시지를 두 번 내보내는 게 실측으로 확인됐다(React "Encountered
+  // two children with the same key" 경고, 2026-07-20 라이브 테스트 — 목차 동의로 넘어가는
+  // 턴에서 재현됨). 원인이 라이브러리 내부라 여기서 직접 고칠 수 없으니, 렌더링 직전에 같은
+  // id를 가진 메시지는 마지막 것만 남기고 걸러낸다 — 카드가 두 번 뜨는 걸 막는 가장 확실한 지점.
+  const messages = rawMessages.filter(
+    (m, i) => rawMessages.findLastIndex((m2) => m2.id === m.id) === i,
+  );
 
   function handleUploaded(file: UploadedFile) {
     setShowAttachHint(false);
@@ -494,16 +504,16 @@ export default function Chat() {
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-zinc-50 dark:bg-black">
-      <div className="flex w-full max-w-4xl flex-1 flex-col px-4 py-8">
+      <div className="flex w-full min-w-0 max-w-4xl flex-1 flex-col px-4 py-8">
         <h1 className="mb-6 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
           사용성테스트 결과보고서 자동생성
         </h1>
 
-        <div className="flex flex-1 flex-col gap-4 pb-32">
+        <div className="flex min-w-0 flex-1 flex-col gap-4 pb-32">
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`whitespace-pre-wrap text-base ${
+              className={`min-w-0 whitespace-pre-wrap break-words text-base ${
                 message.role === "user"
                   ? "self-end rounded-2xl bg-zinc-900 px-4 py-2 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
                   : "self-start text-zinc-900 dark:text-zinc-100"
@@ -511,7 +521,36 @@ export default function Chat() {
             >
               {message.parts.map((part, i) => {
                 if (part.type === "text") {
-                  return <div key={i}>{part.text}</div>;
+                  return <ChatMarkdown key={i} text={part.text} />;
+                }
+                if (part.type === "tool-presentProductInfoPrompt") {
+                  if (part.state !== "output-available") {
+                    return (
+                      <div key={i} className="mt-2 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-5 py-4 text-base text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
+                        기업/제품 정보 입력 카드 준비 중...
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={i} className="mt-2 w-full">
+                      <ProductInfoPromptCard
+                        onSkip={() =>
+                          sendMessage({
+                            text: "제품 정보 입력은 건너뛸게요. 다음 단계로 진행해주세요.",
+                          })
+                        }
+                        onSubmit={(fields: ProductInfo) => {
+                          const lines = (Object.keys(PRODUCT_INFO_FIELD_LABELS) as (keyof ProductInfo)[])
+                            .filter((key) => (fields[key] ?? "").trim() !== "")
+                            .map((key) => `${PRODUCT_INFO_FIELD_LABELS[key]}: ${fields[key]}`)
+                            .join("\n");
+                          sendMessage({
+                            text: `다음 기업/제품 정보를 저장해주세요.\n${lines}`,
+                          });
+                        }}
+                      />
+                    </div>
+                  );
                 }
                 if (part.type === "tool-extractProductInfoFromFile") {
                   return (
