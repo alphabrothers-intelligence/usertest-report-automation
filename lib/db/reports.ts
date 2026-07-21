@@ -86,6 +86,9 @@ export async function saveQualitativeResults(
     await tx`delete from questions where report_id = ${reportId}`;
 
     for (const q of pipeline.questions) {
+      // 극성 요약(polarity_summaries)은 여기서 안 채운다 — 2026-07-21부터 기본 파이프라인과
+      // 분리된 별도 opt-in 기능이라(lib/pipeline/generatePolaritySummaries.ts), 이 시점엔
+      // 아직 존재하지 않는다. null로 남겨두면 사용자가 나중에 요청했을 때만 채워진다.
       const [questionRow] = await tx<{ id: string }[]>`
         insert into questions (report_id, question_key, label, kind)
         values (${reportId}, ${q.id}, ${q.label}, ${q.kind})
@@ -305,6 +308,7 @@ export interface QuestionRow {
   question_key: string;
   label: string;
   kind: "standard" | "improvement";
+  polarity_summaries: Partial<Record<Polarity, string>> | null;
 }
 
 export interface QuestionWithApprovedCategories extends QuestionRow {
@@ -319,7 +323,7 @@ export async function getQuestionsWithApprovedCategories(
   reportId: string,
 ): Promise<QuestionWithApprovedCategories[]> {
   const questions = await sql<QuestionRow[]>`
-    select id, question_key, label, kind from questions
+    select id, question_key, label, kind, polarity_summaries from questions
     where report_id = ${reportId} order by created_at
   `;
   const categories = await sql<CategoryRow[]>`
@@ -338,5 +342,41 @@ export async function getQuestionsWithApprovedCategories(
 export async function getApprovedRecommendations(reportId: string): Promise<RecommendationRow[]> {
   return sql<RecommendationRow[]>`
     select * from recommendations where report_id = ${reportId} and approved = true
+  `;
+}
+
+/**
+ * 극성 요약(2026-07-21, opt-in 기능) 생성용 — 문항 전부 + 카테고리 전부(승인 여부 무관)를
+ * 가져온다. getQuestionsWithApprovedCategories와 달리 insight_approved 필터를 안 건다 —
+ * 요약은 체크포인트 B 승인을 기다리지 않고도(결과요약처럼 Tier 1에 가깝게) 바로 만들 수 있어야
+ * 사용자가 "지금 보여줘"라고 했을 때 빈 결과가 나오지 않는다.
+ */
+export async function getQuestionsWithAllCategories(
+  reportId: string,
+): Promise<QuestionWithApprovedCategories[]> {
+  const questions = await sql<QuestionRow[]>`
+    select id, question_key, label, kind, polarity_summaries from questions
+    where report_id = ${reportId} order by created_at
+  `;
+  const categories = await sql<CategoryRow[]>`
+    select cat.* from categories cat
+    join questions q on q.id = cat.question_id
+    where q.report_id = ${reportId}
+    order by cat.polarity, cat.label
+  `;
+  return questions.map((q) => ({
+    ...q,
+    categories: categories.filter((c) => c.question_id === q.id),
+  }));
+}
+
+/** 극성 요약 결과를 문항별로 저장한다 — 기존 요약이 있으면 병합(coalesce)하지 않고 덮어쓴다
+ * (재생성 = 최신 카테고리 기준으로 새로 씀). */
+export async function saveQuestionPolaritySummaries(
+  questionId: string,
+  summaries: Partial<Record<Polarity, string>>,
+): Promise<void> {
+  await sql`
+    update questions set polarity_summaries = ${sql.json(summaries)} where id = ${questionId}
   `;
 }

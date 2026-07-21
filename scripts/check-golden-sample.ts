@@ -51,6 +51,20 @@ if (!validation.valid) {
     console.log(`${label}: ${actual} (기대값 ${expected}) → ${ok ? "PASS" : "FAIL"}`);
   }
 
+  console.log("\n=== 골든 체크: Ⅱ 인적사항 (나이대 분포, 2026-07-20 추가) ===");
+  // 실제 보고서 6페이지 Q1 응답결과 막대그래프 값. 나이를 평균±SD로만 보여주면 "어떤 나이대가
+  // 많은지" 판단이 안 된다는 실측 피드백으로 나이대 분포를 추가하면서, 기존에 Ⅱ장이 골든
+  // 체크 대상이 아니었던 커버리지 공백도 같이 메운다.
+  const expectedAgeDistribution: Record<string, number> = {
+    "10대": 17,
+    "20대": 35,
+    "30대": 38,
+    "40대 이상": 10,
+  };
+  for (const row of stats.demographics.ageDistribution) {
+    check(`나이대 분포: ${row.label}`, row.percentage, expectedAgeDistribution[row.label]);
+  }
+
   console.log("\n=== 골든 체크: Ⅲ 기능별 만족도 ===");
   const expectedFeatureSatisfaction: Record<string, number> = {
     "펫과의 산책": 6.35,

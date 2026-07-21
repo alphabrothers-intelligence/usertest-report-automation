@@ -1,12 +1,13 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileUploadButton, type UploadedFile } from "@/components/FileUploadButton";
 import { AttachHintBubble } from "@/components/AttachHintBubble";
 import type { QuantStats } from "@/lib/quant/compute";
 import { QuantStatsSummary } from "@/components/QuantStatsSummary";
 import { ReportPlanCard, type ReportPlanOutput } from "@/components/ReportPlanCard";
+import { buildReportPlan } from "@/lib/pipeline/reportPlan";
 import {
   ProductInfoExtractedCard,
   ProductInfoSavedCard,
@@ -101,6 +102,16 @@ interface ComputeQuantStatsOutput {
   stats?: QuantStats;
 }
 
+// 목차 카드에 동의한 직후 "지금부터 뭘 계산하는지"를 로딩 문구 자체에 고정으로 박아둔다
+// (2026-07-20 피드백: "정량 통계를 낼 거다, 확인하고 넘어가는 절차다"를 고지하고 싶다는
+// 요청 — 모델이 매 턴 챗 텍스트로 이걸 서술해주길 기대하는 대신, 로딩 카드 자체에 코드로
+// 고정하면 항상 확실하게 보인다). buildReportPlan의 numeral·title을 그대로 써서 목차 카드와
+// 어긋나지 않게 한다.
+const QUANT_STATS_SECTION_TITLES = buildReportPlan([])
+  .filter((sec) => !["I", "IX"].includes(sec.numeral))
+  .map((sec) => `${sec.numeral}.${sec.title}`)
+  .join(" · ");
+
 function QuantStatsCard({
   state,
   output,
@@ -111,7 +122,11 @@ function QuantStatsCard({
   if (state !== "output-available") {
     return (
       <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-5 py-4 text-base text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
-        정량 통계 계산 중...
+        <p className="font-medium text-zinc-700 dark:text-zinc-300">정량 통계 계산 중...</p>
+        <p className="mt-1 text-sm">
+          방금 동의하신 목차 중 {QUANT_STATS_SECTION_TITLES}에 들어갈 정량 통계를 raw data로
+          계산하고 있어요.
+        </p>
       </div>
     );
   }
@@ -132,6 +147,26 @@ interface RunQualitativeAnalysisOutput extends Partial<PipelineResult> {
   error?: string;
 }
 
+/**
+ * "1~2분 정도 걸릴 수 있어요"라고만 써놓고 그 시간이 지나도 그대로면, 사용자가 계속 기다려야
+ * 할지 뭔가 잘못된 건지 판단할 방법이 없다는 실측 피드백(2026-07-20 — 실제로 정성 분석이
+ * 15분 넘게 안 끝난 사례가 있었다, lib/pipeline/polaritySummary.ts의 타임아웃 누락 버그).
+ * 경과 시간을 직접 보여주고, 예상 시간을 넘기면 안내 문구 자체를 바꿔서 "지금 상태가 정상
+ * 범위인지"를 사용자가 스스로 판단할 수 있게 한다.
+ */
+function useElapsedSeconds(): number {
+  const startRef = useRef<number | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (startRef.current === null) startRef.current = Date.now();
+    const id = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - (startRef.current ?? Date.now())) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+  return elapsed;
+}
+
 function QualitativeAnalysisCard({
   state,
   output,
@@ -139,10 +174,37 @@ function QualitativeAnalysisCard({
   state: string;
   output?: RunQualitativeAnalysisOutput;
 }) {
+  const elapsed = useElapsedSeconds();
+
   if (state !== "output-available") {
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    const elapsedLabel = `경과 ${minutes}분 ${seconds}초`;
+    const isTakingTooLong = elapsed >= 180;
+    const isSlowerThanExpected = elapsed >= 90;
     return (
-      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-5 py-4 text-base text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
-        정성 응답 분석 중... (14개 문항 병렬 처리, 1~2분 정도 걸릴 수 있어요)
+      <div
+        className={`rounded-lg border px-5 py-4 text-base ${
+          isTakingTooLong
+            ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+            : "border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900"
+        }`}
+      >
+        {isTakingTooLong ? (
+          <>
+            <p className="font-medium">예상보다 많이 오래 걸리고 있어요 ({elapsedLabel})</p>
+            <p className="mt-1 text-sm">
+              서버에서 계속 처리 중일 수 있지만, 보통 1~2분이면 끝나는 작업이라 이 정도로 길어지는
+              건 정상 범위를 벗어난 상태예요. 조금 더 기다려보시거나, 계속 안 끝나면 페이지를
+              새로고침한 뒤 다시 시도해주세요 — raw data와 정량 통계는 이미 저장되어 있어서
+              다시 시작해도 처음부터 다시 하지 않아도 됩니다.
+            </p>
+          </>
+        ) : isSlowerThanExpected ? (
+          <p>정성 응답 분석 중... 예상(1~2분)보다 조금 더 걸리고 있어요 ({elapsedLabel})</p>
+        ) : (
+          <p>정성 응답 분석 중... (14개 문항 병렬 처리, 1~2분 정도 걸릴 수 있어요 · {elapsedLabel})</p>
+        )}
       </div>
     );
   }

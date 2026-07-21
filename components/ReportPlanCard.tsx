@@ -51,7 +51,17 @@ export function ReportPlanCard({
                 {sec.numeral}. {sec.title}
               </span>
             </summary>
-            <p className="mt-1.5 pl-5 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+            <ul className="mt-1.5 space-y-1 pl-5 text-sm text-zinc-700 dark:text-zinc-300">
+              {sec.subitems.map((item) => (
+                <li key={item} className="flex gap-1.5">
+                  <span aria-hidden className="text-zinc-400 dark:text-zinc-500">
+                    ·
+                  </span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 pl-5 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
               {sec.source}
             </p>
           </details>

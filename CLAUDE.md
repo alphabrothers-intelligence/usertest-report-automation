@@ -359,10 +359,23 @@
   가치는 있다) 근본 원인이 아니었다.
 - **Blob 404 재시도 (`lib/blob/getWithRetry.ts`)**: 위 근본 원인과는 별개로, 업로드 직후 곧바로
   읽는 경로는 여전히 이론상 진짜 eventual-consistency 타이밍 이슈에 노출될 수 있어 안전망으로
-  남겨뒀다. 최대 4회(400ms~3.2s 지수 백오프, 총 ~6초)까지 재시도한 뒤에도 안 되면 에러로 취급한다.
-  `lib/walla/loadFromUrl.ts`(raw data), `lib/productInfo/extractText.ts`(기업소개 파일),
-  `app/api/download/route.ts`(완성된 PDF) 세 곳 모두 이 공유 헬퍼를 쓴다 — 셋 다 "방금
-  업로드/생성된 blob을 바로 읽는다"는 같은 위험 패턴이기 때문.
+  남겨뒀다. `lib/walla/loadFromUrl.ts`(raw data), `lib/productInfo/extractText.ts`(기업소개
+  파일), `app/api/download/route.ts`(완성된 PDF) 세 곳 모두 이 공유 헬퍼를 쓴다 — 셋 다 "방금
+  업로드/생성된 blob을 바로 읽는다"는 같은 위험 패턴이기 때문. **`onUploadCompleted` 제거 이후
+  에도 완전히 사라지지 않았다** — 같은 날(2026-07-20) 라이브 테스트 중 6회에 1회꼴로 재현됐다
+  (당시 재시도 예산 4회/~6초로는 부족). "이 에러는 절대 나면 안 된다"는 요구사항이라 재시도를
+  7회(~15.5초)로 늘렸다 — 이후 4회 연속 재현 시도에서는 재발하지 않았지만, 원래도 드문
+  현상이었으므로 100% 근절을 보장하는 확인은 아니다. 재발하면 원인 후보를 다시 넓혀볼 것
+  (Vercel Blob 자체의 드문 진짜 지연 등).
+- **`prepareStep`이 validateInput 실패도 성공처럼 취급하던 버그(중요, 위와 같은 시점에 같이
+  발견)**: `doneEver("validateInput")`은 도구가 **호출됐는지**만 보고 **결과가 성공했는지**는
+  안 봐서, validateInput이 파일을 못 찾아 실패해도 다음 스텝에 presentProductInfoPrompt를
+  강제로 호출해버렸다 — 시스템 프롬프트의 "실패하면 이유를 설명하고 멈추세요" 지시와 정반대로
+  동작한 것. 그 결과 한 메시지 안에 에러 카드와 (조건상 나오면 안 되는) 성공 카드가 같이 섞여
+  나오는, 사용자가 보기에 순서가 이상한 화면이 됐다. `steps`에서 이번 턴의 `validateInput`
+  `toolResults`를 찾아 `output.valid`를 직접 확인하고, 실패했으면 강제하지 않도록 고쳤다 —
+  다른 "A 다음엔 반드시 B" 강제 전이를 추가할 때도 A의 **성공 여부**까지 확인해야 하는지 검토할
+  것(지금까지의 전이들은 실패해도 다음 단계로 넘어가도 무해한 것들이라 이 문제가 안 드러났었다).
 - **다중 파일 첨부**: `FileUploadButton`이 `<input multiple>`로 여러 파일을 한 번에 업로드하고
   (병렬 `Promise.all`), `app/page.tsx`의 `attachedFiles`가 배열로 바뀌었다 — raw data 파일과
   기업소개 파일을 한 메시지에 같이 첨부하는 흐름을 지원한다.
@@ -394,6 +407,103 @@
   접힘·펼치면 전체 노출, 2026-07-20). `onUploadCompleted` 제거는 dev 서버(`next dev`)에서
   서버 로그의 재시도 attempt별 hit/miss를 직접 찍어보며 확정했다 — 재시도 로직만으로는 안 되고
   콜백 제거 후에야 `attempt=0 hit`으로 즉시 성공하는 걸 확인했다.
+
+## 실제 발행 보고서 양식 대조 작업 (`lib/pipeline/reportPlan.ts`, `lib/pipeline/surveyQuestions.ts`,
+## `lib/pipeline/polaritySummary.ts`, `lib/pdf/ReportDocument.tsx`, `components/QuantStatsSummary.tsx`,
+## 2026-07-20)
+
+담당자가 "제가 data 폴더에 저장해둔 실제 발행 보고서와 최대한 같은 양식·섹션 구성으로 나와야
+한다"고 명시적으로 요청해서, 실제 리바랩스 PDF(2025.09.05자)를 페이지별로 대조하며 구조를
+맞췄다. 자세한 배경·우선순위 결정은 memory의 `project-report-format-fidelity` 참고.
+
+- **목차(ToC) 페이지 신규**: `lib/pdf/ReportDocument.tsx`의 `TableOfContents`가
+  `lib/pipeline/reportPlan.ts`의 `buildReportPlan()`을 그대로 써서 채팅 목차 카드
+  (`components/ReportPlanCard.tsx`)와 제목·소목차가 항상 일치한다 — 따로 두면 한쪽만 고칠 때
+  어긋난다(실제로 처음엔 어긋나 있었다: Ⅱ장 제목이 채팅 카드는 "인적사항", PDF는 "인적사항 및
+  특성조사"였음. 지금은 `reportPlan.ts`의 `title`이 `lib/pdf/sectionsQuant.tsx`·
+  `sectionsQualitative.tsx`의 `<SectionHeader title="...">` 문자열과 정확히 같아야 한다는
+  규칙을 주석으로 박아뒀다). react-pdf는 선언적 렌더링이라 다른 위치의 "실제 페이지 번호"를
+  미리 계산해 넣을 방법이 없어서(bookmark는 뷰어 사이드바 개요일 뿐 본문 텍스트가 아님),
+  숫자 대신 `id`+`Link` 기반 클릭 이동으로 대체했다 — 알려진 단순화.
+- **Ⅰ장 소목차 확장**: "2. 사용성 테스트 진행 일정"(테스트 진행 기간·대상·담당자, 제품정보
+  카드에 선택 필드 3개 추가 — `lib/productInfo/types.ts`), "3. 사용성 테스트 설문 항목"
+  (`lib/pipeline/surveyQuestions.ts`). 후자는 **실제 보고서 5페이지의 설문 항목 표를 그대로
+  베끼지 않았다** — 그 표 자체가 "핵심 요인" 단일 선택형 문항(원본 28번 컬럼)을 마치 6개의
+  개별 만족도 문항인 것처럼 잘못 나열해뒀고 문항 번호도 본문(Q13)과 표(Q16)가 서로 달랐다
+  (실제 보고서 원본에 있던 오류를 발견한 사례). 대신 WALLA 59컬럼 스키마(`lib/walla/schema.ts`)
+  에서 결정론적으로 구성해, 다른 프로젝트 raw data에도 재사용 가능하고 정확한 틀이 되게 했다.
+- **긍정/부정/중립 표시를 굵은 배너로**: "1. 긍정 의견 (28.7%)" 형식(`sectionsQualitative.tsx`의
+  `PolarityBanner`). 기존엔 작은 회색 라벨 하나뿐이었다.
+- **극성별 총평 박스(`lib/pipeline/polaritySummary.ts`) — 처음엔 기본 파이프라인에 넣었다가
+  완전히 분리했다(2026-07-20~21, 같은 세션 안에서 있었던 일)**: 실제 보고서의 "[긍정 의견
+  요약]" 박스 형식. PRD 6장 소속이 아닌 신규 프롬프트라 "프롬프트 불변" 원칙과 무관하다
+  (extract.ts와 같은 예외 사유).
+  1. **처음 설계**: Stage2 직후 같은 흐름 안에서 호출(`orchestrate.ts`에 3번째 p-limit
+     `summaryLimit`으로 Stage1/Stage2와 분리). DB `questions.polarity_summaries`(jsonb)
+     컬럼 추가 — **마이그레이션(`npm run db:migrate`) 잊지 말 것**, 스키마만 고치고
+     마이그레이션을 안 돌려 `column does not exist` 에러로 한 번 걸렸다.
+  2. **실사용 중 사고**: `generateText` 호출에 타임아웃을 안 줬더니, 응답 없이 걸린 호출 하나가
+     `Promise.all`을 영원히 안 끝내서 14문항 전체가 15분 넘게 멈췄다(담당자가 실제로 겪음).
+     `timeout: 60000`을 추가하고 개별 호출 실패를 try/catch로 격리했다.
+  3. **그런데도 안 끝남 → 속도 실험 두 번**: "동시성을 8→14로 올리면 빨라질까"(21분간 요약
+     호출 27개 전부 타임아웃 → 중단), "문항 내부 응답자를 청크로 나눠 병렬화하면 빨라질까"
+     (`lib/pipeline/stage1Chunked.ts`로 구현해서 테스트, 33분간 타임아웃 18개+ 계속 증가 →
+     중단). 둘 다 실패. 두 실험의 공통점은 "API 호출 개수를 늘리는 방향"이었다는 것.
+  4. **최종 결론**: 원래 안정적으로 잘 돌던 Stage1+Stage2 파이프라인 위에 극성 요약(문항당
+     최대 3회, 14문항이면 최대 42회)을 얹은 것 자체가 그 시점의 API 사용 여력을 넘겨버렸다는
+     것이 가장 그럴듯한 설명이었다 — 그래서 청크 병렬화는 완전히 되돌렸다(`stage1Chunked.ts`
+     삭제, `orchestrate.ts`를 원래 형태로 복원, `polaritySummaries` 필드도 `orchestrate.ts`
+     결과 타입에서 제거). **극성 요약은 이제 기본 파이프라인에서 완전히 빠졌고**, 사용자가
+     명시적으로 요청할 때만 실행되는 별도 opt-in 도구가 됐다 —
+     `lib/pipeline/generatePolaritySummaries.ts`(리포트 단위 오케스트레이션, 이미 저장된
+     카테고리를 재료로 써서 Stage1/2를 다시 안 돈다) + `app/api/chat/route.ts`의
+     `generatePolaritySummaries` 도구(시스템 프롬프트에 "자동으로 이어 부르지 말 것, 사용자가
+     명시 요청했을 때만" 명시). DB 저장도 분리했다 — `saveQualitativeResults`는 더 이상
+     `polarity_summaries`를 안 채우고, `saveQuestionPolaritySummaries`(신규)가 나중에 따로
+     UPDATE한다. `getQuestionsWithAllCategories`(신규)는 `getQuestionsWithApprovedCategories`
+     와 달리 insight 승인 여부를 안 가린다 — 요약은 체크포인트 B를 기다리지 않고 바로 만들 수
+     있어야 한다는 판단.
+  5. **뒤늦게 발견한 교란 요인**: 이 조사가 다 끝난 뒤에야 담당자가 Anthropic 콘솔을 확인했는데,
+     그 시점 조직 크레딧이 $17 수준(월 $200 한도 중 $131+ 이미 사용)까지 떨어져 있었고
+     "잔액 부족" 경고가 떠 있었다 — 오늘 실험들이 겪은 타임아웃·멈춤이 (병렬화 방식의 문제가
+     아니라) **크레딧 소진에 따른 API 측 지연/제한 때문이었을 가능성**을 배제할 수 없다. 위
+     3번 실험의 "동시성/청크 둘 다 역효과"라는 결론은 이 교란 요인이 통제되지 않은 상태에서
+     나온 것이라 **확정적이지 않다** — 크레딧이 충전된 뒤 조용한 시점에 다시 측정해봐야
+     정확한 인과관계를 알 수 있다. 다만 극성 요약을 기본 흐름에서 분리한 결정 자체는(정석
+     분석은 최대한 빠르게, 부가 기능은 선택적으로) 크레딧 문제와 무관하게 여전히 올바른
+     방향이라고 판단해 그대로 유지했다.
+  - `app/page.tsx`의 `QualitativeAnalysisCard`에 **경과 시간 실시간 표시 + 임계값별 안내
+    문구**를 추가했다(`useElapsedSeconds` 훅). 90초부터 "예상보다 조금 더 걸리고 있어요",
+    180초부터는 카드가 노란색으로 바뀌며 "정상 범위를 벗어났다 + 새로고침해도 안전하다
+    (raw data·정량 통계는 이미 저장됨)"는 안내로 바뀐다 — "1~2분 걸릴 수 있어요"라고만 써놓고
+    그 시간이 지나도 그대로면 사용자가 판단할 근거가 없다는 원칙(memory
+    `feedback-user-first-design` 참고). 이건 원인이 무엇이든(레이트리밋이든 크레딧이든) 계속
+    유효한 안전장치라 그대로 남겨뒀다.
+  - **Stage1/Stage2 `generateText` 호출에는 아직 명시적 타임아웃이 없다**(undici 기본 300초
+    헤더 타임아웃이 암묵적 상한이긴 하지만 명시적이지 않음) — 같은 종류의 무한 대기 사고가
+    거기서 재현되면 검토할 것.
+- **채팅 카드에 막대그래프 도입**(`components/QuantStatsSummary.tsx`): 표만 나열하면 "어느 게
+  더 큰지" 한눈에 안 보인다는 피드백으로 순수 CSS 막대그래프로 전면 교체(`BarRow`,
+  `DivergingBarRow` — 상대중요도는 음수도 나오므로 0 기준 좌우 막대). 도표 제목이 작고 안
+  굵어서 구별이 안 된다는 후속 피드백으로 굵게+밑줄+박스 그룹핑(`subLabel`, `chartGroupBox`)도
+  추가했다.
+- **"정량 통계가 왜 나왔는지" 카드 자체에 고정 문구**: 채팅 텍스트 설명 한 번으로는 부족했다
+  (사용자가 두 번 지적) — `QuantStatsCard`의 로딩 문구(`app/page.tsx`)와
+  `QuantStatsSummary`의 완료 후 문구 둘 다에 "방금 동의하신 목차의 Ⅱ~Ⅷ장에 들어갈 내용"이라는
+  설명을 코드로 고정했다. 채팅 프롬프트 지시에 의존하지 않고 컴포넌트 자체에 박아두는 방식은
+  이 세션에서 반복적으로 검증된 신뢰성 패턴이다(위 "채팅 오케스트레이션 신뢰성" 절 참고).
+- **나이를 평균±SD로만 보여주던 버그**: "어떤 나이대가 많은지" 판단이 안 된다는 지적으로 실제
+  보고서처럼 10대/20대/30대/40대 이상 분포로 교체(`lib/quant/basic.ts`의
+  `ageBracketDistribution`). 골든 체크에 4개 검증 추가(93/93 PASS) — Ⅱ장(인적사항)이 기존에
+  golden 체크 대상이 아니었던 공백도 같이 메웠다.
+- **`prepareStep`이 validateInput 실패를 성공처럼 취급하던 버그**: `doneEver("validateInput")`은
+  호출 여부만 보고 성공 여부는 안 봐서, 파일을 못 찾아 실패해도 다음 카드를 강제로 띄워버렸다
+  (시스템 프롬프트의 "실패하면 멈추세요" 지시와 정반대로 동작). `steps`에서 이번 턴
+  `validateInput`의 `toolResults`를 찾아 `output.valid`를 직접 확인하도록 고쳤다 — 다른
+  "A 다음엔 반드시 B" 강제 전이를 추가할 때도 A의 **성공 여부**까지 확인해야 하는지 검토할 것.
+- **Blob 404 재시도 예산 확대**: `onUploadCompleted` 제거(위 절 참고) 이후에도 6회 중 1회꼴로
+  재현되어(기존 재시도 예산 4회/~6초로는 부족), 7회(~15.5초)로 늘렸다. "절대 나면 안 되는
+  에러"라는 요구사항 때문에 실측 확인된 여유보다 더 넉넉하게 잡았다.
 
 ## 현재 구현 범위 (Phase 7까지 — v1 로드맵 핵심 기능 전체 + Phase 8 일부)
 

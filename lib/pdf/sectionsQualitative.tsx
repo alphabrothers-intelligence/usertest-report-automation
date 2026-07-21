@@ -80,22 +80,56 @@ function CategoryBlock({ category }: { category: CategoryRow }) {
   );
 }
 
+const POLARITY_BANNER_STYLE = {
+  positive: { bg: colors.navyLight, text: colors.navy },
+  negative: { bg: "#fde4d0", text: "#c2410c" },
+  neutral: { bg: colors.bgAlt, text: colors.subtext },
+} as const;
+
+/** 실제 발행 보고서의 "1. 긍정 의견 (28.7%)" 굵은 배너 헤더 형식(2026-07-20 반영) —
+ * 기존엔 회색 소문자 라벨 하나뿐이라 긍/부/중 구획이 잘 안 보였다는 피드백. */
+function PolarityBanner({
+  index,
+  polarity,
+  label,
+  pct,
+}: {
+  index: number;
+  polarity: "positive" | "negative" | "neutral";
+  label: string;
+  pct: number;
+}) {
+  const s = POLARITY_BANNER_STYLE[polarity];
+  return (
+    <View style={{ backgroundColor: s.bg, paddingVertical: 4, paddingHorizontal: 6, marginBottom: 4 }}>
+      <Text style={{ fontSize: 9, fontWeight: "bold", color: s.text }}>
+        {index}. {label} 의견 ({pct}%)
+      </Text>
+    </View>
+  );
+}
+
 function QuestionQualitativeBlock({ question }: { question: QuestionWithApprovedCategories }) {
   if (question.categories.length === 0) return null;
   const polarityOrder = ["positive", "negative", "neutral"] as const;
   const polarityLabel = { positive: "긍정", negative: "부정", neutral: "중립" };
+  const pct = polarityPct(question.categories);
+  const pctByPolarity = { positive: pct.positivePct, negative: pct.negativePct, neutral: pct.neutralPct };
+  let bannerIndex = 0;
   return (
     <View style={{ marginBottom: 10 }}>
       <Text style={styles.subheading}>{question.label}</Text>
-      {question.kind === "standard" && <PolarityStackedBar {...polarityPct(question.categories)} />}
+      {question.kind === "standard" && <PolarityStackedBar {...pct} />}
       {polarityOrder.map((p) => {
         const inPolarity = question.categories.filter((c) => c.polarity === p);
         if (inPolarity.length === 0) return null;
+        bannerIndex += 1;
         return (
           <View key={p} style={{ marginTop: 6 }}>
-            <Text style={{ fontSize: 8, color: colors.subtext, marginBottom: 2 }}>
-              {polarityLabel[p]}
-            </Text>
+            <PolarityBanner index={bannerIndex} polarity={p} label={polarityLabel[p]} pct={pctByPolarity[p]} />
+            {question.polarity_summaries?.[p] && (
+              <Text style={[styles.body, { marginBottom: 4 }]}>{question.polarity_summaries[p]}</Text>
+            )}
             {inPolarity.map((c) => (
               <CategoryBlock key={c.id} category={c} />
             ))}

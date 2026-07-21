@@ -2,6 +2,19 @@
 // 절대 순차 처리하지 않는다: 문항 간 Stage1은 서로 독립적으로 동시 실행하고, 각 문항의
 // Stage1이 끝나면 그 문항의 극성별 Stage2도 문항 간 동시 실행한다. 동시성은 p-limit으로
 // 5~10개로 제한한다(Claude API 레이트리밋 고려, 10장).
+//
+// **극성별 총평("[긍정 의견 요약]" 박스)은 여기 없다 — 의도적이다(2026-07-21).** 처음엔 Stage2
+// 직후 같은 흐름 안에서 호출했는데, 실사용 중 그 호출 하나가 응답 없이 걸려 14문항 전체가
+// 15분 넘게 멈추는 사고가 났다. 타임아웃(60초)과 개별 실패 격리(try/catch)를 넣어 "멈추는"
+// 문제는 막았지만, 그 다음 "왜 이렇게 느린가"를 밝히려고 동시성을 늘리는 실험(14로 상향)과
+// 문항 내부를 청크로 쪼개 병렬화하는 실험을 각각 돌려봤는데 — 둘 다 오히려 타임아웃이 대량
+// 발생했다(21분간 27건 전부 실패 / 33분간 18건+ 계속 증가). 두 실험의 공통점은 "API 호출
+// 개수를 늘리는 방향"이었다는 것 — 결론은 원래 안정적으로 잘 돌던 Stage1+Stage2 파이프라인
+// 위에 극성 요약(문항당 최대 3회 호출 추가, 14문항이면 최대 42회)을 얹은 것 자체가 레이트리밋을
+// 넘겨버렸다는 것이었다. 그래서 극성 요약은 이 기본 파이프라인에서 완전히 빼고, 사용자가
+// 명시적으로 요청할 때만 별도로 실행되는 기능으로 분리했다 — lib/pipeline/polaritySummary.ts
+// (개별 호출 함수)와 lib/pipeline/generatePolaritySummaries.ts(리포트 단위 오케스트레이션,
+// app/api/chat/route.ts의 generatePolaritySummaries 도구가 호출) 참고.
 import pLimit from "p-limit";
 import type { QuestionSpec } from "./questions";
 import { runStage1, runStage1ImprovementIdea, type Polarity } from "./stage1";

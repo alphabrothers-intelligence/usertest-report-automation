@@ -27,9 +27,13 @@ create table if not exists questions (
   question_key text not null, -- 예: "feature:펫과의 산책", "improvementIdea"
   label text not null,
   kind text not null check (kind in ('standard', 'improvement')),
+  -- 극성별(긍정/부정/중립) 한 단락 총평. 실제 발행 보고서의 "[긍정 의견 요약]" 박스 형식
+  -- (2026-07-20 추가) — { positive?, negative?, neutral? } 형태의 jsonb.
+  polarity_summaries jsonb,
   created_at timestamptz not null default now(),
   unique (report_id, question_key)
 );
+alter table questions add column if not exists polarity_summaries jsonb;
 
 -- Stage1 출력 (문장/절 분리 + 극성 판정). kind='improvement' 문항은 사용하지 않는다(극성 없음).
 create table if not exists clauses (

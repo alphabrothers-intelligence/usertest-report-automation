@@ -1,6 +1,7 @@
 // raw data 정량 섹션 전체 계산 (PRD 5장 스키마 + 6.8절 상대중요도·NPS 공식). LLM 미사용.
 import type { WallaRecord } from "@/lib/walla/normalize";
 import {
+  ageBracketDistribution,
   categoryDistribution,
   computeNps,
   meanSd,
@@ -23,6 +24,7 @@ export interface QuantStats {
   respondentCount: number;
   demographics: {
     age: MeanSd;
+    ageDistribution: CategoryCount[];
     gender: CategoryCount[];
     os: CategoryCount[];
     avgWalkTime: CategoryCount[];
@@ -64,6 +66,7 @@ export function computeQuantStats(records: WallaRecord[]): QuantStats {
     respondentCount: records.length,
     demographics: {
       age: meanSd(scores(records.map((r) => r.age))),
+      ageDistribution: ageBracketDistribution(records.map((r) => r.age)),
       gender: categoryDistribution(records.map((r) => r.gender)),
       os: categoryDistribution(records.map((r) => r.os)),
       avgWalkTime: categoryDistribution(records.map((r) => r.avgWalkTime)),

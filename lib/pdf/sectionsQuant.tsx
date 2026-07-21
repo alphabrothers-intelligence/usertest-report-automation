@@ -5,12 +5,13 @@ import { styles, colors } from "./theme";
 import { BarChart, DivergingBarChart } from "./charts";
 import type { QuantStats } from "@/lib/quant/compute";
 import type { ProductInfo } from "@/lib/productInfo/types";
+import { buildSurveyQuestionRows } from "@/lib/pipeline/surveyQuestions";
 
 export type { ProductInfo };
 
 export function SectionHeader({ numeral, title }: { numeral: string; title: string }) {
   return (
-    <View style={styles.sectionHeader} wrap={false}>
+    <View id={`section-${numeral}`} style={styles.sectionHeader} wrap={false}>
       <Text style={styles.sectionHeaderBadge}>{numeral}</Text>
       <Text style={styles.sectionHeaderTitle}>{title}</Text>
     </View>
@@ -32,23 +33,78 @@ function FieldRow({ label, value }: { label: string; value: string | null | unde
 
 /** Ⅰ. 개요 — PRD 5.0절 제품 정보. 전부 선택 입력이라 채워지지 않은 필드는 "입력 필요"로
  * 남긴다(AI가 임의로 채우지 않는다는 원칙, 5.0절). v1.4부터 채팅에서 직접 입력하거나
- * 기업소개 파일에서 추출해 채울 수 있다(lib/productInfo/). */
-export function SectionOverview({ productInfo }: { productInfo?: ProductInfo | null }) {
+ * 기업소개 파일에서 추출해 채울 수 있다(lib/productInfo/). 2026-07-20: 실제 발행 보고서
+ * 양식에 맞춰 "2. 사용성 테스트 진행 일정"·"3. 사용성 테스트 설문 항목" 소목차를 추가했다 —
+ * 전자는 제품정보 카드에서 함께 입력받는 선택 필드(테스트 진행 일정은 raw data에 없는 정보라
+ * 자동 계산 불가), 후자는 WALLA 59컬럼 스키마에서 결정론적으로 구성한다
+ * (lib/pipeline/surveyQuestions.ts 참고 — 특정 발행 보고서의 설문설계 문서를 그대로
+ * 베끼지 않는 이유가 그 파일 주석에 있다).
+ */
+export function SectionOverview({
+  productInfo,
+  stats,
+}: {
+  productInfo?: ProductInfo | null;
+  stats: QuantStats;
+}) {
+  const featureNames = stats.featureSatisfaction.map((f) => f.name);
+  const surveyRows = buildSurveyQuestionRows(featureNames, productInfo?.serviceName);
+  // 표의 "단계" 열을 좁은 고정폭 셀에 반복해서 넣으면 긴 한글 문구가 옆 셀과 겹쳐 보이는
+  // 레이아웃 버그가 실측으로 확인됐다(2026-07-20) — 단계를 실제 보고서처럼 전체 너비
+  // 그룹 헤더로 바꾸고, 그 아래 문항만 한 열로 나열한다(병합된 셀처럼 보이는 효과).
+  const surveyStages = surveyRows.reduce<{ stage: string; questions: string[] }[]>((acc, row) => {
+    const last = acc[acc.length - 1];
+    if (last && last.stage === row.stage) {
+      last.questions.push(row.question);
+    } else {
+      acc.push({ stage: row.stage, questions: [row.question] });
+    }
+    return acc;
+  }, []);
   return (
     <View>
       <SectionHeader numeral="I" title="개요" />
-      <Text style={styles.subheading}>1. 기업 개요</Text>
+      <Text style={styles.subheading}>1. 제품 소개</Text>
+      <Text style={[styles.body, { fontWeight: "bold", marginTop: 2 }]}>기업 개요</Text>
       <FieldRow label="기업명" value={productInfo?.companyName} />
       <FieldRow label="홈페이지" value={productInfo?.homepage} />
       <FieldRow label="대표자" value={productInfo?.representative} />
       <FieldRow label="업무담당자" value={productInfo?.contactPerson} />
-      <Text style={[styles.subheading, { marginTop: 8 }]}>2. 제품·서비스 개요</Text>
+      <Text style={[styles.body, { fontWeight: "bold", marginTop: 6 }]}>제품·서비스 개요</Text>
       <FieldRow label="서비스명" value={productInfo?.serviceName} />
       <FieldRow label="서비스 요약" value={productInfo?.serviceSummary} />
       <FieldRow label="사업영역" value={productInfo?.businessArea} />
       <FieldRow label="산업분야" value={productInfo?.industry} />
       <FieldRow label="운영환경" value={productInfo?.operatingEnvironment} />
       <FieldRow label="사업화단계" value={productInfo?.businessStage} />
+
+      <Text style={[styles.subheading, { marginTop: 8 }]}>2. 사용성 테스트 진행 일정</Text>
+      <FieldRow label="테스트 진행 기간" value={productInfo?.testPeriod} />
+      <FieldRow label="테스트 대상" value={productInfo?.testTarget} />
+      <FieldRow label="담당자" value={productInfo?.testManager} />
+
+      <Text style={[styles.subheading, { marginTop: 8 }]}>3. 사용성 테스트 설문 항목</Text>
+      <View style={styles.table}>
+        {surveyStages.map((stage) => (
+          <View key={stage.stage} wrap={false}>
+            <View style={{ backgroundColor: colors.bgAlt, padding: 4, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <Text style={{ fontSize: 8, fontWeight: "bold" }}>{stage.stage}</Text>
+            </View>
+            {stage.questions.map((question, i) => (
+              <View
+                key={i}
+                style={
+                  stage === surveyStages[surveyStages.length - 1] && i === stage.questions.length - 1
+                    ? styles.tableRowLast
+                    : styles.tableRow
+                }
+              >
+                <Text style={[styles.tableCell, { flex: 1, borderRightWidth: 0 }]}>{question}</Text>
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -62,6 +118,9 @@ export function SectionDemographics({ stats }: { stats: QuantStats }) {
       <Text style={styles.body}>
         전체 응답자 {stats.respondentCount}명 (평균 연령 {d.age.mean}세, SD {d.age.sd})
       </Text>
+
+      <Text style={styles.subheading}>나이</Text>
+      <BarChart items={d.ageDistribution.map((g) => ({ label: g.label, value: g.percentage }))} max={100} unit="%" />
 
       <Text style={styles.subheading}>성별</Text>
       <BarChart items={d.gender.map((g) => ({ label: g.label, value: g.percentage }))} max={100} unit="%" />

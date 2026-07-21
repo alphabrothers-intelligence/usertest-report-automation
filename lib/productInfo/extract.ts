@@ -18,6 +18,11 @@ const ProductInfoExtractionSchema = z.object({
   industry: z.string().optional().describe("산업분야"),
   operatingEnvironment: z.string().optional().describe("운영환경(예: iOS/Android, 웹 등)"),
   businessStage: z.string().optional().describe("사업화단계(예: 베타, 정식 출시 등)"),
+  // 기업소개 문서에는 보통 없는 정보라 실제로 채워지는 일은 드물지만, ProductInfo 타입과
+  // 필드 목록을 맞추기 위해 스키마에도 포함한다(문서에 있으면 추출, 없으면 그대로 비워둠).
+  testPeriod: z.string().optional().describe("사용성 테스트 진행 기간"),
+  testTarget: z.string().optional().describe("사용성 테스트 대상"),
+  testManager: z.string().optional().describe("사용성 테스트 담당자"),
 });
 
 const SYSTEM_PROMPT = `당신은 기업 소개 문서에서 정해진 항목만 뽑아내는 추출 도구입니다.

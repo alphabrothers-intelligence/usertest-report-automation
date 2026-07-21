@@ -27,6 +27,36 @@ export interface CategoryCount {
   percentage: number;
 }
 
+const AGE_BRACKETS = ["10대", "20대", "30대", "40대 이상"] as const;
+
+function ageBracketLabel(age: number): (typeof AGE_BRACKETS)[number] {
+  if (age < 20) return "10대";
+  if (age < 30) return "20대";
+  if (age < 40) return "30대";
+  return "40대 이상";
+}
+
+/**
+ * 나이를 평균±SD로만 보여주면 "어떤 연령대가 많은지" 한눈에 안 들어온다는 실측 피드백
+ * (2026-07-20, 실제 보고서는 10대/20대/30대/40대 이상 구간별 분포 막대그래프로 보여줌).
+ * categoryDistribution처럼 건수 내림차순이 아니라, 나이순 그대로(10대→40대 이상) 정렬한다 —
+ * 실제 보고서 차트와 같은 순서라야 비교·해석이 자연스럽다.
+ */
+export function ageBracketDistribution(ages: (number | null)[]): CategoryCount[] {
+  const counts = new Map<string, number>(AGE_BRACKETS.map((b) => [b, 0]));
+  let total = 0;
+  for (const age of ages) {
+    if (age === null || Number.isNaN(age)) continue;
+    const label = ageBracketLabel(age);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+    total += 1;
+  }
+  return AGE_BRACKETS.map((label) => {
+    const count = counts.get(label) ?? 0;
+    return { label, count, percentage: total === 0 ? 0 : round((count / total) * 100, 1) };
+  });
+}
+
 export function categoryDistribution(values: (string | null)[]): CategoryCount[] {
   const counts = new Map<string, number>();
   let total = 0;

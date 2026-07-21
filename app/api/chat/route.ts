@@ -14,6 +14,7 @@ import { computeQuantStats } from "@/lib/quant/compute";
 import { buildQuestionSpecs } from "@/lib/pipeline/questions";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
 import { runQualitativePipeline } from "@/lib/pipeline/orchestrate";
+import { runPolaritySummariesForReport } from "@/lib/pipeline/generatePolaritySummaries";
 import { runRecommendation } from "@/lib/pipeline/recommendation";
 import { runResultSummary } from "@/lib/pipeline/summary";
 import { checkHedgeWording } from "@/lib/pipeline/hedgeCheck";
@@ -91,6 +92,9 @@ const SYSTEM_PROMPT = `당신은 "사용성테스트 결과보고서 자동생�
    runQualitativeAnalysis를 호출하지 마세요.** 사용자가 원치 않는 방향으로 비용을 먼저 써버리는
    걸 막기 위함입니다. 승인을 받으면 runQualitativeAnalysis를 호출하세요. 완료되면 문항별
    카테고리명과 인사이트 초안을 간결히 정리해서 보여주세요.
+   **긍정/부정/중립 총평 박스(generatePolaritySummaries)는 여기서 자동으로 이어 부르지
+   마세요** — Stage1/Stage2와 완전히 분리된 선택 기능입니다(API 호출량이 많아 레이트리밋
+   문제가 있었던 이력 있음). 사용자가 "요약도 만들어줘"처럼 명시적으로 요청할 때만 호출하세요.
 6. 정성 분석이 끝나면 getPolarityReviewQueue를 호출해 신뢰도 낮은(체크포인트 A 대상) 응답이
    있는지 확인하고, 있으면 사용자에게 검수를 안내하세요. 사용자가 "이건 부정이야" 같은 자연어로
    판정을 바꾸면 submitPolarityReview를 호출하세요(카드의 버튼 클릭은 별도 API로 직접 처리되며,
@@ -199,6 +203,9 @@ export async function POST(req: Request) {
         industry: z.string().optional(),
         operatingEnvironment: z.string().optional(),
         businessStage: z.string().optional(),
+        testPeriod: z.string().optional(),
+        testTarget: z.string().optional(),
+        testManager: z.string().optional(),
       }),
       execute: async ({ fileUrl, ...productInfo }) => {
         await saveProductInfo({ fileUrl, productInfo });
@@ -326,6 +333,34 @@ export async function POST(req: Request) {
         const pipeline = await runQualitativePipeline(specs);
         await saveQualitativeResults(report.id, pipeline);
         return { ok: true, ...pipeline };
+      },
+    }),
+    generatePolaritySummaries: tool({
+      description:
+        "각 문항의 긍정/부정/중립 카테고리를 종합한 한 단락 총평(실제 보고서의 '[긍정 의견 " +
+        "요약]' 박스 형식)을 만든다. **runQualitativeAnalysis와는 완전히 분리된 선택 기능이다 " +
+        "— 절대 자동으로 호출하지 말고, 사용자가 명시적으로 요청했을 때만("+
+        "\"요약도 만들어줘\", \"긍정/부정 의견 요약 추가해줘\" 등) 호출한다.** 이미 저장된 " +
+        "카테고리를 재료로 쓰므로 Stage1/Stage2를 다시 돌리지 않지만, 그래도 문항×극성 개수만큼 " +
+        "API를 호출하는 작업이다(최대 14×3=42회). runQualitativeAnalysis가 먼저 완료되어 " +
+        "카테고리가 저장되어 있어야 한다. 체크포인트 B(인사이트) 승인 여부와 무관하게 그 시점의 " +
+        "카테고리로 바로 생성한다.",
+      inputSchema: z.object({
+        fileUrl: z.string().url().describe("validateInput에 사용했던 것과 동일한 raw data URL"),
+      }),
+      execute: async ({ fileUrl }) => {
+        const report = await getReportByFileUrl(fileUrl);
+        if (!report) {
+          return { ok: false, error: "이 파일의 report가 아직 없습니다." };
+        }
+        const result = await runPolaritySummariesForReport(report.id);
+        if (result.questionsProcessed === 0) {
+          return {
+            ok: false,
+            error: "카테고리가 저장된 문항이 없습니다. runQualitativeAnalysis를 먼저 호출하세요.",
+          };
+        }
+        return { ok: true, ...result };
       },
     }),
     getPolarityReviewQueue: tool({
@@ -576,8 +611,19 @@ export async function POST(req: Request) {
       // 지시에 맡기지 않고 toolChoice로 다음 도구를 강제한다.
       //
       // validateInput → presentProductInfoPrompt는 같은 턴 안에서 바로 이어져야 하므로(사용자
-      // 대기가 필요 없는 전이) doneEver 기준으로 강제한다.
-      if (doneEver("validateInput") && !doneEver("presentProductInfoPrompt")) {
+      // 대기가 필요 없는 전이) doneEver 기준으로 강제한다. **단, validateInput이 실패했을 때는
+      // 강제하지 않는다** — 처음엔 "호출됐는지"만 봐서 파일을 못 찾아 실패한 경우에도 다음
+      // 카드를 억지로 띄워버리는 버그가 실측으로 재현됐다(2026-07-20, 시스템 프롬프트의 "실패
+      // 하면 이유를 설명하고 멈추세요" 지시와 반대로 동작 — doneEver는 호출 여부만 보고 성공
+      // 여부는 안 봤기 때문). 이번 턴에 막 호출된 경우에만 output.valid를 확인할 수 있으므로
+      // (이전 턴 성공이면 애초에 이 분기에 안 옴), steps에서 결과를 찾는다.
+      const validateInputResult = steps
+        .flatMap((s) => s.toolResults)
+        .find((r) => r.toolName === "validateInput");
+      const validateInputFailedThisTurn =
+        validateInputResult !== undefined &&
+        !(validateInputResult.output as { valid?: boolean } | undefined)?.valid;
+      if (doneEver("validateInput") && !doneEver("presentProductInfoPrompt") && !validateInputFailedThisTurn) {
         return { toolChoice: { type: "tool", toolName: "presentProductInfoPrompt" } };
       }
       // 아래 두 전이는 카드에 대한 사용자 응답(건너뛰기/입력, 목차 동의)을 반드시 기다려야

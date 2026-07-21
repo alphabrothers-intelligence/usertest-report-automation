@@ -1,58 +1,89 @@
 import type { QuantStats } from "@/lib/quant/compute";
 import type { CategoryCount, MeanSd } from "@/lib/quant/basic";
 
-const subLabel = "text-sm text-zinc-600 dark:text-zinc-400";
-const tableWrap = "mt-2 overflow-x-auto rounded-md border border-zinc-100 dark:border-zinc-800";
-const table = "w-full min-w-[320px] border-collapse text-sm";
-const th = "border-b border-zinc-200 bg-zinc-50 px-3 py-2 text-left font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300";
-const td = "border-b border-zinc-100 px-3 py-2 last:border-b-0 dark:border-zinc-800";
+// 도표 제목("나이대 분포", "성별" 등)이 너무 작고 굵지 않아 도표끼리 구별이 잘 안 된다는
+// 실측 피드백(2026-07-20) — 굵게·크게 키우고 밑줄로 그룹을 구분한다.
+const subLabel =
+  "text-sm font-bold text-zinc-800 dark:text-zinc-100 pb-1 mb-1 border-b border-zinc-200 dark:border-zinc-700";
+const chartGroupBox =
+  "rounded-md border border-zinc-100 bg-zinc-50/50 p-3 dark:border-zinc-800 dark:bg-zinc-800/20";
 
-function MeanSdTable({ rows }: { rows: { name: string; mean: number; sd: number; n?: number }[] }) {
+/**
+ * 표만 나열하면 "어떤 게 더 큰지" 한눈에 안 들어온다는 실측 피드백(2026-07-20) — 값 자체는
+ * 맞아도 사용자가 바로 해석할 수 없으면 소용없다는 원칙에 따라, 단일 값 비교가 필요한 곳은
+ * 전부 막대그래프로 바꿨다(순수 CSS, 차트 라이브러리 불필요 — lib/pdf/charts.tsx의 PDF쪽
+ * View 기반 막대와 같은 접근).
+ */
+function BarRow({ label, value, max, unit }: { label: string; value: number; max: number; unit: string }) {
+  const pct = max === 0 ? 0 : Math.max(0, Math.min(100, (value / max) * 100));
   return (
-    <div className={tableWrap}>
-      <table className={table}>
-        <thead>
-          <tr>
-            <th className={th}>항목</th>
-            <th className={th}>평균</th>
-            <th className={th}>SD</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.name}>
-              <td className={td}>{r.name}</td>
-              <td className={td}>{r.mean}</td>
-              <td className={td}>{r.sd}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="flex items-center gap-2 py-1 text-sm">
+      <span className="w-28 shrink-0 truncate" title={label}>
+        {label}
+      </span>
+      <div className="h-3 flex-1 overflow-hidden rounded bg-zinc-100 dark:bg-zinc-800">
+        <div className="h-full rounded bg-teal-500" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="w-16 shrink-0 text-right tabular-nums text-zinc-600 dark:text-zinc-400">
+        {value}
+        {unit}
+      </span>
     </div>
   );
 }
 
-function DistributionTable({ rows }: { rows: CategoryCount[] }) {
+function MeanSdBarChart({
+  rows,
+  showSd = true,
+}: {
+  rows: { name: string; mean: number; sd: number; n?: number }[];
+  showSd?: boolean;
+}) {
   return (
-    <div className={tableWrap}>
-      <table className={table}>
-        <thead>
-          <tr>
-            <th className={th}>항목</th>
-            <th className={th}>건수</th>
-            <th className={th}>비율</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.label}>
-              <td className={td}>{r.label}</td>
-              <td className={td}>{r.count}</td>
-              <td className={td}>{r.percentage}%</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="mt-1">
+      {rows.map((r) => (
+        <BarRow key={r.name} label={r.name} value={r.mean} max={10} unit="점" />
+      ))}
+      {showSd && (
+        <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+          표준편차: {rows.map((r) => `${r.name} ${r.sd}`).join(" · ")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DistributionBarChart({ rows }: { rows: CategoryCount[] }) {
+  return (
+    <div className="mt-1">
+      {rows.map((r) => (
+        <BarRow key={r.label} label={r.label} value={r.percentage} max={100} unit="%" />
+      ))}
+    </div>
+  );
+}
+
+/** 순위 기반 상대중요도는 음수도 나올 수 있어(6.8절 공식) 0을 기준으로 좌우로 뻗는 막대로 그린다. */
+function DivergingBarRow({ label, value, maxAbs }: { label: string; value: number; maxAbs: number }) {
+  const pct = maxAbs === 0 ? 0 : Math.min(100, (Math.abs(value) / maxAbs) * 100) / 2;
+  const isPositive = value >= 0;
+  return (
+    <div className="flex items-center gap-2 py-1 text-sm">
+      <span className="w-28 shrink-0 truncate" title={label}>
+        {label}
+      </span>
+      <div className="relative h-3 flex-1 overflow-hidden rounded bg-zinc-100 dark:bg-zinc-800">
+        <div className="absolute inset-y-0 left-1/2 w-px bg-zinc-300 dark:bg-zinc-600" />
+        <div
+          className={`absolute inset-y-0 rounded ${isPositive ? "bg-teal-500" : "bg-red-400"}`}
+          style={
+            isPositive
+              ? { left: "50%", width: `${pct}%` }
+              : { right: "50%", width: `${pct}%` }
+          }
+        />
+      </div>
+      <span className="w-16 shrink-0 text-right tabular-nums text-zinc-600 dark:text-zinc-400">{value}</span>
     </div>
   );
 }
@@ -90,10 +121,20 @@ export function QuantStatsSummary({ s }: { s: QuantStats }) {
   const rankedFeatures = [...s.featureSatisfaction].sort((a, b) => b.mean - a.mean);
   const topFeature = rankedFeatures[0];
   const topImportance = rankedImportance[0];
+  const maxImportanceAbs = Math.max(1, ...s.relativeImportance.map((r) => Math.abs(r.score)));
 
   return (
     <div className="w-full rounded-lg border border-zinc-200 bg-white px-5 py-4 text-base text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
       <p className="text-base font-semibold">정량 통계 계산 완료 (응답자 {s.respondentCount}명)</p>
+      {/* 카드 자체에 "왜 지금 이게 나왔는지" + "확인하고 넘어가는 절차"임을 고정으로 박아둔다 —
+          채팅 텍스트는 스크롤로 지나가 버릴 수 있지만 이 문구는 카드를 볼 때마다 항상 보인다
+          (2026-07-20 피드백: 연결 문구를 채팅에 한 번 띄우는 것만으로는 부족했고, "정량 통계를
+          낼 거다 → 확인하고 넘어가는 절차다"라는 흐름 자체를 고지하고 싶다는 요청). 아래 섹션
+          번호(Ⅱ~Ⅷ)는 방금 동의한 목차 카드의 섹션 번호와 그대로 대응된다. */}
+      <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+        방금 동의하신 목차의 Ⅱ~Ⅷ장에 그대로 들어갈 내용이에요(아래 섹션 번호가 목차의 섹션
+        번호와 같습니다). 내용을 확인해주시면 다음 단계(정성 분석 진행 여부)로 넘어갑니다.
+      </p>
 
       {/* 핵심 요약 — 표를 하나하나 안 읽어도 결과의 큰 그림이 바로 보이게 */}
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -104,53 +145,61 @@ export function QuantStatsSummary({ s }: { s: QuantStats }) {
       </div>
 
       <div className="mt-4">
-        <Section numeral="Ⅱ" title="인적사항">
+        <Section numeral="Ⅱ" title="인적사항 및 특성조사">
           <ul className="space-y-1 text-sm">
-            <li>{oneLineMeanSd("나이", s.demographics.age)}</li>
+            <li>
+              나이: 평균 {s.demographics.age.mean}세 (SD {s.demographics.age.sd}, n={s.demographics.age.n})
+            </li>
             <li>
               유사서비스 경험률: {s.demographics.priorServiceExperienceRate}% (경험자 만족도:{" "}
               {s.demographics.priorServiceSatisfaction.mean}점, n={s.demographics.priorServiceSatisfaction.n})
             </li>
           </ul>
-          <div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-            <div>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className={chartGroupBox}>
+              <p className={subLabel}>나이대 분포</p>
+              <DistributionBarChart rows={s.demographics.ageDistribution} />
+            </div>
+            <div className={chartGroupBox}>
               <p className={subLabel}>성별</p>
-              <DistributionTable rows={s.demographics.gender} />
+              <DistributionBarChart rows={s.demographics.gender} />
             </div>
-            <div>
+            <div className={chartGroupBox}>
               <p className={subLabel}>운영체제</p>
-              <DistributionTable rows={s.demographics.os} />
+              <DistributionBarChart rows={s.demographics.os} />
             </div>
-            <div>
+            <div className={chartGroupBox}>
               <p className={subLabel}>하루 평균 걷는 시간</p>
-              <DistributionTable rows={s.demographics.avgWalkTime} />
+              <DistributionBarChart rows={s.demographics.avgWalkTime} />
             </div>
-            <div>
+            <div className={chartGroupBox}>
               <p className={subLabel}>일주일 기준 산책 빈도</p>
-              <DistributionTable rows={s.demographics.walkFrequencyPerWeek} />
+              <DistributionBarChart rows={s.demographics.walkFrequencyPerWeek} />
             </div>
           </div>
         </Section>
 
-        <Section numeral="Ⅲ" title="기능별 만족도">
-          <MeanSdTable rows={s.featureSatisfaction} />
+        <Section numeral="Ⅲ" title="기능별 고객경험평가">
+          <MeanSdBarChart rows={s.featureSatisfaction} />
         </Section>
 
         <Section numeral="Ⅳ" title="핵심구매요소">
-          <p className={subLabel}>상대중요도 (높은 순)</p>
-          <ul className="mt-1 space-y-1 text-sm">
-            {rankedImportance.map((r) => (
-              <li key={r.name}>
-                {r.name}: {r.score}
-              </li>
-            ))}
-          </ul>
-          <p className={`mt-3 ${subLabel}`}>핵심구매요소 응답 분포</p>
-          <DistributionTable rows={s.keyFactorDistribution} />
+          <div className={chartGroupBox}>
+            <p className={subLabel}>상대중요도 (높은 순)</p>
+            <div className="mt-1">
+              {rankedImportance.map((r) => (
+                <DivergingBarRow key={r.name} label={r.name} value={r.score} maxAbs={maxImportanceAbs} />
+              ))}
+            </div>
+          </div>
+          <div className={`mt-3 ${chartGroupBox}`}>
+            <p className={subLabel}>핵심구매요소 응답 분포</p>
+            <DistributionBarChart rows={s.keyFactorDistribution} />
+          </div>
         </Section>
 
         <Section numeral="Ⅴ" title="4대가치 만족도">
-          <MeanSdTable
+          <MeanSdBarChart
             rows={[
               { name: "기능적", ...s.fourValues.functional },
               { name: "심미적", ...s.fourValues.aesthetic },
@@ -160,97 +209,73 @@ export function QuantStatsSummary({ s }: { s: QuantStats }) {
           />
         </Section>
 
-        <Section numeral="Ⅵ" title="UX 품질">
-          <p className={subLabel}>실용성</p>
-          <MeanSdTable rows={s.uxQuality.usability} />
-          <p className={`mt-3 ${subLabel}`}>즐거움</p>
-          <MeanSdTable rows={s.uxQuality.fun} />
+        <Section numeral="Ⅵ" title="사용자 경험 품질 평가">
+          <div className={chartGroupBox}>
+            <p className={subLabel}>실용성</p>
+            <MeanSdBarChart rows={s.uxQuality.usability} />
+          </div>
+          <div className={`mt-3 ${chartGroupBox}`}>
+            <p className={subLabel}>즐거움</p>
+            <MeanSdBarChart rows={s.uxQuality.fun} />
+          </div>
         </Section>
 
-        <Section numeral="Ⅷ" title="종합만족도 · NPS">
+        <Section numeral="Ⅷ" title="NPS 종합만족도 및 개선아이디어">
           <ul className="space-y-1 text-sm">
             <li>{oneLineMeanSd("전반적 만족도", s.overallSatisfaction)}</li>
-            <li>
-              NPS: {s.nps.npsScore} (추천 {s.nps.promoterPct}% · 중립 {s.nps.passivePct}% · 비추천{" "}
-              {s.nps.detractorPct}%, n={s.nps.n})
-            </li>
           </ul>
+          <div className={`mt-3 ${chartGroupBox}`}>
+            <p className={subLabel}>NPS: {s.nps.npsScore} (n={s.nps.n})</p>
+            <DistributionBarChart
+              rows={[
+                { label: "추천(9~10점)", count: 0, percentage: s.nps.promoterPct },
+                { label: "중립(7~8점)", count: 0, percentage: s.nps.passivePct },
+                { label: "비추천(0~6점)", count: 0, percentage: s.nps.detractorPct },
+              ]}
+            />
+          </div>
         </Section>
 
         <Section numeral="Ⅶ" title="교차분석">
-          <p className={subLabel}>연령대별 (기능별 만족도 평균)</p>
-          <div className={tableWrap}>
-            <table className={table}>
-              <thead>
-                <tr>
-                  <th className={th}>구간(n)</th>
-                  {s.crossAnalysis.byAgeGroup[0]?.featureSatisfaction.map((f) => (
-                    <th key={f.name} className={th}>
-                      {f.name}
-                    </th>
-                  ))}
-                  <th className={th}>기능적</th>
-                  <th className={th}>심미적</th>
-                  <th className={th}>경제적</th>
-                  <th className={th}>사회·공공</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.crossAnalysis.byAgeGroup.map((g) => (
-                  <tr key={g.group}>
-                    <td className={td}>
-                      {g.group} ({g.n})
-                    </td>
-                    {g.featureSatisfaction.map((f) => (
-                      <td key={f.name} className={td}>
-                        {f.mean}
-                      </td>
-                    ))}
-                    <td className={td}>{g.fourValues.functional}</td>
-                    <td className={td}>{g.fourValues.aesthetic}</td>
-                    <td className={td}>{g.fourValues.economic}</td>
-                    <td className={td}>{g.fourValues.social}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className={chartGroupBox}>
+            <p className={subLabel}>연령대별 기능 만족도</p>
+            {s.crossAnalysis.byAgeGroup.map((g) => (
+              <div key={g.group} className="mt-2">
+                <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  {g.group} (n={g.n})
+                </p>
+                <MeanSdBarChart
+                  showSd={false}
+                  rows={[
+                    ...g.featureSatisfaction.map((f) => ({ name: f.name, mean: f.mean, sd: 0 })),
+                    { name: "기능적가치", mean: g.fourValues.functional, sd: 0 },
+                    { name: "심미적가치", mean: g.fourValues.aesthetic, sd: 0 },
+                    { name: "경제적가치", mean: g.fourValues.economic, sd: 0 },
+                    { name: "사회공공가치", mean: g.fourValues.social, sd: 0 },
+                  ]}
+                />
+              </div>
+            ))}
           </div>
-          <p className={`mt-3 ${subLabel}`}>성별 (기능별 만족도 평균)</p>
-          <div className={tableWrap}>
-            <table className={table}>
-              <thead>
-                <tr>
-                  <th className={th}>성별(n)</th>
-                  {s.crossAnalysis.byGender[0]?.featureSatisfaction.map((f) => (
-                    <th key={f.name} className={th}>
-                      {f.name}
-                    </th>
-                  ))}
-                  <th className={th}>기능적</th>
-                  <th className={th}>심미적</th>
-                  <th className={th}>경제적</th>
-                  <th className={th}>사회·공공</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.crossAnalysis.byGender.map((g) => (
-                  <tr key={g.group}>
-                    <td className={td}>
-                      {g.group} ({g.n})
-                    </td>
-                    {g.featureSatisfaction.map((f) => (
-                      <td key={f.name} className={td}>
-                        {f.mean}
-                      </td>
-                    ))}
-                    <td className={td}>{g.fourValues.functional}</td>
-                    <td className={td}>{g.fourValues.aesthetic}</td>
-                    <td className={td}>{g.fourValues.economic}</td>
-                    <td className={td}>{g.fourValues.social}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className={`mt-3 ${chartGroupBox}`}>
+            <p className={subLabel}>성별 기능 만족도</p>
+            {s.crossAnalysis.byGender.map((g) => (
+              <div key={g.group} className="mt-2">
+                <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  {g.group} (n={g.n})
+                </p>
+                <MeanSdBarChart
+                  showSd={false}
+                  rows={[
+                    ...g.featureSatisfaction.map((f) => ({ name: f.name, mean: f.mean, sd: 0 })),
+                    { name: "기능적가치", mean: g.fourValues.functional, sd: 0 },
+                    { name: "심미적가치", mean: g.fourValues.aesthetic, sd: 0 },
+                    { name: "경제적가치", mean: g.fourValues.economic, sd: 0 },
+                    { name: "사회공공가치", mean: g.fourValues.social, sd: 0 },
+                  ]}
+                />
+              </div>
+            ))}
           </div>
         </Section>
       </div>

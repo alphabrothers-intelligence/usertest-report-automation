@@ -15,6 +15,12 @@ export interface ProductInfo {
   industry?: string;
   operatingEnvironment?: string;
   businessStage?: string;
+  // Ⅰ장 "2. 사용성 테스트 진행 일정" 용 (2026-07-20 추가) — 실제 보고서 양식에 맞춰 목차에
+  // 소목차로 반영. 나머지 필드와 동일하게 전부 선택 입력이고, 건너뛰어도 나중에 다시 채울 수
+  // 있다(제품/기업 정보 카드에 함께 노출).
+  testPeriod?: string;
+  testTarget?: string;
+  testManager?: string;
 }
 
 export const PRODUCT_INFO_FIELD_LABELS: Record<keyof ProductInfo, string> = {
@@ -28,4 +34,7 @@ export const PRODUCT_INFO_FIELD_LABELS: Record<keyof ProductInfo, string> = {
   industry: "산업분야",
   operatingEnvironment: "운영환경",
   businessStage: "사업화단계",
+  testPeriod: "테스트 진행 기간",
+  testTarget: "테스트 대상",
+  testManager: "담당자",
 };
