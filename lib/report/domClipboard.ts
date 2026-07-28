@@ -16,7 +16,7 @@
 import { escapeHtml } from "./richText";
 
 export const CLIPBOARD_ROOT_FONT =
-  "'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif";
+  "'맑은 고딕', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif";
 
 const SKIP_TAGS = new Set(["BUTTON", "SVG", "SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "INPUT", "TEXTAREA"]);
 const BLOCK_DISPLAYS = new Set([

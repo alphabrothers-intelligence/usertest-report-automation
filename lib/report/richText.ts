@@ -114,7 +114,7 @@ export function richTextToHtml(value: string): string {
 // 스타일 + 의미 태그**로만 써야 한다. 붙여넣을 때 워드프로세서는 CSS 클래스를 버리고 인라인
 // 스타일과 <b>/<u>/<i> 같은 태그만 해석하기 때문이다. 글꼴도 인라인 font-family로 지정해야
 // 맑은 고딕이 유지된다(PRD 3.3.2).
-export const CLIPBOARD_FONT_FAMILY = "'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif";
+export const CLIPBOARD_FONT_FAMILY = "'맑은 고딕', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif";
 
 /** run(굵게/밑줄/기울임)을 인라인 스타일 + 의미 태그로 변환 — 붙여넣기 호환성을 위해 둘 다 쓴다. */
 function runToInlineHtml(run: RichTextRun): string {

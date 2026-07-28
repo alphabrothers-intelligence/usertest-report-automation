@@ -44,7 +44,10 @@ export async function runPolaritySummariesForQuestion(
 ): Promise<Partial<Record<Polarity | "combined", string>>> {
   const question = (await getQuestionsWithAllCategories(reportId)).find((item) => item.question_key === questionKey);
   if (!question) throw new Error("요약할 문항을 찾을 수 없습니다.");
-  if (question.kind !== "standard" || question.categories.length === 0) {
+  // 요약 가능 여부는 문항의 화면 분류(standard/improvement)가 아니라 실제로 저장된
+  // 정성 카테고리와 극성 정보로 판단한다. 기존에는 improvement로 저장된 문항도 일괄
+  // 차단되어, 화면에는 'AI 요약 생성' 버튼이 보이지만 아무 결과도 만들 수 없었다.
+  if (question.categories.length === 0) {
     throw new Error("저장된 정성 카테고리가 없어 요약을 생성할 수 없습니다.");
   }
   const grouped = groupCategoriesByPolarity(question.categories);
@@ -59,6 +62,9 @@ export async function runPolaritySummariesForQuestion(
       }))]];
     }),
   ) as Partial<Record<Polarity, { label: string; insight: string; clause_count: number }[]>>;
+  if (Object.keys(byPolarity).length === 0) {
+    throw new Error("이 문항에는 긍정·부정·중립으로 분류된 정성 카테고리가 없어 요약을 만들 수 없습니다.");
+  }
   const summaries = question.question_key.startsWith("values:")
     ? { combined: await runValueSummary({ valueLabel: question.label, byPolarity }) }
     : await runPolaritySummaries({ questionLabel: question.label, byPolarity });

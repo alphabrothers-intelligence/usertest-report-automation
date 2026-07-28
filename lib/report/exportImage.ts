@@ -64,7 +64,7 @@ export async function downloadSvgAsPng(svg: SVGSVGElement, filename: string, sca
   triggerDownload(blob, filename);
 }
 
-const TABLE_FONT_FAMILY = "'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', sans-serif";
+const TABLE_FONT_FAMILY = "'맑은 고딕', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif";
 
 /**
  * 표를 PNG로 만든다. **처음엔 SVG `<foreignObject>`로 표 HTML을 감싸 `<img>`로 래스터화하는

@@ -85,7 +85,9 @@ function polarXY(cx: number, cy: number, r: number, deg: number): [number, numbe
 
 /** 긍정/부정/중립 비율을 반원 도넛 게이지 SVG 문자열로 만든다(원본 감정분석 차트 형식). */
 function donutSvg(counts: Record<string, number>): string {
-  const cx = 110, cy = 112, R = 95, Ri = 56;
+  // 원본 반원 도넛의 비율·범례 배치를 따른다. 색상만으로 극성을 추측하게 하지 않고
+  // 우측 범례에 긍정/부정/중립을 명시한다.
+  const cx = 125, cy = 126, R = 100, Ri = 58;
   const total = counts.positive + counts.negative + counts.neutral;
   if (total <= 0) return "";
   const paths: string[] = [];
@@ -104,12 +106,14 @@ function donutSvg(counts: Record<string, number>): string {
       `<path d="M ${ox0.toFixed(1)} ${oy0.toFixed(1)} A ${R} ${R} 0 0 1 ${ox1.toFixed(1)} ${oy1.toFixed(1)} L ${ix1.toFixed(1)} ${iy1.toFixed(1)} A ${Ri} ${Ri} 0 0 0 ${ix0.toFixed(1)} ${iy0.toFixed(1)} Z" fill="${DONUT_COLOR[pol]}"/>`,
     );
     const [lx, ly] = polarXY(cx, cy, (R + Ri) / 2, (a0 + a1) / 2);
-    labels.push(
-      `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle" dominant-baseline="central">${((frac) * 100).toFixed(1)}%</text>`,
-    );
+    labels.push(`<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle" dominant-baseline="central">${((frac) * 100).toFixed(1)}%</text>`);
     a = a1;
   }
-  return `<svg viewBox="0 0 220 128" width="220" height="128" xmlns="http://www.w3.org/2000/svg">${paths.join("")}${labels.join("")}</svg>`;
+  const legend = POLARITY_ORDER.map((pol, index) => {
+    const y = 55 + index * 21;
+    return `<rect x="252" y="${y - 9}" width="10" height="10" fill="${DONUT_COLOR[pol]}"/><text x="268" y="${y}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="11" fill="#4b5563">${POLARITY_LABEL[pol]}</text>`;
+  }).join("");
+  return `<svg viewBox="0 0 330 145" width="100%" style="max-width:330px" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="주관식 응답 감정 분석: 긍정, 부정, 중립 비율">${paths.join("")}${labels.join("")}${legend}</svg>`;
 }
 
 /** 긍정/부정/중립 % + 건수 표(원본 감정분석 하단 표 형식). */
@@ -125,10 +129,9 @@ function polarityTableHtml(counts: Record<string, number>): string {
 
 /** 극성별 응답 요약([긍정/부정/중립 의견 요약])을 원본 "응답 요약" 박스 형식 HTML로 만든다. */
 export function responseSummaryHtml(ps: Partial<Record<string, string>> | null | undefined, questionKey?: string): string {
-  if (!ps) return "";
   const rows: string[] = [];
   const add = (pol: string, label: string) => {
-    const text = ps[pol];
+    const text = ps?.[pol];
     if (text) rows.push(`<p style="font-weight:700;margin:6pt 0 2pt"><strong>[${label} 의견 요약]</strong></p><p style="margin:0 0 4pt">${richTextToInlineHtml(text)}</p>`);
   };
   add("positive", "긍정");
@@ -137,36 +140,55 @@ export function responseSummaryHtml(ps: Partial<Record<string, string>> | null |
   const content = rows.length === 0
     ? `<p style="margin:0;color:#9ca3af">정성 요약이 아직 없습니다. 이 박스의 AI 요약 생성 버튼으로 채울 수 있습니다.</p>`
     : rows.join("");
-  return questionKey ? `<div data-summary-key="${escapeHtml(questionKey)}">${content}</div>` : content;
+  // 별도 툴바가 아니라 실제 "응답 요약" 셀 안에서만 실행한다. contenteditable=false로
+  // 본문 편집 중 버튼이 지워지는 일을 막고, data-copy-ignore로 한글 복사 대상에서도 제외한다.
+  const action = questionKey
+    ? `<div data-copy-ignore contenteditable="false" style="margin:0 0 6pt;text-align:right"><button type="button" data-ai-summary="${escapeHtml(questionKey)}" style="border:1px solid #315c9c;border-radius:3pt;background:#ffffff;color:#315c9c;padding:3pt 7pt;font-size:9pt;font-weight:700;cursor:pointer">AI 요약 생성</button></div>`
+    : "";
+  return questionKey ? `<div data-summary-key="${escapeHtml(questionKey)}">${action}${content}</div>` : content;
 }
 
 // --- 원본 8·11·14페이지 "만족도 분포도"(0~10점 세로 막대) + "주요 키워드 도출"(워드클라우드) ---
 /** 0~10점 응답자 수 배열을 원본 "만족도 분포도" 세로 막대그래프 SVG로 그린다(웹 표시 전용 —
  * SVG라 한글 붙여넣기엔 안 실리고, 아래 감정분석 %표·키워드가 수치를 전달한다). */
 function satisfactionHistogramSvg(distribution: number[]): string {
-  const width = 320, height = 150, padTop = 16, padBottom = 18, padX = 6;
+  // 원본의 Excel형 그래프 규칙: 가로 격자·Y축 눈금·X/Y축 제목·최빈 점수 강조.
+  // SVG 하나를 웹 표시와 PNG 저장에 공용으로 쓰므로 출력물에서도 동일한 축이 유지된다.
+  const width = 560, height = 280;
+  const margin = { top: 18, right: 18, bottom: 46, left: 52 };
   const maxCount = Math.max(1, ...distribution);
-  const plotW = width - padX * 2;
-  const plotH = height - padTop - padBottom;
+  const niceMax = Math.max(5, Math.ceil(maxCount / 5) * 5);
+  const plotW = width - margin.left - margin.right;
+  const plotH = height - margin.top - margin.bottom;
   const slot = plotW / distribution.length;
   const barW = slot * 0.68;
-  const baseY = padTop + plotH;
+  const baseY = margin.top + plotH;
+  const grid: string[] = [];
+  for (let tick = 0; tick <= niceMax; tick += niceMax / 5) {
+    const y = baseY - (tick / niceMax) * plotH;
+    grid.push(
+      `<line x1="${margin.left}" y1="${y.toFixed(1)}" x2="${width - margin.right}" y2="${y.toFixed(1)}" stroke="#e5e7eb" stroke-width="1"/>` +
+      `<text x="${margin.left - 8}" y="${(y + 4).toFixed(1)}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="10" text-anchor="end" fill="#6b7280">${Math.round(tick)}</text>`,
+    );
+  }
   const parts = distribution.map((count, i) => {
-    const cx = padX + slot * i + slot / 2;
-    const h = (count / maxCount) * plotH;
+    const cx = margin.left + slot * i + slot / 2;
+    const h = (count / niceMax) * plotH;
     const y = baseY - h;
     const valueLabel = count > 0
-      ? `<text x="${cx.toFixed(1)}" y="${(y - 3).toFixed(1)}" font-size="8" text-anchor="middle" fill="#374151">${count}</text>`
+      ? `<text x="${cx.toFixed(1)}" y="${(y - 5).toFixed(1)}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="11" font-weight="700" text-anchor="middle" fill="#4b5563">${count}</text>`
       : "";
     return (
-      `<rect x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" fill="#7fdca4"/>` +
+      `<rect x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" fill="${count === maxCount && count > 0 ? "#078c44" : "#2ed6a4"}"/>` +
       valueLabel +
-      `<text x="${cx.toFixed(1)}" y="${(height - 5).toFixed(1)}" font-size="8" text-anchor="middle" fill="#6b7280">${i}</text>`
+      `<text x="${cx.toFixed(1)}" y="${(baseY + 18).toFixed(1)}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="11" text-anchor="middle" fill="#4b5563">${i}</text>`
     );
   });
   return (
-    `<svg viewBox="0 0 ${width} ${height}" width="100%" style="max-width:${width}px" xmlns="http://www.w3.org/2000/svg">` +
-    `<line x1="${padX}" y1="${baseY}" x2="${width - padX}" y2="${baseY}" stroke="#e5e7eb"/>${parts.join("")}</svg>`
+    `<svg viewBox="0 0 ${width} ${height}" width="100%" style="max-width:${width}px" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="만족도 점수별 응답자 수 분포">` +
+    `${grid.join("")}<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${baseY}" stroke="#9ca3af"/><line x1="${margin.left}" y1="${baseY}" x2="${width - margin.right}" y2="${baseY}" stroke="#9ca3af"/>${parts.join("")}` +
+    `<text x="${width / 2}" y="${height - 8}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="12" text-anchor="middle" fill="#4b5563">만족도 점수</text>` +
+    `<text x="16" y="${height / 2}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="12" text-anchor="middle" fill="#4b5563" transform="rotate(-90 16 ${height / 2})">응답자 수</text></svg>`
   );
 }
 
@@ -399,7 +421,7 @@ function valueMeanSdTableHtml(mean: number, sd: number): string {
  * Ⅴ장에는 Ⅲ장의 긍정·부정·중립 총평을 그대로 나열하지 않는다. `combined`에는 가치 문항 전용
  * 프롬프트가 만든 3~4문장 존댓말 요약이 저장된다. 이전에 생성해 둔 보고서는 combined 키가
  * 없을 수 있으므로, 그 경우에만 기존 극성 요약을 읽는 호환 경로를 둔다. */
-export function valueSummaryBoxHtml(label: string, summaries: Partial<Record<string, string>> | null | undefined): string {
+export function valueSummaryBoxHtml(label: string, summaries: Partial<Record<string, string>> | null | undefined, questionKey?: string): string {
   const text = summaries?.combined
     ?? (summaries
       ? (["positive", "negative", "neutral"] as const)
@@ -413,9 +435,12 @@ export function valueSummaryBoxHtml(label: string, summaries: Partial<Record<str
   const formattedText = text.split(/\r?\n+/).filter(Boolean)
     .map((line) => `<p style="margin:0 0 5pt;line-height:1.65">${richTextToInlineHtml(line)}</p>`)
     .join("");
+  const action = questionKey
+    ? `<button type="button" data-copy-ignore contenteditable="false" data-ai-summary="${escapeHtml(questionKey)}" style="float:right;border:1px solid #315c9c;border-radius:3pt;background:#ffffff;color:#315c9c;padding:3pt 7pt;font-size:9pt;font-weight:700;cursor:pointer">AI 요약 생성</button>`
+    : "";
   return (
     `<table style="border-collapse:collapse;width:100%;margin:0 0 14pt"><tbody>` +
-    `<tr><td style="background-color:#dfe6f7;color:#000000;font-weight:700;text-align:center;padding:6pt;border:1px solid #d4d4d8">[ ${escapeHtml(label)} 조사 결과 ]</td></tr>` +
+    `<tr><td style="background-color:#dfe6f7;color:#000000;font-weight:700;text-align:center;padding:6pt;border:1px solid #d4d4d8">${action}[ ${escapeHtml(label)} 조사 결과 ]</td></tr>` +
     `<tr><td style="padding:8pt;border:1px solid #d4d4d8;line-height:1.6">${text ? formattedText : "정성 요약이 아직 없습니다. 이 박스의 AI 요약 생성 버튼으로 채울 수 있습니다."}</td></tr>` +
     `</tbody></table>`
   );
@@ -447,7 +472,7 @@ function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questio
       }));
       blocks.push(richStaticBlock({
         id: `${idPrefix}-summary-${index + 1}`,
-        html: valueSummaryBoxHtml(value.label, question.polarity_summaries),
+        html: valueSummaryBoxHtml(value.label, question.polarity_summaries, question.question_key),
         summaryQuestionKey: question.question_key,
         summaryKind: "value",
       }));
@@ -458,11 +483,54 @@ function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questio
   return blocks;
 }
 
+/**
+ * 정성 문항은 DB 생성 시각이 아닌 설문지의 논리적 문항 순서로 정렬한다.
+ *
+ * 같은 원자료를 재분석하거나 일부 문항만 다시 생성하면 `created_at` 순서가 바뀔 수 있다.
+ * 그러면 Q6~Q12 기능 결과가 뒤섞여 보이는 문제가 생기므로, 통계 모델의 기능 순서와
+ * 설문 스키마의 문항 순서를 기준으로 한 번 정렬한 뒤 모든 섹션에서 재사용한다.
+ */
+function qualitativeQuestionOrder(stats: QuantStats, question: QuestionWithApprovedCategories): number {
+  if (question.question_key.startsWith("feature:")) {
+    const featureName = question.question_key.slice("feature:".length);
+    const featureIndex = stats.featureSatisfaction.findIndex((feature) => feature.name === featureName);
+    return 600 + (featureIndex >= 0 ? featureIndex : 99);
+  }
+
+  const fixedOrder: Record<string, number> = {
+    // 기능 만족도/중요도(Q6~Q12) 다음의 유사 서비스 경험 문항
+    priorService: 1500,
+    // 핵심구매요소(Q13~) 뒤에 이어지는 4대 가치 문항
+    "values:functional": 2300,
+    "values:aesthetic": 2400,
+    "values:economic": 2500,
+    "values:social": 2600,
+    // 보고서 말미의 종합 만족도·추천 의향·개선 아이디어
+    overallSatisfaction: 3500,
+    nps: 3600,
+    improvementIdea: 3700,
+  };
+  return fixedOrder[question.question_key] ?? Number.MAX_SAFE_INTEGER;
+}
+
+function orderQualitativeQuestions(stats: QuantStats, qual: QuestionWithApprovedCategories[]) {
+  return [...qual].sort((left, right) => {
+    const orderDifference = qualitativeQuestionOrder(stats, left) - qualitativeQuestionOrder(stats, right);
+    if (orderDifference !== 0) return orderDifference;
+    return left.question_key.localeCompare(right.question_key, "ko");
+  });
+}
+
 function questionsByKeyPrefix(qual: QuestionWithApprovedCategories[], prefix: string) {
   return qual.filter((q) => q.question_key.startsWith(prefix));
 }
 function questionsByKeys(qual: QuestionWithApprovedCategories[], keys: string[]) {
-  return qual.filter((q) => keys.includes(q.question_key));
+  const questionByKey = new Map(qual.map((question) => [question.question_key, question]));
+  // `filter`는 DB 저장 순서를 보존한다. 요청한 키 순서로 명시적으로 꺼내야 Q 번호가 고정된다.
+  return keys.flatMap((key) => {
+    const question = questionByKey.get(key);
+    return question ? [question] : [];
+  });
 }
 
 /**
@@ -471,9 +539,8 @@ function questionsByKeys(qual: QuestionWithApprovedCategories[], keys: string[])
  * (PRD 3.3.1, 2026-07-25 재구성). PDF/DOCX/HWPX 렌더러의 레이아웃 구현과는 분리돼 있다 —
  * 웹에서 문장이나 차트를 편집해도 기존 독립 PDF 렌더러를 변경하지 않는다.
  *
- * 정성 데이터(카테고리·인용문·인사이트)는 이번 재구성에서도 아직 연결하지 않는다 — DB에
- * 정성 분석이 승인된 테스트 보고서가 없어 검증할 수 없기 때문(2026-07-25 사용자 확인).
- * 정성이 들어갈 자리는 `pending: true` 텍스트 블록으로 정직하게 비워둔다.
+ * 정성 데이터(카테고리·인용문·인사이트)는 DB에 저장된 승인 문항을 그대로 연결한다.
+ * 아직 생성·승인되지 않은 문항만 `pending: true` 텍스트 블록으로 정직하게 비워 둔다.
  */
 export type ReportWorkspaceSeed = {
   quantStats: QuantStats;
@@ -1101,9 +1168,99 @@ function buildCrossAnalysisSection(stats: QuantStats): ReportBlock[] {
   ];
 }
 
-/** 섹션 Ⅷ: 종합 만족도 및 NPS 지수 — 정량 요약 표 + 종합/유사서비스/개선아이디어 정성 분석. */
+/** 원본 43쪽 NPS 해설·결과표. NPS 도식(SVG)은 별도 블록으로 두되, 설명/수치표는 원본처럼
+ * 연보라 구분선과 5열 표를 가진 하나의 문서 표로 만든다. 일반 `EditableTable`은 이 구조(강조
+ * 문단, 구분선, 열 너비)를 보존하지 못하므로 rich-static을 사용한다. */
+function npsReferenceHtml(stats: QuantStats): string {
+  const nps = stats.nps;
+  const rule = "border-top:1.25pt solid #6388e6";
+  const head = "background-color:#c0cdef;border:0.75pt solid #6f86b7;padding:6pt 4pt;text-align:center;font-weight:700";
+  const cell = "border:0.75pt solid #aeb7c9;padding:6pt 4pt;text-align:center";
+  // 원본은 NPS 결과와 고객군 비율 사이에 더 굵은 세로 구분선을 둔다.
+  const npsDivider = "border-right:2pt double #4b5563";
+  return [
+    `<div style="margin:4pt 0 10pt;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:#111827;font-size:10.5pt;line-height:1.7">`,
+    `<div style="${rule};padding:8pt 8pt 7pt;margin-top:6pt">`,
+    `<p style="margin:0 0 3pt;padding-left:12pt;text-indent:-10pt">• 글로벌 자문 업체인 Bain &amp; Company가 실제 고객 충성도를 측정하기 위해 제시한 순수 고객추천/구매 지수 조사</p>`,
+    `<p style="margin:0 0 3pt;padding-left:12pt;text-indent:-10pt">• 제품별 구매/추천 의향 조사를 통하여 고객 유지율 및 신뢰도 분석 진행하며, 사용성 테스트를 통해 NPS의 유형별 비율 산정</p>`,
+    `<p style="margin:0;padding-left:12pt;text-indent:-10pt">• 창업 초기기업의 경우, 통상적으로 NPS 지수가 0보다 크면 충성 고객을 확보해 시장성이 있는 제품으로 판단</p>`,
+    `</div>`,
+    `<div style="${rule};padding:8pt 8pt 7pt">`,
+    `<p style="margin:0 0 4pt"><strong>− 구매/추천고객 (PROMOTER, 9~10점)</strong><br><span style="padding-left:12pt">자발적으로 구매/추천할 만큼 만족도가 높은 잠재 고객</span></p>`,
+    `<p style="margin:0 0 4pt"><strong>− 중립 고객 (PASSIVE, 7~8점)</strong><br><span style="padding-left:12pt">제품에 대한 보증까지는 응하지 않을 가능성이 큰 고객</span></p>`,
+    `<p style="margin:0"><strong>− 비구매/비추천 고객 (DETRACTOR, 0~6점)</strong><br><span style="padding-left:12pt">실제 비구매 및 다른 이에게도 쓰지 않도록 적극적으로 의견을 표출할 수 있는 고객</span></p>`,
+    `</div>`,
+    `<div style="${rule};padding:8pt 8pt 10pt">`,
+    `<p style="margin:0 0 4pt">− MVP TEST 내부 DB 분석 결과, NPS 지수가 음수가 나오면 시장성이 낮다고 판단함</p>`,
+    `<p style="margin:0">− 실제 제품 사용 경험을 바탕으로 산정한 데이터가 아니기에 음수로 산정될 수 있으며, 지속해서 NPS 지수 추적 관리를 통해 PMF(제품시장적합도)를 높일 필요성이 있음</p>`,
+    `</div>`,
+    `<table style="border-collapse:collapse;width:100%;margin:8pt 0 0;table-layout:fixed"><thead><tr>`,
+    `<th style="${head}">평균 구매 의향</th><th style="${head};${npsDivider}">NPS 지수</th><th style="${head}">구매 고객<br>(PROMOTERS)</th><th style="${head}">중립 고객<br>(PASSIVES)</th><th style="${head}">비구매 고객<br>(DETRACTORS)</th>`,
+    `</tr></thead><tbody><tr>`,
+    `<td style="${cell}">${nps.rawMean.toFixed(2)}</td><td style="${cell};${npsDivider}">${nps.npsScore}</td><td style="${cell}">${nps.promoterPct} %</td><td style="${cell}">${nps.passivePct} %</td><td style="${cell}">${nps.detractorPct} %</td>`,
+    `</tr></tbody></table></div>`,
+  ].join("");
+}
+
+/** 원본 43쪽 수치표 아래의 삼각형 판단문. 회사 내부 기준 비교는 일반화할 수 없으므로,
+ * NPS 부호와 응답 비율이라는 현재 raw data 근거만 사용한다. */
+function npsJudgmentHtml(nps: QuantStats["nps"]): string {
+  const marketability = nps.npsScore >= 0 ? "양호한 시장성" : "낮은 시장성";
+  const urgency = nps.npsScore >= 0 ? "추세를 지속적으로 관리할 필요가 있음" : "개선 전략의 수립이 시급하다고 사료됨";
+  return [
+    `<div style="margin:8pt 0 0;font-family:'맑은 고딕','Malgun Gothic',sans-serif;font-size:10.5pt;line-height:1.7">`,
+    `<p style="margin:0 0 5pt;padding-left:14pt;text-indent:-12pt">▶ 구매의향, 추천의향을 NPS 지수로 환산했을 때, ${nps.npsScore}으로 <u>'${marketability}'</u> 수준으로 판단되어 ${urgency}</p>`,
+    `<p style="margin:0 0 5pt;padding-left:14pt;text-indent:-12pt">▶ 구매 고객 대비 중립 고객(${nps.passivePct}%) 비율을 확인할 때, <strong><u>사용자들의 구매 전환을 일으키는 요소를 보완할 필요가 있음</u></strong></p>`,
+    `<p style="margin:0;padding-left:14pt;text-indent:-12pt">▶ 전체 기능에 대한 고도화 및 사용자에게 도출된 불편 사항, 개선 사항을 반영하여 사용자의 만족도를 높이는 방안이 필요함</p>`,
+    `</div>`,
+  ].join("");
+}
+
+/** 원본 44쪽의 전반적 만족도 결과: 점수 분포 → 평균/표준편차 → 3개 구간 비율 순서를 유지한다. */
+function overallSatisfactionResultHtml(stats: QuantStats): string {
+  const distribution = stats.overallSatisfactionDistribution ?? Array.from({ length: 11 }, () => 0);
+  const hasDistribution = distribution.some((count) => count > 0);
+  const total = distribution.reduce((sum, value) => sum + value, 0) || 1;
+  const bracketPct = (start: number, end: number) => Math.round((distribution.slice(start, end + 1).reduce((sum, value) => sum + value, 0) / total) * 1000) / 10;
+  const border = "1px solid #9db6e4";
+  return [
+    `<div style="font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:#111827;font-size:10.5pt;line-height:1.6">`,
+    `<div style="border-top:4px solid #4fc8e8;border-left:${border};border-right:${border};border-bottom:${border};padding:0;margin:0 0 10pt">`,
+    `<p style="margin:0;background-color:#c0cdef;padding:5pt;text-align:center;font-weight:700">[ 전반적 만족도 조사 결과 ]</p>`,
+    `<div style="padding:7pt;text-align:center">${hasDistribution ? satisfactionHistogramSvg(distribution) : `<p style="margin:20pt 0;color:#64748b">원본 raw data에서 만족도 분포를 불러오는 중입니다.</p>`}</div></div>`,
+    `<table style="border-collapse:collapse;width:100%;margin:0 0 10pt"><thead><tr><th colspan="3" style="background-color:#c0cdef;border:${border};padding:5pt;text-align:center">종합만족도 평가</th></tr><tr><th style="background-color:#dfe6f7;border:${border};padding:5pt">구분</th><th style="background-color:#dfe6f7;border:${border};padding:5pt">평균 만족도</th><th style="background-color:#dfe6f7;border:${border};padding:5pt">표준편차</th></tr></thead><tbody><tr><td style="border:${border};padding:5pt;text-align:center">전체</td><td style="border:${border};padding:5pt;text-align:center">${stats.overallSatisfaction.mean.toFixed(2)}</td><td style="border:${border};padding:5pt;text-align:center">${stats.overallSatisfaction.sd.toFixed(2)}</td></tr></tbody></table>`,
+    `<p style="margin:7pt 0 3pt;font-weight:700">[만족도 구간별 비율]</p>`,
+    `<table style="border-collapse:collapse;width:100%;margin:0"><thead><tr><th style="background-color:#fde4d0;border:${border};padding:5pt">부정 고객<br>(0~6점)</th><th style="background-color:#e8e8e8;border:${border};padding:5pt">중립 고객<br>(7~8점)</th><th style="background-color:#dce8fb;border:${border};padding:5pt">긍정 고객<br>(9~10점)</th></tr></thead><tbody><tr><td style="border:${border};padding:5pt;text-align:center">${bracketPct(0, 6)}%</td><td style="border:${border};padding:5pt;text-align:center">${bracketPct(7, 8)}%</td><td style="border:${border};padding:5pt;text-align:center">${bracketPct(9, 10)}%</td></tr></tbody></table>`,
+    `</div>`,
+  ].join("");
+}
+
+/** 원본 44쪽의 '[주요 시사점]' 자리. 주관적 해석을 덧붙이지 않고 구간별 실제 응답 비율만 서술한다. */
+function overallSatisfactionInsightHtml(stats: QuantStats): string {
+  const distribution = stats.overallSatisfactionDistribution ?? Array.from({ length: 11 }, () => 0);
+  const total = distribution.reduce((sum, value) => sum + value, 0) || 1;
+  const bracketPct = (start: number, end: number) => Math.round((distribution.slice(start, end + 1).reduce((sum, value) => sum + value, 0) / total) * 1000) / 10;
+  const negative = bracketPct(0, 6);
+  const neutral = bracketPct(7, 8);
+  const positive = bracketPct(9, 10);
+  return [
+    `<div style="font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:#111827;font-size:10.5pt;line-height:1.7;margin:10pt 0 2pt">`,
+    `<p style="margin:0 0 4pt;font-weight:700">[주요 시사점]</p>`,
+    `<p style="margin:0 0 3pt;padding-left:12pt;text-indent:-10pt">• 긍정 고객(9~10점)은 ${positive}%이며, 전반적 만족도 평균은 ${stats.overallSatisfaction.mean.toFixed(2)}점으로 확인됨.</p>`,
+    `<p style="margin:0 0 3pt;padding-left:12pt;text-indent:-10pt">• 중립 고객(7~8점)은 ${neutral}%이며, 추가 사용·추천 의향으로 전환될 수 있는 응답 비율을 확인함.</p>`,
+    `<p style="margin:0;padding-left:12pt;text-indent:-10pt">• 부정 고객(0~6점)은 ${negative}%이며, 해당 응답에서 언급된 개선 요구는 다음 개선 아이디어 문항에서 확인할 수 있음.</p>`,
+    `</div>`,
+  ].join("");
+}
+
+/** 섹션 Ⅷ: 종합 만족도 및 NPS 지수 — 원본의 도식 → 해설 3묶음 → 5열 결과표 순서를 따른다. */
 function buildNpsSection(stats: QuantStats, qual: QuestionWithApprovedCategories[]): ReportBlock[] {
-  const npsQual = questionsByKeys(qual, ["overallSatisfaction", "nps", "priorService", "improvementIdea"]);
+  // 종합 만족도·추천 의향·개선 아이디어는 설문지의 마지막 문항 순서로 유지한다.
+  // priorService는 이보다 앞선 유사 서비스 경험 문항이므로, 뒤쪽에 끼워 넣지 않는다.
+  const [overallQuestion] = questionsByKeys(qual, ["overallSatisfaction"]);
+  const [improvementQuestion] = questionsByKeys(qual, ["improvementIdea"]);
+  const overallSurvey = findSurveyQuestion(stats, "종합 만족도", 0);
+  const improvementSurvey = findSurveyQuestion(stats, "개선 아이디어", 0);
   return [
     headingBlock({ id: "nps-result-heading", variant: "numbered", number: "1", text: "종합 만족도 및 NPS 지수" }),
     npsBlock({
@@ -1115,24 +1272,26 @@ function buildNpsSection(stats: QuantStats, qual: QuestionWithApprovedCategories
       passivePct: stats.nps.passivePct,
       detractorPct: stats.nps.detractorPct,
     }),
-    tableBlock({
-      id: "nps-summary",
-      title: "종합 만족도 및 NPS 지수",
-      headers: ["전반적 만족도", "평균 구매 의향", "NPS 지수", "구매 고객", "중립 고객", "비구매 고객"],
-      rows: [[
-        stats.overallSatisfaction.mean,
-        stats.nps.rawMean,
-        stats.nps.npsScore,
-        `${stats.nps.promoterPct}%`,
-        `${stats.nps.passivePct}%`,
-        `${stats.nps.detractorPct}%`,
-      ]],
+    richStaticBlock({ id: "nps-reference-and-summary", html: npsReferenceHtml(stats) }),
+    richStaticBlock({ id: "nps-judgments", html: npsJudgmentHtml(stats.nps) }),
+    headingBlock({
+      id: "nps-overall-question",
+      variant: "question",
+      number: overallSurvey ? `Q${overallSurvey.qno}` : undefined,
+      text: overallSurvey?.question ?? overallQuestion?.label ?? "전반적인 만족도(종합 점수)는 몇 점입니까?",
     }),
-    ...qualitativeBlock(
-      "nps-improvement-idea",
-      "종합 만족도 · 개선 아이디어 분석",
-      npsQual,
-    ),
+    richStaticBlock({ id: "nps-overall-result", html: overallSatisfactionResultHtml(stats) }),
+    richStaticBlock({ id: "nps-overall-insights", html: overallSatisfactionInsightHtml(stats) }),
+    headingBlock({ id: "nps-improvement-heading", variant: "numbered", number: "2", text: "개선 아이디어" }),
+    headingBlock({
+      id: "nps-improvement-question",
+      variant: "question",
+      number: improvementSurvey ? `Q${improvementSurvey.qno}` : undefined,
+      text: improvementSurvey?.question ?? improvementQuestion?.label ?? "개선 아이디어 제안",
+    }),
+    ...(improvementQuestion
+      ? qualitativeBlock("nps-improvement-idea", "개선 아이디어", [improvementQuestion])
+      : [textBlock({ id: "nps-improvement-idea", label: "개선 아이디어", html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`, pending: true })]),
   ];
 }
 
@@ -1151,17 +1310,98 @@ function polarityPercentages(qual: QuestionWithApprovedCategories[], featureName
   return { positive: pct(counts.positive), neutral: pct(counts.neutral), negative: pct(counts.negative) };
 }
 
+/** 원본 50쪽의 6열 기능별 고객 경험 평가 수치표. 최고/최저 지표만 절제된 색으로 표시한다. */
+function conclusionFeatureTableHtml(stats: QuantStats, qual: QuestionWithApprovedCategories[], ranked: typeof stats.relativeImportance): string {
+  const rows = ranked.map((item) => {
+    const polarity = polarityPercentages(qual, item.name);
+    return {
+      name: item.name,
+      satisfaction: stats.featureSatisfaction.find((feature) => feature.name === item.name)?.mean ?? 0,
+      importance: item.score,
+      ...polarity,
+    };
+  });
+  const maxSatisfaction = Math.max(...rows.map((row) => row.satisfaction));
+  const minSatisfaction = Math.min(...rows.map((row) => row.satisfaction));
+  const maxImportance = Math.max(...rows.map((row) => row.importance));
+  const maxPositive = Math.max(...rows.map((row) => row.positive));
+  const maxNeutral = Math.max(...rows.map((row) => row.neutral));
+  const maxNegative = Math.max(...rows.map((row) => row.negative));
+  const cell = (value: string | number, tone?: "best" | "worst" | "neutral") => {
+    const background = tone === "best" ? "#dce7f9" : tone === "worst" ? "#fde4d0" : tone === "neutral" ? "#e7e7e7" : "#ffffff";
+    return `<td style="border:0.75pt solid #d4d4d8;padding:5pt 4pt;text-align:center;background-color:${background}">${value}</td>`;
+  };
+  return [
+    `<table style="border-collapse:collapse;width:100%;table-layout:fixed;margin:0 0 10pt;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:9.5pt;line-height:1.35">`,
+    `<thead><tr style="background-color:#f4f4f5">`,
+    `<th style="border:0.75pt solid #d4d4d8;padding:5pt 3pt">기능명</th><th style="border:0.75pt solid #d4d4d8;padding:5pt 3pt">평균 만족도<br>(점)</th><th style="border:0.75pt solid #d4d4d8;padding:5pt 3pt">상대 중요도</th><th style="border:0.75pt solid #d4d4d8;padding:5pt 3pt">긍정 비율<br>(%)</th><th style="border:0.75pt solid #d4d4d8;padding:5pt 3pt">중립 비율<br>(%)</th><th style="border:0.75pt solid #d4d4d8;padding:5pt 3pt">부정 의견<br>(%)</th>`,
+    `</tr></thead><tbody>`,
+    ...rows.map((row) => `<tr>${cell(escapeHtml(row.name))}${cell(row.satisfaction.toFixed(2), row.satisfaction === maxSatisfaction ? "best" : row.satisfaction === minSatisfaction ? "worst" : undefined)}${cell(row.importance.toFixed(2), row.importance === maxImportance ? "best" : row.importance === Math.min(...rows.map((r) => r.importance)) ? "worst" : undefined)}${cell(row.positive.toFixed(1), row.positive === maxPositive ? "best" : undefined)}${cell(row.neutral.toFixed(1), row.neutral === maxNeutral ? "neutral" : undefined)}${cell(row.negative.toFixed(1), row.negative === maxNegative ? "worst" : undefined)}</tr>`),
+    `</tbody></table>`,
+  ].join("");
+}
+
+function conclusionEvidenceTableHtml(
+  stats: QuantStats,
+  resultSummary: string | null | undefined,
+  recommendations: RecommendationRow[],
+): string {
+  const values = [
+    ["기능적 가치", stats.fourValues.functional.mean],
+    ["심미적 가치", stats.fourValues.aesthetic.mean],
+    ["경제적 가치", stats.fourValues.economic.mean],
+    ["사회·공공적 가치", stats.fourValues.social.mean],
+  ] as const;
+  const topFactors = [...stats.keyFactorDistribution].sort((a, b) => b.percentage - a.percentage).slice(0, 3);
+  const usability = stats.uxQuality.usability;
+  const fun = stats.uxQuality.fun;
+  const lowestUx = [...usability, ...fun].sort((a, b) => a.mean - b.mean)[0];
+  const devPriority = recommendations.find((r) => r.section === "dev_priority");
+  const cell = "border:0.75pt solid #d4d4d8;padding:10pt 12pt;vertical-align:top";
+  const label = "border:0.75pt solid #d4d4d8;padding:10pt 7pt;vertical-align:middle;text-align:center;background-color:#dfe7f6;font-weight:700;width:18%";
+  const outcome = resultSummary?.trim()
+    ? richTextToHtml(resultSummary)
+    : `<p style="margin:0;color:#6b7280">종합 결과 요약은 정성 분석 승인 후 표시됩니다.</p>`;
+  const direction = devPriority
+    ? richTextToHtml(devPriority.final ?? devPriority.draft)
+    : `<p style="margin:0;color:#6b7280">개선 전략 제언은 정성 분석 승인 후 표시됩니다.</p>`;
+  return [
+    `<table style="border-collapse:collapse;width:100%;margin:0 0 12pt;table-layout:fixed;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.5pt;line-height:1.65">`,
+    `<thead><tr><th style="${label};background-color:#d0dcf3">항목</th><th style="${cell};background-color:#d0dcf3;text-align:center;font-weight:700">주요 의견</th></tr></thead><tbody>`,
+    `<tr><td style="${label}">핵심구매요소</td><td style="${cell}"><p style="margin:0">상위 선택 항목은 ${topFactors.map((item) => `<strong>${escapeHtml(item.label)}(${item.percentage}%)</strong>`).join(", ")}로 집계되었습니다.</p></td></tr>`,
+    `<tr><td style="${label}">4대 가치 만족도</td><td style="${cell}"><p style="margin:0">${values.map(([labelText, value]) => `<strong>${labelText}</strong> ${value.toFixed(2)}점`).join(", ")}으로 집계되었습니다. 항목별 수치는 원자료 기반 정량 결과입니다.</p></td></tr>`,
+    `<tr><td style="${label}">사용자 경험<br>품질 평가</td><td style="${cell}"><p style="margin:0">실용성 평균은 ${(usability.reduce((sum, item) => sum + item.mean, 0) / Math.max(usability.length, 1)).toFixed(2)}점, 즐거움 평균은 ${(fun.reduce((sum, item) => sum + item.mean, 0) / Math.max(fun.length, 1)).toFixed(2)}점입니다.${lowestUx ? ` 가장 낮은 항목은 <strong>${escapeHtml(lowestUx.name)}(${lowestUx.mean.toFixed(2)}점)</strong>입니다.` : ""}</p></td></tr>`,
+    `<tr><td style="${label}">종합 만족도<br>및 NPS 지수</td><td style="${cell}"><p style="margin:0">전반적 만족도는 <strong>${stats.overallSatisfaction.mean.toFixed(2)}점</strong>, 평균 구매 의향은 <strong>${stats.nps.rawMean.toFixed(2)}점</strong>, NPS 지수는 <strong>${stats.nps.npsScore}</strong>입니다.</p></td></tr>`,
+    `<tr><td style="${label}">사용성테스트<br>결과 요약</td><td style="${cell}">${outcome}</td></tr>`,
+    `<tr><td style="${label}">개선 전략<br>제언</td><td style="${cell}">${direction}</td></tr>`,
+    `</tbody></table>`,
+  ].join("");
+}
+
+function conclusionStrategyTableHtml(recommendations: RecommendationRow[]): string {
+  const devPriority = recommendations.find((r) => r.section === "dev_priority");
+  const featureRecs = recommendations.filter((r) => r.section.startsWith("feature_improvement:"));
+  const cell = "border:0.75pt solid #d4d4d8;padding:10pt 12pt;vertical-align:top";
+  const label = "border:0.75pt solid #d4d4d8;padding:10pt 7pt;vertical-align:middle;text-align:center;background-color:#dfe7f6;font-weight:700;width:18%";
+  const priority = devPriority
+    ? richTextToHtml(devPriority.final ?? devPriority.draft)
+    : `<p style="margin:0;color:#6b7280">개발 우선순위 제언은 정성 분석 승인 후 표시됩니다.</p>`;
+  const features = featureRecs.length > 0
+    ? featureRecs.map((rec) => `<p style="margin:9pt 0 3pt;font-weight:700"><strong>[${escapeHtml(rec.section.replace("feature_improvement:", ""))}]</strong></p>${richTextToHtml(rec.final ?? rec.draft)}`).join("")
+    : `<p style="margin:0;color:#6b7280">기능 개선 제언은 정성 분석 승인 후 표시됩니다.</p>`;
+  return `<table style="border-collapse:collapse;width:100%;margin:0 0 12pt;table-layout:fixed;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.5pt;line-height:1.65"><tbody><tr><td style="${label}">전반적 방향성</td><td style="${cell}">${priority}</td></tr><tr><td style="${label}">개발 우선순위 제언</td><td style="${cell}">${priority}</td></tr><tr><td style="${label}">기능 개선 제안</td><td style="${cell}">${features}</td></tr></tbody></table>`;
+}
+
 function buildConclusionSection(
   stats: QuantStats,
   resultSummary: string | null | undefined,
   qual: QuestionWithApprovedCategories[],
   recommendations: RecommendationRow[],
 ): ReportBlock[] {
-  const devPriority = recommendations.find((r) => r.section === "dev_priority");
-  const featureRecs = recommendations.filter((r) => r.section.startsWith("feature_improvement:"));
   const rankedImportance = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
   return [
     headingBlock({ id: "conclusion-result-heading", variant: "numbered", number: "1", text: "사용성테스트 결과 요약" }),
+    richStaticBlock({ id: "conclusion-summary-table-header", html: `<table style="border-collapse:collapse;width:100%;margin:0"><thead><tr><th style="width:18%;border:0.75pt solid #d4d4d8;background-color:#d0dcf3;padding:6pt;text-align:center;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif">항목</th><th style="border:0.75pt solid #d4d4d8;background-color:#d0dcf3;padding:6pt;text-align:center;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif">주요 의견</th></tr></thead></table>` }),
     quadrantBlock({
       id: "conclusion-importance-satisfaction-quadrant",
       title: "기능별 상대 중요도-만족도 그래프",
@@ -1172,51 +1412,10 @@ function buildConclusionSection(
         satisfaction: stats.featureSatisfaction.find((feature) => feature.name === item.name)?.mean ?? 0,
       })),
     }),
-    tableBlock({
-      id: "conclusion-feature-summary-table",
-      title: "기능별 고객 경험 평가",
-      headers: ["기능명", "평균 만족도 (점)", "상대 중요도", "긍정 비율 (%)", "중립 비율 (%)", "부정 의견 (%)"],
-      rows: rankedImportance.map((item) => {
-        const polarity = polarityPercentages(qual, item.name);
-        return [item.name, stats.featureSatisfaction.find((feature) => feature.name === item.name)?.mean ?? 0, item.score, polarity.positive, polarity.neutral, polarity.negative];
-      }),
-    }),
-    textBlock({
-      id: "final-summary",
-      label: "사용성테스트 결과 요약",
-      // resultSummary는 Claude가 마크다운(#, ##, -)으로 쓴 원문 그대로다. 여기서 <p>로
-      // 감싸버리면 RichReportEditor의 looksLikeHtml 판정이 "이미 HTML"로 오인해
-      // richTextToHtml(마크다운→HTML 변환)을 건너뛰고 #/##/- 글자가 그대로 노출된다
-      // (2026-07-28 실측 확인) — 감싸지 않은 원문을 그대로 넘겨야 자동 변환된다.
-      html: resultSummary?.trim() || "정량 분석 결과를 바탕으로 한 결과 요약을 입력하세요.",
-    }),
-    devPriority
-      ? textBlock({
-          id: "final-strategy",
-          label: "개선 전략 제언",
-          html: devPriority.final ?? devPriority.draft,
-          styled: true,
-        })
-      : textBlock({ id: "final-strategy", label: "개선 전략 제언", html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`, pending: true }),
-    featureRecs.length > 0
-      ? textBlock({
-          id: "final-feature-recs",
-          label: "기능별 고객 제언 종합",
-          // 제언은 6.5절 헤지워딩 자유 서술 초안이라(체크포인트 B 대상②) 표로 강제 파싱하지
-          // 않고, 기능명 소제목 + 제언 문단을 그대로 나열한다 — 담당자가 검수·수정하는 게
-          // 설계 의도라 원문 손실 없이 보여주는 쪽을 택했다.
-          // rec.draft/final은 마크다운 원문이라, 내가 직접 붙이는 <p> 제목 태그와 섞이면
-          // RichReportEditor의 looksLikeHtml 판정이 "이미 HTML"로 오인해 마크다운 변환을
-          //건너뛴다(위 resultSummary와 같은 함정) — richTextToHtml로 미리 변환해서 합친다.
-          html: featureRecs
-            .map((rec) => {
-              const featureName = rec.section.replace("feature_improvement:", "");
-              return `<p style="font-weight:700;margin:10pt 0 4pt">[${escapeHtml(featureName)}]</p>${richTextToHtml(rec.final ?? rec.draft)}`;
-            })
-            .join(""),
-          styled: true,
-        })
-      : textBlock({ id: "final-feature-recs", label: "기능별 고객 제언 종합", html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`, pending: true }),
+    richStaticBlock({ id: "conclusion-feature-summary-table", html: conclusionFeatureTableHtml(stats, qual, rankedImportance) }),
+    richStaticBlock({ id: "conclusion-evidence-table", html: conclusionEvidenceTableHtml(stats, resultSummary, recommendations) }),
+    headingBlock({ id: "conclusion-strategy-heading", variant: "numbered", number: "2", text: "개선 전략 제언" }),
+    richStaticBlock({ id: "conclusion-strategy-table", html: conclusionStrategyTableHtml(recommendations) }),
   ];
 }
 
@@ -1233,7 +1432,7 @@ export function buildReportWorkspaceSeed(input: {
 }): ReportWorkspaceSeed {
   const { productInfo, fileName, resultSummary } = input;
   const stats = normalizeQuantStats(input.quantStats);
-  const qual = input.qualitative ?? [];
+  const qual = orderQualitativeQuestions(stats, input.qualitative ?? []);
   const recommendations = input.recommendations ?? [];
   const plan = buildReportPlan(stats.featureSatisfaction.map((f) => f.name));
 

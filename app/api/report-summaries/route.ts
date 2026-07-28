@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       summaryKind: value ? "value" : "polarity",
-      html: value ? valueSummaryBoxHtml(question.label, summaries) : responseSummaryHtml(summaries, question.question_key),
+      html: value ? valueSummaryBoxHtml(question.label, summaries, question.question_key) : responseSummaryHtml(summaries, question.question_key),
     });
   } catch (error) {
     console.error("[report-summaries]", error);

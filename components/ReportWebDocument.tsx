@@ -15,7 +15,7 @@
  * 그대로 쓴다(차트/표/글 3종 블록, `lib/report/sections.ts`). 정성 데이터가 아직 없는 자리는
  * `pending: true`로 정직하게 "정성 분석 승인 후 표시"라고 보여준다.
  */
-import { useEffect, useMemo, useRef, useState, type Dispatch, type FocusEvent, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type FocusEvent, type MouseEvent, type SetStateAction } from "react";
 import { ReportPropertyPanel } from "@/components/ReportPropertyPanel";
 import { RichReportEditor, writeRichClipboard } from "@/components/RichReportEditor";
 import { EditableBarChart } from "@/components/report/EditableBarChart";
@@ -28,8 +28,10 @@ import { EditableQuadrantChart } from "@/components/report/EditableQuadrantChart
 import { PriorityReferenceDiagram } from "@/components/report/PriorityReferenceDiagram";
 import { EditablePolarityChart } from "@/components/report/EditablePolarityChart";
 import { EditableTable } from "@/components/report/EditableTable";
-import { elementToClipboardHtml } from "@/lib/report/domClipboard";
+import { elementToClipboardHtml, fragmentToClipboardHtml } from "@/lib/report/domClipboard";
 import { downloadSectionExportsAsZip, downloadSvgAsPng } from "@/lib/report/exportImage";
+import { htmlToPlainText } from "@/lib/report/richText";
+import { htmlToRtf } from "@/lib/report/rtfClipboard";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
@@ -78,10 +80,16 @@ function EditableRichStaticBlock({
     if (html && html !== block.html) onChange({ ...block, html });
   }
 
+  function setSummaryButtonLabel(label: string) {
+    const button = editorRef.current?.querySelector<HTMLButtonElement>("[data-ai-summary]");
+    if (button) button.textContent = label;
+  }
+
   async function generateSummary() {
     if (!sourceFileUrl || !block.summaryQuestionKey || summaryStatus === "loading") return;
     setSummaryStatus("loading");
     setSummaryError(null);
+    setSummaryButtonLabel("AI 요약 생성 중…");
     try {
       const response = await fetch("/api/report-summaries", {
         method: "POST",
@@ -104,11 +112,30 @@ function EditableRichStaticBlock({
         nextHtml = documentHtml.body.innerHTML;
       }
       onChange({ ...block, html: nextHtml });
+      setSummaryButtonLabel("AI 요약 다시 생성");
       setSummaryStatus("idle");
     } catch (error) {
       setSummaryStatus("error");
       setSummaryError(error instanceof Error ? error.message : "AI 요약 생성에 실패했습니다.");
+      setSummaryButtonLabel("AI 요약 생성");
     }
+  }
+
+  function onEditorClick(event: MouseEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-ai-summary]")) {
+      event.preventDefault();
+      event.stopPropagation();
+      void generateSummary();
+    }
+  }
+
+  // contentEditable 내부의 버튼을 누르면 기본 동작상 편집 영역이 먼저 blur될 수 있다.
+  // 이때 직전 HTML이 저장되며 비동기 결과가 덮일 여지가 있으므로, 버튼을 누르는 동안에는
+  // 선택/포커스를 유지한다. click은 그대로 발생해 generateSummary만 실행된다.
+  function onEditorMouseDown(event: MouseEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-ai-summary]")) event.preventDefault();
   }
 
   async function downloadEmbeddedChart(index: number) {
@@ -117,7 +144,17 @@ function EditableRichStaticBlock({
     await downloadSvgAsPng(svg, `${block.id}-그래프-${index + 1}.png`);
   }
 
+  function handleChartDownload(event: MouseEvent<HTMLButtonElement>) {
+    const index = Number(event.currentTarget.dataset.chartIndex);
+    if (Number.isInteger(index) && index >= 0) void downloadEmbeddedChart(index);
+  }
+
   const hasEmbeddedCharts = /<svg[\s>]/i.test(block.html);
+  const chartLabel = (index: number) => {
+    if (block.id.includes("scorebox")) return "만족도 분포도";
+    if (block.id.includes("emotionbox")) return "주관식 응답 감정 분석 도넛";
+    return `차트 ${index + 1}`;
+  };
 
   return (
     <div className="mb-5 mt-3">
@@ -127,15 +164,10 @@ function EditableRichStaticBlock({
       <p data-copy-ignore className="mb-2 text-xs text-[#70675e]">클릭하면 바로 내용을 수정할 수 있습니다.</p>
       <div data-copy-ignore className="mb-2 flex flex-wrap items-center gap-2">
         {hasEmbeddedCharts && Array.from({ length: (block.html.match(/<svg[\s>]/gi) ?? []).length }).map((_, index) => (
-          <button key={index} type="button" onClick={() => void downloadEmbeddedChart(index)} className="rounded border border-[#315c9c] px-2.5 py-1 text-xs font-semibold text-[#315c9c] hover:bg-[#edf3fc]">
-            그래프 {index + 1} PNG 다운로드
+          <button key={index} type="button" data-chart-index={index} onClick={handleChartDownload} className="rounded border border-[#315c9c] px-2.5 py-1 text-xs font-semibold text-[#315c9c] hover:bg-[#edf3fc]">
+            {chartLabel(index)} PNG 다운로드
           </button>
         ))}
-        {sourceFileUrl && block.summaryQuestionKey && (
-          <button type="button" disabled={summaryStatus === "loading"} onClick={() => void generateSummary()} className="rounded border border-[#315c9c] px-2.5 py-1 text-xs font-semibold text-[#315c9c] hover:bg-[#edf3fc] disabled:cursor-wait disabled:opacity-60">
-            {summaryStatus === "loading" ? "AI 요약 생성 중…" : "AI 요약 생성"}
-          </button>
-        )}
       </div>
       {summaryError && <p data-copy-ignore className="mb-2 text-xs text-[#a64d32]">{summaryError}</p>}
       <div
@@ -143,6 +175,8 @@ function EditableRichStaticBlock({
         className="report-rich-static rounded outline-none focus-within:ring-2 focus-within:ring-[#4fc8e8] focus-within:ring-offset-2"
         contentEditable
         suppressContentEditableWarning
+        onClick={onEditorClick}
+        onMouseDown={onEditorMouseDown}
         onBlur={save}
       />
     </div>
@@ -458,6 +492,37 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     targets.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   }, [sections.length]);
+
+  /**
+   * 본문을 드래그해 복사하는 경우에도 버튼 복사와 동일하게 HTML·RTF·평문을 함께 제공한다.
+   *
+   * 브라우저 기본 CF_HTML은 화면의 빈 <p>와 CSS margin을 운영체제별로 축약한다. 특히 한글은
+   * 이 경로에서 빈 문단을 제거해 카테고리 사이가 붙는 사례가 확인됐다. 선택 범위를 화면 밖
+   * staging에 잠시 붙여 실제 계산 스타일을 인라인화한 뒤, HTML과 RTF(\par)를 명시적으로
+   * 넣으면 한글이 어느 형식을 택해도 굵게·밑줄·기울임·빈 문단을 해석할 수 있다.
+   */
+  useEffect(() => {
+    const copySelectionForHancom = (event: globalThis.ClipboardEvent) => {
+      // `tryOfficeCompatibleCopy()`가 만든 내부 선택은 기본 브라우저 경로를 보존한다.
+      if (document.documentElement.hasAttribute("data-report-office-copy")) return;
+      const root = documentContainerRef.current;
+      const selection = window.getSelection();
+      if (!root || !selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+      const range = selection.getRangeAt(0);
+      if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return;
+
+      const html = fragmentToClipboardHtml(range.cloneContents());
+      if (!html.replace(/<[^>]+>|&nbsp;|\s/g, "")) return;
+      const clipboard = event.clipboardData;
+      if (!clipboard) return;
+      event.preventDefault();
+      clipboard.setData("text/html", html);
+      clipboard.setData("text/rtf", htmlToRtf(html));
+      clipboard.setData("text/plain", htmlToPlainText(html));
+    };
+    document.addEventListener("copy", copySelectionForHancom, true);
+    return () => document.removeEventListener("copy", copySelectionForHancom, true);
+  }, []);
 
   function scrollToSection(numeral: string) {
     sectionElementsRef.current.get(numeral)?.scrollIntoView({ behavior: "smooth", block: "start" });

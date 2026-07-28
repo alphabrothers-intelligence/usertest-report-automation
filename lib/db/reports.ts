@@ -76,6 +76,28 @@ export async function getReportByFileUrl(fileUrl: string): Promise<ReportRow | n
   return row ?? null;
 }
 
+/**
+ * 구버전 정량 저장본에는 Ⅷ장의 전반적 만족도 분포가 없을 수 있다. 원본 raw data로
+ * 한 번 보완한 값만 해당 JSON 필드에 저장한다. 다른 정량·정성 분석 결과는 변경하지 않는다.
+ */
+export async function saveOverallSatisfactionDistribution(
+  reportId: string,
+  distribution: number[],
+): Promise<void> {
+  await sql`
+    update reports
+    set
+      quant_stats = jsonb_set(
+        coalesce(quant_stats, '{}'::jsonb),
+        '{overallSatisfactionDistribution}',
+        ${sql.json(distribution)}::jsonb,
+        true
+      ),
+      updated_at = now()
+    where id = ${reportId}
+  `;
+}
+
 /** 정량 통계 기반 결과 요약을 저장한다. PDF/DOCX의 단순 재생성은 이 값을 재사용한다. */
 export async function saveReportResultSummary(reportId: string, resultSummary: string): Promise<void> {
   await sql`

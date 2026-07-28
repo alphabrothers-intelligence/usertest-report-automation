@@ -8,7 +8,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: Arial, "Malgun Gothic", "Noto Sans KR", sans-serif;
+  /* macOS 한글(HWP)과 브라우저의 본문 표시를 동일한 계열로 맞춘다. */
+  --font-sans: "맑은 고딕", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
   --font-mono: "SFMono-Regular", Consolas, monospace;
 }
 
@@ -22,7 +23,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, "Malgun Gothic", "Noto Sans KR", sans-serif;
+  font-family: "맑은 고딕", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
 }
 
 /* 원본 보고서의 개선 제언 행: 색으로 강조하지 않고 검정·굵게·기울임과 화살표로 구분한다. */

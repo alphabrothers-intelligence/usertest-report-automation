@@ -79,7 +79,10 @@ export function htmlToRtf(value: string): string {
   // \sa는 문단 간격으로 반영하므로, 이걸 넣어야 붙여넣기 후 문단들이 다닥다닥 붙지 않는다
   // (2026-07-28 사용자 "문단 띄어쓰기가 한글에 적용 안 됨" 대응). \pard가 리셋하지만 walk는
   // 문단마다 \pard를 다시 내지 않으므로 문서 전체에 유지된다.
-  const out: string[] = ["{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Malgun Gothic;}}", `{\\colortbl ;${colorTable}}`, "\\viewkind4\\uc1\\pard\\sa120\\ql\\f0\\fs22 "];
+  // HTML의 CSS fallback은 한글이 해석하지 않는다. RTF 글꼴표에 맑은 고딕을 직접
+  // 명시해야 HWP가 붙여넣은 본문에 해당 글꼴을 적용한다. 한글 이름은 유니코드 RTF로
+  // 이스케이프해 인코딩에 따라 깨지지 않게 한다.
+  const out: string[] = [`{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\fnil\\fcharset129 ${rtfText("맑은 고딕")};}}`, `{\\colortbl ;${colorTable}}`, "\\viewkind4\\uc1\\pard\\sa120\\ql\\f0\\fs22 "];
 
   /**
    * **실측으로 확인한 버그(2026-07-28)**: 기존엔 TABLE/TR을 그냥 `\par`가 붙는 일반 block으로
@@ -132,6 +135,16 @@ export function htmlToRtf(value: string): string {
     const italic = tag === "I" || tag === "EM" || hasStyle(element, "font-style", "italic");
     const color = inlineColor(element);
     const colorIndex = color ? colorIndexes.get(`${color.r},${color.g},${color.b}`) : undefined;
+    // 빈 문단은 HTML의 `&nbsp;` 하나만으로는 한글에서 종종 삭제된다. RTF의 두 번의
+    // `\\par`는 빈 줄을 뜻하는 실제 문단 제어어이므로, 카테고리/인용문 묶음 사이 간격을
+    // 한글 붙여넣기에서도 확실히 남긴다.
+    const isEmptyParagraph = (tag === "P" || tag === "DIV")
+      && (element.textContent ?? "").replace(/[\s\u00a0]/g, "") === ""
+      && element.children.length === 0;
+    if (isEmptyParagraph) {
+      out.push("\\par\\par ");
+      return;
+    }
     if (isBlock) {
       if (tag === "LI") out.push("\\par\\fi-360\\li360 • ");
       else out.push("\\par ");

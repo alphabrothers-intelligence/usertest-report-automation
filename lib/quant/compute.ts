@@ -59,6 +59,8 @@ export interface QuantStats {
     fun: FeatureStat[]; // 즐거움1~4
   }; // Ⅵ
   overallSatisfaction: MeanSd; // Ⅷ
+  /** 전반적 만족도 0~10점 분포. Ⅷ장의 원본형 만족도 분포도·구간 비율에 사용한다. */
+  overallSatisfactionDistribution?: number[];
   nps: NpsResult; // Ⅷ
   crossAnalysis: CrossAnalysis; // Ⅶ
   // Ⅰ장 "3. 설문 항목" 표 — 실제 raw data 헤더에서 도출한 문항 목록(2026-07-23). headerRow가
@@ -130,6 +132,7 @@ export function computeQuantStats(records: WallaRecord[], headerRow?: unknown[])
       })),
     },
     overallSatisfaction: meanSd(scores(records.map((r) => r.overallSatisfaction.score))),
+    overallSatisfactionDistribution: scoreHistogram(scores(records.map((r) => r.overallSatisfaction.score))),
     nps: computeNps(scores(records.map((r) => r.nps.score))),
     crossAnalysis: computeCrossAnalysis(records),
     surveyQuestions: headerRow ? buildSurveyQuestionRows(headerRow) : [],
