@@ -1,0 +1,66 @@
+{
+  "updatedAt": "2026-07-27T13:29:46.337Z",
+  "event": "qualitative_three_question_load_complete",
+  "status": "completed",
+  "concurrency": 5,
+  "questionLabels": [
+    "'펫과의 산책' 기능 만족도",
+    "'펫 성장 시스템' 기능 만족도",
+    "'펫 꾸미기' 기능 만족도"
+  ],
+  "callPlan": {
+    "mode": "fast",
+    "stage1Calls": 3,
+    "stage2MaxCalls": 0,
+    "maxTotalCalls": 3,
+    "inputCharacters": 45676,
+    "estimatedInputTokens": 52528,
+    "estimatedOutputTokens": 15987,
+    "estimatedCostUsd": 0.397,
+    "costAssumption": {
+      "inputUsdPerMTokens": 3,
+      "outputUsdPerMTokens": 15
+    }
+  },
+  "completedQuestions": [
+    {
+      "id": "feature:펫과의 산책",
+      "label": "'펫과의 산책' 기능 만족도",
+      "kind": "standard",
+      "clauses": 0,
+      "stage2Polarities": [
+        "positive",
+        "negative",
+        "neutral"
+      ],
+      "stage2Failures": []
+    },
+    {
+      "id": "feature:펫 성장 시스템",
+      "label": "'펫 성장 시스템' 기능 만족도",
+      "kind": "standard",
+      "clauses": 0,
+      "stage2Polarities": [
+        "positive",
+        "negative",
+        "neutral"
+      ],
+      "stage2Failures": []
+    },
+    {
+      "id": "feature:펫 꾸미기",
+      "label": "'펫 꾸미기' 기능 만족도",
+      "kind": "standard",
+      "clauses": 0,
+      "stage2Polarities": [
+        "positive",
+        "negative",
+        "neutral"
+      ],
+      "stage2Failures": []
+    }
+  ],
+  "failedQuestionCount": 0,
+  "failedQuestions": [],
+  "elapsedMs": 42087
+}

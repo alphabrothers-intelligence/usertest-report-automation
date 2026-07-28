@@ -4,6 +4,9 @@
 // 볼드 등 최소한의 서식을 지원해 Claude.ai 채팅처럼 읽기 편하게 한다. dangerouslySetInnerHTML을
 // 쓰지 않고 순수 React 노드만 만들어서 별도 sanitize 없이도 안전하다.
 import { Fragment, useState } from "react";
+import { writeRichClipboard } from "@/components/RichReportEditor";
+import { richTextToClipboardHtml } from "@/lib/report/richText";
+import { downloadRtf } from "@/lib/report/rtfClipboard";
 
 function renderInline(text: string, keyPrefix: string) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g).filter((p) => p !== "");
@@ -17,6 +20,26 @@ function renderInline(text: string, keyPrefix: string) {
 
 export function ChatMarkdown({ text }: { text: string }) {
   const lines = text.split("\n");
+  const [copyNotice, setCopyNotice] = useState("");
+  // 정성 분석처럼 실제 보고서 본문으로 옮길 수 있는 Markdown 결과에만 액션을 노출한다.
+  // 단순 안내 문구마다 복사 버튼이 생기면 채팅 흐름을 방해하므로 `**`, `__`, 화살표,
+  // 대괄호 소제목 중 하나가 있을 때만 보인다.
+  const isReportText = /\*\*|__|^\s*(?:→|▶|\[[^\]]+\])/m.test(text);
+
+  async function copyForHancom() {
+    try {
+      await writeRichClipboard(richTextToClipboardHtml(text));
+      setCopyNotice("한글용 실제 서식으로 복사했습니다.");
+    } catch {
+      setCopyNotice("복사에 실패했습니다. 한글 서식 파일을 사용하세요.");
+    }
+  }
+
+  function downloadForHancom() {
+    downloadRtf(richTextToClipboardHtml(text), "정성분석_서식본문");
+    setCopyNotice("한글 서식 파일을 내려받았습니다.");
+  }
+
   return (
     <div className="space-y-1.5">
       {lines.map((line, i) => {
@@ -34,6 +57,13 @@ export function ChatMarkdown({ text }: { text: string }) {
         }
         return <div key={i}>{renderInline(line, `${i}`)}</div>;
       })}
+      {isReportText && (
+        <div data-copy-ignore className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-700">
+          <button type="button" onClick={() => void copyForHancom()} className="rounded border border-[#315c9c] px-2.5 py-1 text-xs font-semibold text-[#315c9c] hover:bg-[#edf3fc]">한글 서식 복사</button>
+          <button type="button" onClick={downloadForHancom} className="rounded bg-[#315c9c] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[#294c81]">한글 서식 파일</button>
+          {copyNotice && <span className="text-xs text-zinc-500">{copyNotice}</span>}
+        </div>
+      )}
     </div>
   );
 }

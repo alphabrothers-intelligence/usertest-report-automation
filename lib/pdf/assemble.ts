@@ -9,6 +9,7 @@ import {
   getStrategicInput,
   getPendingInsightReviews,
   getPendingRecommendationReviews,
+  saveReportResultSummary,
 } from "@/lib/db/reports";
 import { runResultSummary } from "@/lib/pipeline/summary";
 
@@ -18,6 +19,8 @@ export interface AssembleResult {
   pendingInsightCount?: number;
   pendingRecommendationCount?: number;
   pdfUrl?: string;
+  /** PDF와 DOCX에 동일하게 넣을 Tier 1 결과 요약. 호출자는 한 번만 생성해 재사용할 수 있다. */
+  resultSummary?: string;
 }
 
 /**
@@ -47,7 +50,10 @@ export async function assembleReport(fileUrl: string): Promise<AssembleResult> {
     getStrategicInput(report.id),
   ]);
 
-  const resultSummary = await runResultSummary(report.quant_stats);
+  // 재렌더링은 Claude 분석이 아니라 순수 PDF 레이아웃 작업이다. 이미 생성·확정된 요약이
+  // 있으면 그대로 사용하고, 없을 때만 한 번 생성해 reports에 캐시한다.
+  const resultSummary = report.result_summary ?? (await runResultSummary(report.quant_stats));
+  if (!report.result_summary) await saveReportResultSummary(report.id, resultSummary);
 
   registerFonts();
   const buffer = await renderToBuffer(
@@ -77,5 +83,5 @@ export async function assembleReport(fileUrl: string): Promise<AssembleResult> {
   });
 
   const downloadUrl = `/api/download?u=${encodeURIComponent(blob.url)}&name=${encodeURIComponent(pdfName)}`;
-  return { ok: true, pdfUrl: downloadUrl };
+  return { ok: true, pdfUrl: downloadUrl, resultSummary };
 }

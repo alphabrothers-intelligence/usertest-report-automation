@@ -1,6 +1,6 @@
 import { sql } from "./client";
 import type { QuantStats } from "@/lib/quant/compute";
-import type { PipelineResult } from "@/lib/pipeline/orchestrate";
+import type { PipelineResult, QuestionResult } from "@/lib/pipeline/orchestrate";
 import type { Polarity } from "@/lib/pipeline/stage1";
 import type { ProductInfo } from "@/lib/productInfo/types";
 
@@ -11,6 +11,8 @@ export interface ReportRow {
   respondent_count: number | null;
   quant_stats: QuantStats | null;
   product_info: ProductInfo | null;
+  /** 정량 통계에서 한 번만 만든 Claude 결과 요약. 재렌더링 때 재사용한다. */
+  result_summary: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +64,7 @@ export async function upsertReportQuantStats(params: {
       file_name = excluded.file_name,
       respondent_count = excluded.respondent_count,
       quant_stats = excluded.quant_stats,
+      result_summary = null,
       updated_at = now()
     returning id
   `;
@@ -71,6 +74,15 @@ export async function upsertReportQuantStats(params: {
 export async function getReportByFileUrl(fileUrl: string): Promise<ReportRow | null> {
   const [row] = await sql<ReportRow[]>`select * from reports where file_url = ${fileUrl}`;
   return row ?? null;
+}
+
+/** 정량 통계 기반 결과 요약을 저장한다. PDF/DOCX의 단순 재생성은 이 값을 재사용한다. */
+export async function saveReportResultSummary(reportId: string, resultSummary: string): Promise<void> {
+  await sql`
+    update reports
+    set result_summary = ${resultSummary}, updated_at = now()
+    where id = ${reportId}
+  `;
 }
 
 /**
@@ -116,6 +128,7 @@ export async function saveQualitativeResults(
           question_id: questionId,
           respondent_id: c.respondent_id,
           clause: c.clause,
+          raw_clause: c.raw_clause,
           polarity: c.polarity,
           rationale: c.rationale,
           confidence: c.confidence,
@@ -142,11 +155,78 @@ export async function saveQualitativeResults(
   });
 }
 
+/**
+ * 정성 분석 한 문항을 독립적으로 저장한다.
+ *
+ * 긴 전체 분석이 중단돼도 이미 끝난 문항은 남아야 하므로, 백그라운드 작업자와 채팅 경로는
+ * 이 함수를 사용한다. 같은 question_key를 다시 실행하면 그 문항의 절·카테고리만 교체하며,
+ * 다른 문항과 검수 결과는 건드리지 않는다.
+ */
+export async function saveQualitativeQuestionResult(
+  reportId: string,
+  q: QuestionResult,
+): Promise<void> {
+  await sql.begin(async (tx) => {
+    const [questionRow] = await tx<{ id: string }[]>`
+      insert into questions (report_id, question_key, label, kind)
+      values (${reportId}, ${q.id}, ${q.label}, ${q.kind})
+      on conflict (report_id, question_key) do update set
+        label = excluded.label,
+        kind = excluded.kind,
+        polarity_summaries = null
+      returning id
+    `;
+    const questionId = questionRow.id;
+    await tx`delete from clauses where question_id = ${questionId}`;
+    await tx`delete from categories where question_id = ${questionId}`;
+
+    if (q.kind === "improvement") {
+      if (q.stage2.categories.length > 0) {
+        await tx`insert into categories ${tx(q.stage2.categories.map((c) => ({
+          question_id: questionId,
+          polarity: null as Polarity | null,
+          label: c.label,
+          clause_count: c.clause_count,
+          quotes: c.quotes,
+          insight_draft: c.insight,
+        })))}`;
+      }
+      return;
+    }
+
+    if (q.clauses.length > 0) {
+      await tx`insert into clauses ${tx(q.clauses.map((c) => ({
+        question_id: questionId,
+        respondent_id: c.respondent_id,
+        clause: c.clause,
+        raw_clause: c.raw_clause,
+        polarity: c.polarity,
+        rationale: c.rationale,
+        confidence: c.confidence,
+      })))}`;
+    }
+    const categoryRows = (Object.keys(q.stage2ByPolarity) as Polarity[]).flatMap((polarity) => {
+      const stage2 = q.stage2ByPolarity[polarity];
+      if (!stage2) return [];
+      return stage2.categories.map((c) => ({
+        question_id: questionId,
+        polarity,
+        label: c.label,
+        clause_count: c.clause_count,
+        quotes: c.quotes,
+        insight_draft: c.insight,
+      }));
+    });
+    if (categoryRows.length > 0) await tx`insert into categories ${tx(categoryRows)}`;
+  });
+}
+
 export interface ClauseRow {
   id: string;
   question_id: string;
   respondent_id: number;
   clause: string;
+  raw_clause: string | null;
   polarity: Polarity;
   rationale: string;
   confidence: "high" | "medium" | "low";
@@ -249,6 +329,15 @@ export async function saveRecommendation(params: {
   return row.id;
 }
 
+/** 승인 여부와 무관하게 이 report의 제언 초안을 전부 가져온다 — 정성 카테고리와 같은 패턴
+ * (getQuestionsWithAllCategories)으로, 웹 작업공간은 체크포인트 승인 전에도 초안을 보여줘야
+ * 한다(최종 PDF만 승인된 것만 반영). */
+export async function getAllRecommendations(reportId: string): Promise<RecommendationRow[]> {
+  return sql<RecommendationRow[]>`
+    select * from recommendations where report_id = ${reportId} order by created_at
+  `;
+}
+
 /** 체크포인트 B(7.2절) 대상②: 아직 승인되지 않은 제언 문단. */
 export async function getPendingRecommendationReviews(
   reportId: string,
@@ -308,7 +397,9 @@ export interface QuestionRow {
   question_key: string;
   label: string;
   kind: "standard" | "improvement";
-  polarity_summaries: Partial<Record<Polarity, string>> | null;
+  // 극성별 짧은 개조식 총평(positive/negative/neutral) 또는 4대 가치용 한 단락 존댓말 요약
+  // (combined) — 문항 종류에 따라 둘 중 하나를 채운다(2026-07-28).
+  polarity_summaries: Partial<Record<Polarity | "combined", string>> | null;
 }
 
 export interface QuestionWithApprovedCategories extends QuestionRow {
@@ -374,7 +465,7 @@ export async function getQuestionsWithAllCategories(
  * (재생성 = 최신 카테고리 기준으로 새로 씀). */
 export async function saveQuestionPolaritySummaries(
   questionId: string,
-  summaries: Partial<Record<Polarity, string>>,
+  summaries: Partial<Record<Polarity | "combined", string>>,
 ): Promise<void> {
   await sql`
     update questions set polarity_summaries = ${sql.json(summaries)} where id = ${questionId}

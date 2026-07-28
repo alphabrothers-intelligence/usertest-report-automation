@@ -7,24 +7,26 @@ import {
   type UIMessage,
 } from "ai";
 import { z } from "zod";
+import { logClaudeUsage } from "@/lib/claudeUsage";
 import { loadWallaFromUrl } from "@/lib/walla/loadFromUrl";
 import { extractFeatureNames, WALLA_COLUMN_COUNT } from "@/lib/walla/schema";
-import { normalizeWallaRows } from "@/lib/walla/normalize";
+import { filterWallaResponseRows, normalizeWallaRows } from "@/lib/walla/normalize";
 import { computeQuantStats } from "@/lib/quant/compute";
 import { buildQuestionSpecs } from "@/lib/pipeline/questions";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
-import { runQualitativePipeline } from "@/lib/pipeline/orchestrate";
+import { estimateQualitativeCallPlan, QUALITATIVE_MAX_CLAUDE_CALLS, QUALITATIVE_MAX_ESTIMATED_USD } from "@/lib/pipeline/orchestrate";
 import { runPolaritySummariesForReport } from "@/lib/pipeline/generatePolaritySummaries";
 import { runRecommendation } from "@/lib/pipeline/recommendation";
 import { runResultSummary } from "@/lib/pipeline/summary";
 import { checkHedgeWording } from "@/lib/pipeline/hedgeCheck";
 import { assembleReport } from "@/lib/pdf/assemble";
+import { assembleReportDocx } from "@/lib/docx/assemble";
+import { assembleReportHwpx } from "@/lib/hwpx/assemble";
 import { extractTextFromDocument } from "@/lib/productInfo/extractText";
 import { runProductInfoExtraction } from "@/lib/productInfo/extract";
 import {
   upsertReportQuantStats,
   getReportByFileUrl,
-  saveQualitativeResults,
   getPendingPolarityReviews,
   reviewClausePolarity,
   getPendingInsightReviews,
@@ -36,7 +38,9 @@ import {
   saveStrategicInput,
   getStrategicInput,
   saveProductInfo,
+  saveReportResultSummary,
 } from "@/lib/db/reports";
+import { createQualitativeJob } from "@/lib/db/qualitativeJobs";
 
 export const maxDuration = 300; // Vercel Fluid Compute 기본 실행시간 (PRD 10장)
 
@@ -87,7 +91,10 @@ const SYSTEM_PROMPT = `당신은 "사용성테스트 결과보고서 자동생�
    분석한 결과입니다" 같은 한 문장으로, 이 카드가 바로 위 목차 계획과 어떻게 연결되는지
    명시적으로 짚어주세요** — 사용자가 이 통계가 왜 지금 나오는지 맥락 없이 받아보지 않도록
    하기 위함입니다.
-5. **정량 통계 카드를 보여준 다음에는, 정성 분석(문항 14개, 시간·비용이 큰 작업)을 진행해도
+5. **정량 통계 카드를 보여준 다음에는, estimateQualitativeAnalysis를 먼저 호출해 내부 안전 점검을
+   수행하세요. 일반 사용자에게 호출 수·비용·예산을 표시하거나 승인 판단을 맡기지 마세요.** 점검을 통과한
+   경우에만 "정성 분석을 진행할까요?"라고 간단히 묻고, 통과하지 못하면 "현재 분석을 시작할 수 없어
+   관리자 확인이 필요합니다"라고만 안내하세요. 정성 분석(문항 14개)을 진행해도
    될지 짧은 텍스트로 먼저 물어보고, 사용자가 명시적으로 승인("네", "진행해줘" 등)하기 전까지는
    runQualitativeAnalysis를 호출하지 마세요.** 사용자가 원치 않는 방향으로 비용을 먼저 써버리는
    걸 막기 위함입니다. 승인을 받으면 runQualitativeAnalysis를 호출하세요. 완료되면 문항별
@@ -117,8 +124,9 @@ const SYSTEM_PROMPT = `당신은 "사용성테스트 결과보고서 자동생�
    전면 수정하셔도 됩니다"라고 안내하세요.
 11. 사용자가 "최종 보고서 만들어줘"처럼 명시적으로 요청하면 assembleReportTool을 호출하세요.
    pendingInsightCount·pendingRecommendationCount가 0보다 크면 실패한 것이므로, 어떤 체크포인트가
-   남았는지 안내하고 검수를 먼저 끝내도록 유도하세요(재호출 금지). 성공하면 pdfUrl을 그대로
-   전달하고, 다운로드 링크임을 알려주세요.
+   남았는지 안내하고 검수를 먼저 끝내도록 유도하세요(재호출 금지). 성공하면 pdfUrl·docxUrl·hwpxUrl을
+   그대로 전달하고, 세 형식의 다운로드 링크임을 알려주세요(PDF는 최종 열람·인쇄용, DOCX와 HWPX는
+   담당자가 직접 수정하고 싶을 때용 — 사용자가 먼저 물어보지 않아도 세 형식이 준비됐다고 안내하세요).
 
 # 원칙
 - runQualitativeAnalysis가 만드는 insight, generateRecommendation이 만드는 제언 문장은 전부
@@ -206,6 +214,32 @@ export async function POST(req: Request) {
         testPeriod: z.string().optional(),
         testTarget: z.string().optional(),
         testManager: z.string().optional(),
+        mainFeatures: z
+          .string()
+          .optional()
+          .describe(
+            "Ⅰ장 개요의 '주요 기능' 칸에 들어갈 기능명·설명 목록. 사용자가 채팅으로 직접 작성해 " +
+              "주면 그대로 저장할 것(이미지 첨부는 아직 미지원, 텍스트만). 안 주면 빈 칸으로 둔다.",
+          ),
+        footerBrandName: z
+          .string()
+          .optional()
+          .describe(
+            "PDF 하단 푸터의 \"{연도} by {브랜드명}\" 문구에 쓸 이름. 사용자가 \"2026 by testipie로 바꿔줘\" " +
+              "처럼 요청하면 이 필드로 저장할 것 — 기본값은 Alphabrothers. 우측 로고 이미지는 고정이라 " +
+              "바꿀 수 없다는 점을 사용자에게 알릴 것.",
+          ),
+        coverDate: z
+          .string()
+          .optional()
+          .describe("표지에 표시할 발행일. 예: 2025.09.05. 비우면 보고서 생성일을 사용한다."),
+        coverLogoUrl: z
+          .string()
+          .url()
+          .optional()
+          .describe(
+            "표지 하단에 표시할 로고 이미지의 공개 URL. 사용자가 제공한 URL만 저장한다. 비우면 ALPHA BROTHERS 기본 로고를 사용한다.",
+          ),
       }),
       execute: async ({ fileUrl, ...productInfo }) => {
         await saveProductInfo({ fileUrl, productInfo });
@@ -235,7 +269,7 @@ export async function POST(req: Request) {
           valid: loaded.validation.valid,
           expectedColumnCount: WALLA_COLUMN_COUNT,
           actualColumnCount: loaded.validation.columnCount,
-          respondentCount: loaded.parsed.dataRows.length,
+          respondentCount: filterWallaResponseRows(loaded.parsed.dataRows).length,
           featureNames,
           errors: loaded.validation.errors,
         };
@@ -265,7 +299,8 @@ export async function POST(req: Request) {
         }
 
         const records = normalizeWallaRows(loaded.parsed.headerRow, loaded.parsed.dataRows);
-        const stats = computeQuantStats(records);
+        // headerRow를 함께 넘겨 Ⅰ장 설문 문항 표를 실제 raw data 헤더에서 도출한다(2026-07-23).
+        const stats = computeQuantStats(records, loaded.parsed.headerRow);
         await upsertReportQuantStats({
           fileUrl,
           fileName: fileName ?? null,
@@ -273,6 +308,30 @@ export async function POST(req: Request) {
           quantStats: stats,
         });
         return { ok: true, stats };
+      },
+    }),
+    estimateQualitativeAnalysis: tool({
+      description:
+        "Claude API를 호출하지 않고 raw data 정성 분석의 내부 호출·예산 안전 점검을 수행한다. " +
+        "computeQuantStats 이후 정성 분석 승인 전에 반드시 호출하며, 일반 사용자 화면에는 수치 대신 준비 상태만 반환한다.",
+      inputSchema: z.object({
+        fileUrl: z.string().url().describe("정량 분석에 사용한 raw data URL"),
+      }),
+      execute: async ({ fileUrl }) => {
+        const loaded = await loadWallaFromUrl(fileUrl);
+        if (!loaded.ok || !loaded.parsed || !loaded.validation?.valid) {
+          return { ok: false, error: loaded.fetchError ?? "유효한 raw data가 필요합니다." };
+        }
+        const records = normalizeWallaRows(loaded.parsed.headerRow, loaded.parsed.dataRows);
+        const plan = estimateQualitativeCallPlan(buildQuestionSpecs(records));
+        const ready = plan.maxTotalCalls <= QUALITATIVE_MAX_CLAUDE_CALLS && plan.estimatedCostUsd <= QUALITATIVE_MAX_ESTIMATED_USD;
+        // 수치·단가 전제는 운영 로그에서만 확인한다. 채팅 UI의 tool output은 일반 사용자도 볼 수 있다.
+        console.info(JSON.stringify({ event: "qualitative_safety_check", ready, ...plan, allowedCalls: QUALITATIVE_MAX_CLAUDE_CALLS, allowedEstimatedUsd: QUALITATIVE_MAX_ESTIMATED_USD }));
+        return {
+          ok: true,
+          ready,
+          message: ready ? "정성 분석 준비가 완료되었습니다." : "현재 정성 분석을 시작할 수 없습니다. 관리자 확인이 필요합니다.",
+        };
       },
     }),
     presentReportPlan: tool({
@@ -302,8 +361,8 @@ export async function POST(req: Request) {
     runQualitativeAnalysis: tool({
       description:
         "14개 정성 문항(기능 6개+4대가치 4개+유사서비스만족도+전반적만족도+NPS+개선아이디어)을 " +
-        "Stage1(문장분리+극성판정)·Stage2(카테고리+인용+인사이트초안)로 병렬 처리하고 DB에 저장한다. " +
-        "실제 Claude API를 수십 회 호출하는 무거운 작업이므로, 사용자가 진행을 승인했을 때만 호출한다. " +
+        "Stage1(문장분리+극성판정)·Stage2(카테고리+인용+인사이트초안)로 제한된 동시성에서 처리하고 DB에 저장한다. " +
+        "문항 하나가 최종 실패해도 다른 문항은 저장하며 failedQuestionCount로 반드시 알린다. 실제 Claude API를 수십 회 호출하는 무거운 작업이므로, 사용자가 진행을 승인했을 때만 호출한다. " +
         "computeQuantStats가 먼저 실행되어 report가 생성되어 있어야 한다.",
       inputSchema: z.object({
         fileUrl: z.string().url().describe("validateInput에 사용했던 것과 동일한 raw data URL"),
@@ -330,9 +389,18 @@ export async function POST(req: Request) {
 
         const records = normalizeWallaRows(loaded.parsed.headerRow, loaded.parsed.dataRows);
         const specs = buildQuestionSpecs(records);
-        const pipeline = await runQualitativePipeline(specs);
-        await saveQualitativeResults(report.id, pipeline);
-        return { ok: true, ...pipeline };
+        // 채팅 요청 자체에서는 절대 Claude 대형 호출을 기다리지 않는다. 작업 등록만 하고,
+        // 문항별 Stage1/Stage2 작업자가 결과를 즉시 저장·재개한다.
+        const callPlan = estimateQualitativeCallPlan(specs);
+        const job = await createQualitativeJob({ reportId: report.id, specs, callPlan });
+        return {
+          ok: true,
+          queued: true,
+          jobId: job.id,
+          totalQuestions: specs.length,
+          callPlan,
+          message: "정성 분석 작업을 등록했습니다. 문항별 진행 상태를 확인하면서 결과가 저장됩니다.",
+        };
       },
     }),
     generatePolaritySummaries: tool({
@@ -341,8 +409,8 @@ export async function POST(req: Request) {
         "요약]' 박스 형식)을 만든다. **runQualitativeAnalysis와는 완전히 분리된 선택 기능이다 " +
         "— 절대 자동으로 호출하지 말고, 사용자가 명시적으로 요청했을 때만("+
         "\"요약도 만들어줘\", \"긍정/부정 의견 요약 추가해줘\" 등) 호출한다.** 이미 저장된 " +
-        "카테고리를 재료로 쓰므로 Stage1/Stage2를 다시 돌리지 않지만, 그래도 문항×극성 개수만큼 " +
-        "API를 호출하는 작업이다(최대 14×3=42회). runQualitativeAnalysis가 먼저 완료되어 " +
+        "카테고리를 재료로 쓰므로 Stage1/Stage2를 다시 돌리지 않으며, 세 극성 총평을 문항당 한 번의 " +
+        "구조화된 호출로 묶어 생성한다(최대 14회, 기본 동시성 2). runQualitativeAnalysis가 먼저 완료되어 " +
         "카테고리가 저장되어 있어야 한다. 체크포인트 B(인사이트) 승인 여부와 무관하게 그 시점의 " +
         "카테고리로 바로 생성한다.",
       inputSchema: z.object({
@@ -433,7 +501,10 @@ export async function POST(req: Request) {
         if (!report?.quant_stats) {
           return { ok: false, error: "정량 통계가 없습니다. computeQuantStats를 먼저 호출하세요." };
         }
-        const summary = await runResultSummary(report.quant_stats);
+        // 이미 생성한 결과 요약은 재사용한다. 사용자가 보고서 서식만 반복해서 확인할 때
+        // Claude 토큰이 다시 나가지 않도록 하되, 정량 통계를 새로 계산하면 캐시는 자동 초기화된다.
+        const summary = report.result_summary ?? (await runResultSummary(report.quant_stats));
+        if (!report.result_summary) await saveReportResultSummary(report.id, summary);
         return { ok: true, summary };
       },
     }),
@@ -567,14 +638,34 @@ export async function POST(req: Request) {
     }),
     assembleReportTool: tool({
       description:
-        "PRD 8장: 최종 PDF 보고서를 조립해 Vercel Blob에 업로드하고 다운로드 링크를 반환한다. " +
-        "체크포인트 A/B(인사이트·제언)가 전부 승인되지 않았으면 실패하며 대기 건수를 알려준다 — " +
-        "이 경우 사용자에게 어떤 검수가 남았는지 안내하고 이 도구를 다시 호출하지 마세요.",
+        "PRD 8장: 최종 보고서를 PDF, DOCX(Word), HWPX(한글) 세 형식으로 조립해 Vercel Blob에 업로드하고 " +
+        "각각의 다운로드 링크를 반환한다. 체크포인트 A/B(인사이트·제언)가 " +
+        "전부 승인되지 않았으면 발행하지 않으며 대기 건수를 알려준다 — 이 경우 사용자에게 어떤 검수가 " +
+        "남았는지 안내하고 이 도구를 다시 호출하지 마세요.",
       inputSchema: z.object({
         fileUrl: z.string().url().describe("validateInput에 사용했던 것과 동일한 raw data URL"),
       }),
       execute: async ({ fileUrl }) => {
-        return assembleReport(fileUrl);
+        // PDF를 먼저 조립해 Tier 1 결과 요약을 한 번만 생성하고, 같은 문장을 DOCX에 넘긴다.
+        // 두 파일을 병렬 조립하면 render 자체는 안전하지만, 각 조립기가 runResultSummary를
+        // 호출해 Claude 토큰이 두 번 소모됐다. 여기서는 출력물의 내용은 유지하면서 중복 API
+        // 호출만 제거한다.
+        const pdfResult = await assembleReport(fileUrl);
+        if (!pdfResult.ok) return pdfResult;
+        const docxResult = await assembleReportDocx(fileUrl, { resultSummary: pdfResult.resultSummary });
+        const hwpxResult = await assembleReportHwpx(fileUrl, pdfResult.resultSummary ?? "");
+        return {
+          ok: docxResult.ok && hwpxResult.ok,
+          pdfUrl: pdfResult.pdfUrl,
+          docxUrl: docxResult.docxUrl,
+          hwpxUrl: hwpxResult.hwpxUrl,
+          // 웹 편집 작업공간은 이 raw data URL로 이미 저장된 정량 결과를 읽는다. 재계산·Claude
+          // 호출을 하지 않도록 결과물과 함께 명시적으로 넘긴다.
+          sourceFileUrl: fileUrl,
+          error: pdfResult.error ?? docxResult.error ?? hwpxResult.error,
+          pendingInsightCount: pdfResult.pendingInsightCount ?? docxResult.pendingInsightCount,
+          pendingRecommendationCount: pdfResult.pendingRecommendationCount ?? docxResult.pendingRecommendationCount,
+        };
       },
     }),
   };
@@ -596,6 +687,11 @@ export async function POST(req: Request) {
     // 한 턴에 여러 단계가 이어질 수 있어 여유 있게 허용한다.
     stopWhen: stepCountIs(10),
     tools,
+    onEnd: ({ usage, steps }) => {
+      // 채팅 한 턴 안에서 도구 호출을 위해 여러 모델 단계가 실행될 수 있으므로, 누적 토큰과
+      // 단계 수를 함께 남긴다. 원문 메시지·raw data는 로그에 기록하지 않는다.
+      logClaudeUsage("chat-orchestrator", usage, { stepCount: steps.length });
+    },
     prepareStep: async ({ steps }) => {
       const calledThisTurn = new Set(steps.flatMap((s) => s.toolCalls.map((tc) => tc.toolName)));
       // doneBefore: 이전 턴(=사용자가 실제로 응답한 뒤)에 완료된 것만. doneEver: 이번 턴에

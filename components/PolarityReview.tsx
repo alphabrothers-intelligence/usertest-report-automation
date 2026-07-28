@@ -7,6 +7,7 @@ export interface PolarityReviewItem {
   question_label: string;
   respondent_id: number;
   clause: string;
+  raw_clause?: string | null;
   polarity: "positive" | "negative" | "neutral";
   rationale: string;
   confidence: "high" | "medium" | "low";
@@ -49,7 +50,7 @@ function ReviewRow({ item, onDone }: { item: PolarityReviewItem; onDone: (id: st
   return (
     <div className="rounded-md border border-zinc-200 p-4 text-base dark:border-zinc-800">
       <p className="text-sm text-zinc-500">{item.question_label} · 응답자 #{item.respondent_id}</p>
-      <p className="mt-1.5">&ldquo;{item.clause}&rdquo;</p>
+      <p className="mt-1.5">&ldquo;{item.raw_clause ?? item.clause}&rdquo;</p>
       <p className="mt-1 text-sm text-zinc-500">
         현재 판정: <span className="font-medium">{POLARITY_LABEL[item.polarity]}</span> — {item.rationale}
       </p>

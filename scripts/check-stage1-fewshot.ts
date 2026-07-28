@@ -72,10 +72,10 @@ async function main() {
     const clauses = respondent.clauses;
     console.log(JSON.stringify(clauses, null, 2));
 
-    // 1) verbatim 규칙: 모든 clause가 원문의 부분 문자열이어야 한다
-    const normalizedReason = c.input.reason.replace(/\s+/g, "");
+    // 1) 직접 인용 후보(raw_clause)는 반드시 원문 부분 문자열이어야 한다.
+    // 보정본(analysis_clause)은 분석에 남을 수 있으므로 여기서는 별도 평가한다.
     const verbatimOk = clauses.every((cl) =>
-      normalizedReason.includes(cl.clause.replace(/\s+/g, "")),
+      cl.raw_clause === null || c.input.reason.replace(/\s+/g, "").includes(cl.raw_clause.replace(/\s+/g, "")),
     );
 
     // 2) clause 개수가 기대치와 일치하는지 (모델마다 절 분리가 미세하게 다를 수 있어 참고용)

@@ -1,0 +1,15 @@
+{
+  "updatedAt": "2026-07-27T02:29:39.617Z",
+  "event": "stage2_streaming_smoke_complete",
+  "status": "completed",
+  "question": "‘펫과의 산책’ 기능 만족도",
+  "polarity": "negative",
+  "apiCalls": 1,
+  "clausesSent": 12,
+  "categoriesReturned": 5,
+  "totalClauseCount": 12,
+  "categorizedClauseCount": 12,
+  "clauseCountMatches": true,
+  "quoteViolations": [],
+  "elapsedMs": 9544
+}

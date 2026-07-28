@@ -1,0 +1,11 @@
+{
+  "updatedAt": "2026-07-27T13:51:43.197Z",
+  "event": "fast_qualitative_smoke_complete",
+  "status": "completed",
+  "apiCalls": 1,
+  "question": "'펫과의 산책' 기능 만족도",
+  "respondentsSent": 100,
+  "categoryCount": 14,
+  "verifiedQuoteCount": 38,
+  "elapsedMs": 39855
+}

@@ -21,6 +21,21 @@ export interface ProductInfo {
   testPeriod?: string;
   testTarget?: string;
   testManager?: string;
+  // Ⅰ장 "주요 기능" 표 칸(2026-07-22 추가) — 원본 3페이지의 기능 스크린샷+기능명·설명
+  // 목록에 해당한다. 이미지 첨부 흐름이 없어 자동 추출은 안 되고(알려진 갭), 담당자가 채팅으로
+  // 직접 작성해 넣는다. 안 채우면 PDF에 빈 칸으로 남아 나중에 편집해 넣을 수 있다.
+  mainFeatures?: string;
+  // 페이지 하단 푸터의 "{연도} by {브랜드명}" 문구(2026-07-21 추가) — 기본값은 "Alphabrothers"
+  // (이 보고서를 만드는 에이전시 자신의 정체성, CLAUDE.md 참고). 사용자가 다른 회사명으로
+  // 발행하고 싶으면("2026 by testipie로 바꿔줘") 이 필드로 채팅에서 바로 바꿀 수 있다.
+  // 로고 이미지 자체(우측 워드마크 PNG)는 고정이다 — 커스텀 로고 이미지 업로드는 지원하지
+  // 않는다(제품 정보에 이미지 첨부 흐름이 아직 없는 것과 같은 갭, CLAUDE.md 참고).
+  footerBrandName?: string;
+  // 표지 공통 템플릿용. coverDate가 비어 있으면 PDF 생성일을, coverLogoUrl이 비어 있으면
+  // ALPHA BROTHERS 기본 로고를 사용한다. 로고는 업로드 파일의 공개 URL 또는 사용자가 제공한
+  // 이미지 URL을 저장한다.
+  coverDate?: string;
+  coverLogoUrl?: string;
 }
 
 export const PRODUCT_INFO_FIELD_LABELS: Record<keyof ProductInfo, string> = {
@@ -37,4 +52,8 @@ export const PRODUCT_INFO_FIELD_LABELS: Record<keyof ProductInfo, string> = {
   testPeriod: "테스트 진행 기간",
   testTarget: "테스트 대상",
   testManager: "담당자",
+  mainFeatures: "주요 기능",
+  footerBrandName: "보고서 하단 브랜드명(기본: Alphabrothers)",
+  coverDate: "표지 발행일 (예: 2025.09.05)",
+  coverLogoUrl: "표지 로고 이미지 URL (비우면 기본 로고 사용)",
 };

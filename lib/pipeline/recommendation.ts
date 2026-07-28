@@ -2,6 +2,7 @@
 // Ⅳ. 핵심구매요소 해석 서술, Ⅸ. 개발우선순위제언·기능개선제안(As-is→To-be)에 재사용된다.
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
+import { logClaudeUsage } from "@/lib/claudeUsage";
 
 const RECOMMENDATION_MODEL = process.env.ANTHROPIC_RECOMMENDATION_MODEL ?? "claude-sonnet-5";
 
@@ -42,11 +43,12 @@ export async function runRecommendation({
   sectionLabel: string;
   dataSummary: unknown;
 }): Promise<string> {
-  const { text } = await generateText({
+  const result = await generateText({
     model: anthropic(RECOMMENDATION_MODEL),
     system: RECOMMENDATION_SYSTEM_PROMPT,
     prompt: `아래는 '${sectionLabel}' 관련 정량 분석 결과입니다.\n이 결과를 바탕으로 제언 문단을 작성하세요. (3~5문장)\n\n${JSON.stringify(dataSummary, null, 2)}`,
     maxOutputTokens: 2000,
   });
-  return text;
+  logClaudeUsage(`recommendation:${sectionLabel}`, result.usage);
+  return result.text;
 }

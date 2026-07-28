@@ -8,8 +8,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: Arial, "Malgun Gothic", "Noto Sans KR", sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,5 +22,26 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Arial, "Malgun Gothic", "Noto Sans KR", sans-serif;
+}
+
+/* 원본 보고서의 개선 제언 행: 색으로 강조하지 않고 검정·굵게·기울임과 화살표로 구분한다. */
+.report-rich-editor [data-report-kind="arrow"] {
+  margin: 0.45rem 0;
+  color: #111;
+  font-weight: 700;
+  font-style: italic;
+  letter-spacing: -0.015em;
+}
+
+.report-rich-editor h1,
+.report-rich-editor h2,
+.report-rich-editor h3 {
+  margin: 1.35rem 0 0.45rem;
+  color: #333;
+  font-weight: 700;
+}
+
+.report-rich-editor h2 {
+  font-size: 1.22em;
 }

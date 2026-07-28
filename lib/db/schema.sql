@@ -20,6 +20,10 @@ create unique index if not exists reports_file_url_key on reports (file_url);
 -- reports 행이 생성되고 나머지 컬럼은 나중에 채워진다.
 alter table reports add column if not exists product_info jsonb;
 
+-- PDF/DOCX를 다시 렌더링할 때 정량 결과 요약을 매번 Claude에 요청하지 않도록 보관한다.
+-- raw data를 다시 정량 계산하면 reports.ts의 upsert가 이 값을 null로 돌려 최신 통계와만 연결한다.
+alter table reports add column if not exists result_summary text;
+
 -- 정성 처리 대상 14개 문항 (PRD 6.1절).
 create table if not exists questions (
   id uuid primary key default gen_random_uuid(),
@@ -41,6 +45,9 @@ create table if not exists clauses (
   question_id uuid not null references questions(id) on delete cascade,
   respondent_id int not null,
   clause text not null,
+  -- AI가 분석·군집화를 위해 맞춤법만 보정한 clause와, 보고서 직접 인용용 원문을 분리한다.
+  -- 원문과 대조되지 않은 경우 raw_clause는 null이며 직접 인용 대상으로 쓰지 않는다.
+  raw_clause text,
   polarity text not null check (polarity in ('positive', 'negative', 'neutral')),
   rationale text not null,
   confidence text not null check (confidence in ('high', 'medium', 'low')),
@@ -49,6 +56,7 @@ create table if not exists clauses (
   overridden_polarity text check (overridden_polarity in ('positive', 'negative', 'neutral')),
   created_at timestamptz not null default now()
 );
+alter table clauses add column if not exists raw_clause text;
 
 create index if not exists clauses_question_id_idx on clauses (question_id);
 
@@ -92,3 +100,40 @@ create table if not exists strategic_inputs (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- 정성 분석은 문항당 대형 스트리밍 호출을 포함하므로, 하나의 채팅/서버리스 요청에서
+-- 14문항을 끝까지 기다리지 않는다. 작업과 각 문항의 현재 단계를 영속화해, 1개 요청은
+-- Stage1 또는 Stage2 하나만 수행하고 다음 요청이 이어받는다.
+create table if not exists qualitative_jobs (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references reports(id) on delete cascade,
+  status text not null check (status in ('queued', 'running', 'completed', 'completed_with_failures', 'failed', 'cancelled')) default 'queued',
+  total_items int not null,
+  completed_items int not null default 0,
+  failed_items int not null default 0,
+  call_plan jsonb not null,
+  created_at timestamptz not null default now(),
+  started_at timestamptz,
+  completed_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+create index if not exists qualitative_jobs_report_id_idx on qualitative_jobs(report_id, created_at desc);
+
+create table if not exists qualitative_job_items (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid not null references qualitative_jobs(id) on delete cascade,
+  question_key text not null,
+  label text not null,
+  kind text not null check (kind in ('standard', 'improvement')),
+  phase text not null check (phase in ('stage1', 'stage2')) default 'stage1',
+  status text not null check (status in ('queued', 'running', 'completed', 'failed')) default 'queued',
+  attempts int not null default 0,
+  checkpoint jsonb,
+  last_error text,
+  created_at timestamptz not null default now(),
+  started_at timestamptz,
+  completed_at timestamptz,
+  updated_at timestamptz not null default now(),
+  unique (job_id, question_key)
+);
+create index if not exists qualitative_job_items_claim_idx on qualitative_job_items(job_id, status, phase, created_at);

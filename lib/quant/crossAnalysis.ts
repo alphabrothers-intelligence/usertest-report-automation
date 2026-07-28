@@ -23,6 +23,10 @@ export interface CrossAnalysisGroup {
     economic: number;
     social: number;
   };
+  uxQuality: {
+    usability: { name: string; mean: number }[];
+    fun: { name: string; mean: number }[];
+  };
 }
 
 export interface CrossAnalysis {
@@ -33,6 +37,8 @@ export interface CrossAnalysis {
 function scores(values: (number | null)[]): number[] {
   return values.filter((v): v is number => v !== null);
 }
+
+const UX_INDICES = [0, 1, 2, 3] as const;
 
 function summarizeGroup(group: string, members: WallaRecord[]): CrossAnalysisGroup {
   const featureNames = members[0]?.featureSatisfaction.map((f) => f.name) ?? [];
@@ -48,6 +54,16 @@ function summarizeGroup(group: string, members: WallaRecord[]): CrossAnalysisGro
       aesthetic: meanSd(scores(members.map((m) => m.values.aesthetic.score))).mean,
       economic: meanSd(scores(members.map((m) => m.values.economic.score))).mean,
       social: meanSd(scores(members.map((m) => m.values.social.score))).mean,
+    },
+    uxQuality: {
+      usability: UX_INDICES.map((idx) => ({
+        name: members[0]?.uxQuality[idx]?.usability.name ?? `실용성${idx + 1}`,
+        mean: meanSd(scores(members.map((m) => m.uxQuality[idx]?.usability.score ?? null))).mean,
+      })),
+      fun: UX_INDICES.map((idx) => ({
+        name: members[0]?.uxQuality[idx]?.fun.name ?? `즐거움${idx + 1}`,
+        mean: meanSd(scores(members.map((m) => m.uxQuality[idx]?.fun.score ?? null))).mean,
+      })),
     },
   };
 }

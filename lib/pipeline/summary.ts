@@ -2,6 +2,7 @@
 // computeQuantStats의 결과만 근거로 하므로 이미 검증된 결정론적 데이터에 기반한다(4.1절).
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
+import { logClaudeUsage } from "@/lib/claudeUsage";
 
 const SUMMARY_MODEL = process.env.ANTHROPIC_SUMMARY_MODEL ?? "claude-sonnet-5";
 
@@ -18,11 +19,12 @@ const SUMMARY_SYSTEM_PROMPT = `당신은 사용성테스트 결과보고서의 "
 - 개조식(명사형 종결, "~함", "~됨")으로 작성하세요.`;
 
 export async function runResultSummary(statsSummary: unknown): Promise<string> {
-  const { text } = await generateText({
+  const result = await generateText({
     model: anthropic(SUMMARY_MODEL),
     system: SUMMARY_SYSTEM_PROMPT,
     prompt: JSON.stringify(statsSummary, null, 2),
     maxOutputTokens: 2000,
   });
-  return text;
+  logClaudeUsage("result-summary", result.usage);
+  return result.text;
 }

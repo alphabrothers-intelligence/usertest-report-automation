@@ -3,7 +3,8 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { PRODUCT_INFO_FIELD_LABELS, type ProductInfo } from "./types";
+import { logClaudeUsage } from "@/lib/claudeUsage";
+import type { ProductInfo } from "./types";
 
 const MODEL = process.env.ANTHROPIC_CHAT_MODEL ?? "claude-sonnet-5";
 
@@ -33,7 +34,7 @@ const SYSTEM_PROMPT = `당신은 기업 소개 문서에서 정해진 항목만 
 - 문서 원문에 있는 표현을 최대한 그대로 사용하세요. 의역하거나 재작성하지 마세요.`;
 
 export async function runProductInfoExtraction(documentText: string): Promise<ProductInfo> {
-  const { output } = await generateText({
+  const result = await generateText({
     model: anthropic(MODEL),
     instructions: { role: "system", content: SYSTEM_PROMPT },
     prompt: `다음 문서에서 기업/제품 정보를 추출하세요.\n\n${documentText}`,
@@ -43,9 +44,16 @@ export async function runProductInfoExtraction(documentText: string): Promise<Pr
     // stage1.ts의 상세 주석 참고(같은 이유로 다른 추출/분류 파이프라인에도 적용).
     reasoning: "none",
   });
+  logClaudeUsage("product-info-extraction", result.usage);
+  const { output } = result;
 
   const info: ProductInfo = {};
-  for (const key of Object.keys(PRODUCT_INFO_FIELD_LABELS) as (keyof ProductInfo)[]) {
+  // PRODUCT_INFO_FIELD_LABELS가 아니라 이 추출 스키마 자신의 키만 순회한다 — footerBrandName
+  // 같은 필드는 ProductInfo 전체 필드 목록엔 있어도 "기업소개 문서에서 뽑아낼 수 있는 정보"가
+  // 아니므로 이 스키마에 아예 없다(2026-07-21, footerBrandName 추가 때 두 목록이 어긋나며
+  // 타입 에러로 발견됨 — 라벨 목록 대신 스키마 자체를 기준으로 삼으면 이런 어긋남이 재발하지
+  // 않는다).
+  for (const key of Object.keys(ProductInfoExtractionSchema.shape) as (keyof typeof ProductInfoExtractionSchema.shape)[]) {
     const value = output[key];
     if (value && value.trim() !== "") info[key] = value.trim();
   }

@@ -1,6 +1,8 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { FileUploadButton, type UploadedFile } from "@/components/FileUploadButton";
 import { AttachHintBubble } from "@/components/AttachHintBubble";
@@ -145,6 +147,9 @@ function QuantStatsCard({
 interface RunQualitativeAnalysisOutput extends Partial<PipelineResult> {
   ok: boolean;
   error?: string;
+  queued?: boolean;
+  jobId?: string;
+  totalQuestions?: number;
 }
 
 /**
@@ -175,6 +180,52 @@ function QualitativeAnalysisCard({
   output?: RunQualitativeAnalysisOutput;
 }) {
   const elapsed = useElapsedSeconds();
+  const [jobProgress, setJobProgress] = useState<{ completed: number; failed: number; total: number; status: string } | null>(null);
+  const [jobError, setJobError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!output?.queued || !output.jobId) return;
+    let cancelled = false;
+    const baseUrl = `/api/qualitative-jobs/${output.jobId}`;
+    const updateStatus = async () => {
+      const response = await fetch(baseUrl, { cache: "no-store" });
+      if (!response.ok) throw new Error("정성 분석 진행 상태를 불러오지 못했습니다.");
+      const data = await response.json();
+      if (!cancelled) {
+        setJobProgress({
+          completed: data.job.completed_items,
+          failed: data.job.failed_items,
+          total: data.job.total_items,
+          status: data.job.status,
+        });
+      }
+      return data.job.status as string;
+    };
+    const worker = async () => {
+      while (!cancelled) {
+        const response = await fetch(`${baseUrl}/run-next`, { method: "POST" });
+        const data = await response.json();
+        const status = await updateStatus();
+        if (["completed", "completed_with_failures", "failed", "cancelled"].includes(status)) return;
+        // 다른 작업자가 모두 Stage1을 실행 중인 순간에는 잠시 뒤 다시 가져온다.
+        if (!data.ok && !data.item) await new Promise((resolve) => setTimeout(resolve, 1_500));
+      }
+    };
+    // 현재 실측에서는 문항 하나가 212초까지 걸렸다. 3개는 공급자 제한을 과도하게 밀지
+    // 않으면서도 전체 시간을 약 1/3로 줄이는 시작값이며, 서버는 행 잠금으로 중복을 막는다.
+    // **2026-07-27 버그 수정**: 위 주석은 "3개"라고 적혀 있는데 실제 코드는 worker()를 4번
+    // 호출하고 있었다 — lib/pipeline/orchestrate.ts의 DEFAULT_CONCURRENCY=3(같은 교훈: "동시성
+    // 4는 불안정해 3으로 조정"이 이미 이 프로젝트에서 실측으로 확인됨)과 이 클라이언트 폴링
+    // 루프가 서로 다른 값을 쓰고 있었던 것 — 실제 14문항 전체 실행에서 4건이 90초 하드
+    // 타임아웃으로 실패한 사고와 부합해 3으로 맞췄다.
+    void Promise.all([worker(), worker(), worker()]).catch((error) => {
+      if (!cancelled) setJobError(error instanceof Error ? error.message : String(error));
+    });
+    void updateStatus().catch((error) => {
+      if (!cancelled) setJobError(error instanceof Error ? error.message : String(error));
+    });
+    return () => { cancelled = true; };
+  }, [output?.jobId, output?.queued]);
 
   if (state !== "output-available") {
     const minutes = Math.floor(elapsed / 60);
@@ -205,6 +256,22 @@ function QualitativeAnalysisCard({
         ) : (
           <p>정성 응답 분석 중... (14개 문항 병렬 처리, 1~2분 정도 걸릴 수 있어요 · {elapsedLabel})</p>
         )}
+      </div>
+    );
+  }
+
+  if (output?.ok && output.queued && output.jobId) {
+    const progress = jobProgress ?? { completed: 0, failed: 0, total: output.totalQuestions ?? 14, status: "queued" };
+    const done = progress.completed + progress.failed;
+    return (
+      <div className="rounded-lg border border-sky-200 bg-sky-50 px-5 py-4 text-base text-sky-950 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
+        <p className="font-semibold">정성 응답 분석 진행 중 · {done}/{progress.total} 문항 완료</p>
+        <p className="mt-1 text-sm">문항별 Stage1·Stage2를 3개씩 병렬 처리하며, 완료된 결과부터 저장합니다.</p>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-sky-100 dark:bg-sky-900">
+          <div className="h-full bg-sky-600 transition-all" style={{ width: `${Math.round((done / Math.max(progress.total, 1)) * 100)}%` }} />
+        </div>
+        <p className="mt-2 text-xs text-sky-700 dark:text-sky-300">상태: {progress.status}{progress.failed > 0 ? ` · 실패 ${progress.failed}문항` : ""}</p>
+        {jobError && <p className="mt-2 text-sm text-red-700 dark:text-red-300">{jobError}</p>}
       </div>
     );
   }
@@ -432,9 +499,23 @@ interface AssembleReportOutput {
   pendingInsightCount?: number;
   pendingRecommendationCount?: number;
   pdfUrl?: string;
+  docxUrl?: string;
+  hwpxUrl?: string;
+  sourceFileUrl?: string;
 }
 
 function AssembleReportCard({ state, output }: { state: string; output?: AssembleReportOutput }) {
+  const router = useRouter();
+  const viewerHref = output?.pdfUrl
+    ? `/viewer?pdf=${encodeURIComponent(output.pdfUrl)}${output.sourceFileUrl ? `&source=${encodeURIComponent(output.sourceFileUrl)}` : ""}`
+    : "/viewer";
+
+  useEffect(() => {
+    if (state !== "output-available" || !output?.ok || !output.pdfUrl) return;
+    const timer = window.setTimeout(() => router.push(viewerHref), 900);
+    return () => window.clearTimeout(timer);
+  }, [output?.ok, output?.pdfUrl, router, state, viewerHref]);
+
   if (state !== "output-available") {
     return (
       <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-5 py-4 text-base text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
@@ -452,6 +533,13 @@ function AssembleReportCard({ state, output }: { state: string; output?: Assembl
   return (
     <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4 text-base text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
       <p className="font-medium">최종 보고서 PDF가 완성됐습니다.</p>
+      <p className="mt-1 text-sm">편집 뷰어로 이동합니다. 뷰어에서 내용을 수정하고 저장할 수 있습니다.</p>
+      <Link
+        href={viewerHref}
+        className="mt-3 inline-block rounded-full bg-[#315c9c] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#254879]"
+      >
+        보고서 뷰어 열기
+      </Link>
       <a
         href={output.pdfUrl}
         target="_blank"
@@ -460,6 +548,22 @@ function AssembleReportCard({ state, output }: { state: string; output?: Assembl
       >
         PDF 다운로드
       </a>
+      {output.docxUrl && (
+        <a
+          href={output.docxUrl}
+          className="mt-2 ml-2 inline-block rounded-full border border-emerald-700 px-4 py-1.5 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+        >
+          DOCX 다운로드
+        </a>
+      )}
+      {output.hwpxUrl && (
+        <a
+          href={output.hwpxUrl}
+          className="mt-2 ml-2 inline-block rounded-full border border-[#315c9c] px-4 py-1.5 text-sm font-medium text-[#315c9c] hover:bg-[#e8effa]"
+        >
+          HWPX 다운로드
+        </a>
+      )}
     </div>
   );
 }
@@ -546,13 +650,13 @@ export default function Chat() {
       }}
       className="w-full max-w-4xl px-4"
     >
-      <div className="rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="rounded-3xl border border-[#dfdbd2] bg-[#fffdf9] shadow-[0_8px_28px_rgba(69,58,45,0.08)]">
         {attachedFiles.length > 0 && (
           <div className="flex flex-wrap gap-2 px-4 pt-3">
             {attachedFiles.map((file) => (
               <div
                 key={file.url}
-                className="flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                className="flex items-center gap-2 rounded-full border border-[#dfdbd2] bg-[#f5f1e9] px-3 py-1 text-sm text-[#544c44]"
               >
                 <span aria-hidden>📎</span>
                 <span>{file.name}</span>
@@ -560,7 +664,7 @@ export default function Chat() {
                   type="button"
                   onClick={() => removeAttachedFile(file.url)}
                   aria-label="첨부 제거"
-                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                  className="text-[#a39a8d] hover:text-[#5e554c]"
                 >
                   ×
                 </button>
@@ -589,7 +693,7 @@ export default function Chat() {
           placeholder="오늘 어떤 보고서를 만들어드릴까요?"
           disabled={status !== "ready"}
           rows={1}
-          className="max-h-[200px] w-full resize-none bg-transparent px-5 pb-2 pt-4 text-base outline-none placeholder:text-zinc-400 disabled:opacity-50 dark:placeholder:text-zinc-500"
+          className="max-h-[200px] w-full resize-none bg-transparent px-5 pb-2 pt-4 text-base text-[#2f2a26] outline-none placeholder:text-[#9f978d] disabled:opacity-50"
         />
         <div className="flex items-center justify-between px-3 pb-3">
           <div className="relative">
@@ -601,7 +705,7 @@ export default function Chat() {
             />
           </div>
           {isUploadingFiles && (
-            <span className="text-sm text-zinc-400 dark:text-zinc-500">파일 업로드 중...</span>
+            <span className="text-sm text-[#9f978d]">파일 업로드 중...</span>
           )}
           <button
             type="submit"
@@ -611,7 +715,7 @@ export default function Chat() {
               (!input.trim() && attachedFiles.length === 0)
             }
             aria-label="전송"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-zinc-50 disabled:opacity-30 dark:bg-zinc-100 dark:text-zinc-900"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d97757] text-white shadow-sm transition hover:bg-[#c96648] disabled:opacity-30"
           >
             <span aria-hidden>↑</span>
           </button>
@@ -622,13 +726,13 @@ export default function Chat() {
 
   if (messages.length === 0) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 dark:bg-black">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#f7f6f2] px-4">
         <div className="flex w-full max-w-4xl flex-col items-center gap-6">
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+          <h1 className="text-2xl font-semibold tracking-[-0.02em] text-[#2f2a26]">
             사용성테스트 결과보고서 자동생성
           </h1>
           {composerForm}
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-[#81786e]">
             raw data(xlsx/csv)를 첨부하거나 메시지를 보내 대화를 시작하세요.
           </p>
         </div>
@@ -637,9 +741,9 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-zinc-50 dark:bg-black">
+    <div className="flex min-h-screen flex-col items-center bg-[#f7f6f2]">
       <div className="flex w-full min-w-0 max-w-4xl flex-1 flex-col px-4 py-8">
-        <h1 className="mb-6 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <h1 className="mb-6 text-xl font-semibold tracking-[-0.02em] text-[#2f2a26]">
           사용성테스트 결과보고서 자동생성
         </h1>
 
@@ -649,8 +753,8 @@ export default function Chat() {
               key={message.id}
               className={`min-w-0 whitespace-pre-wrap break-words text-base ${
                 message.role === "user"
-                  ? "self-end rounded-2xl bg-zinc-900 px-4 py-2 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
-                  : "self-start text-zinc-900 dark:text-zinc-100"
+                  ? "self-end rounded-2xl bg-[#d97757] px-4 py-2 text-white shadow-sm"
+                  : "self-start text-[#302b27]"
               } max-w-full`}
             >
               {message.parts.map((part, i) => {

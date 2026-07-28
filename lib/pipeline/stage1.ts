@@ -5,8 +5,9 @@
 // 후속 API다(node_modules/ai/docs/03-ai-sdk-core/60-telemetry.mdx 참고). 강제되는 구조·의미는
 // 동일하므로 여기서는 최신 API로 구현한다.
 import { anthropic } from "@ai-sdk/anthropic";
-import { generateText, Output } from "ai";
+import { Output } from "ai";
 import { z } from "zod";
+import { streamStructured, withClaudeGuard } from "./claudeGuard";
 
 const STAGE1_MODEL = process.env.ANTHROPIC_STAGE1_MODEL ?? "claude-sonnet-5";
 
@@ -14,12 +15,12 @@ export const PolaritySchema = z.enum(["positive", "negative", "neutral"]);
 export type Polarity = z.infer<typeof PolaritySchema>;
 
 export const ClauseSchema = z.object({
-  clause: z.string().describe("원문 그대로 복사한 절/문장. 의역·축약·맞춤법 교정 금지"),
+  clause: z.string().describe("원문에서 그대로 복사한 절/문장. 의역·축약·맞춤법 교정 금지"),
   polarity: PolaritySchema,
   rationale: z.string().describe("판정근거 한 줄"),
 });
 
-export const Stage1OutputSchema = z.object({
+const Stage1ModelOutputSchema = z.object({
   results: z.array(
     z.object({
       respondent_id: z.number(),
@@ -28,13 +29,76 @@ export const Stage1OutputSchema = z.object({
     }),
   ),
 });
+type Stage1ModelOutput = z.infer<typeof Stage1ModelOutputSchema>;
 
-export type Stage1Output = z.infer<typeof Stage1OutputSchema>;
+export interface VerifiedClause {
+  /** 원문에서 검증된 직접 인용 후보. null이면 분석에는 쓰되 보고서 인용에는 쓰지 않는다. */
+  raw_clause: string | null;
+  /** 오탈자·띄어쓰기만 보정할 수 있는 분석·군집화용 문장. */
+  analysis_clause: string;
+  polarity: Polarity;
+  rationale: string;
+}
+
+export interface Stage1Output {
+  results: Array<{
+    respondent_id: number;
+    score: number;
+    clauses: VerifiedClause[];
+  }>;
+}
 
 export interface Stage1Input {
   respondent_id: number;
   score: number;
   reason: string;
+}
+
+/**
+ * 고객 인용문은 오탈자까지 원문 그대로여야 한다. 다만 Excel·모델 사이에서 바뀔 수 있는
+ * 따옴표 모양과 공백/줄바꿈은 의미·표기 교정이 아니므로 비교 시에만 통일한다.
+ */
+function normalizeForVerbatimComparison(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[\u200B\s]+/g, "");
+}
+
+export function isVerbatimClause(source: string, clause: string): boolean {
+  const normalizedClause = normalizeForVerbatimComparison(clause);
+  return normalizedClause.length > 0 && normalizeForVerbatimComparison(source).includes(normalizedClause);
+}
+
+/**
+ * 모델 출력은 한 문장만 받아 비용을 최소화한다. 원문 대조에 통과하면 직접 인용에도 쓰고,
+ * 대조에 실패해도 분석용 문장으로는 유지하되 보고서 직접 인용에는 쓰지 않는다.
+ */
+function verifyRawClauses(
+  output: Stage1ModelOutput,
+  inputs: Stage1Input[],
+): Stage1Output {
+  const sourceByRespondent = new Map(inputs.map((input) => [input.respondent_id, input.reason]));
+  let unverifiedCount = 0;
+  const results = output.results.map((result) => {
+    const source = sourceByRespondent.get(result.respondent_id) ?? "";
+    const clauses = result.clauses.map((clause) => {
+      const raw_clause = isVerbatimClause(source, clause.clause) ? clause.clause : null;
+      if (!raw_clause) unverifiedCount += 1;
+      return {
+        raw_clause,
+        analysis_clause: clause.clause,
+        polarity: clause.polarity,
+        rationale: clause.rationale,
+      };
+    });
+    return { ...result, clauses };
+  });
+  if (unverifiedCount > 0) {
+    console.warn(`[qualitative] Stage1 retained ${unverifiedCount} clause(s) for analysis but excluded them from direct quotes because raw text could not be verified`);
+  }
+  return { results };
 }
 
 // PRD 6.2절 [SYSTEM] 프롬프트 원문. 절대 의역·축약하지 않는다(4.4절: "6장의 프롬프트 내용 자체는
@@ -119,7 +183,7 @@ const STAGE1_SYSTEM_PROMPT = `당신은 사용성테스트 주관식 응답을 �
 
 # 절대 규칙
 - clause 필드는 원문을 그대로 복사하세요. 절대 의역·축약·맞춤법 교정을
-  하지 마세요. (이 값은 보고서에 실제 고객 인용문으로 그대로 실립니다.)
+  하지 마세요. 원문 대조에 통과한 값만 보고서의 실제 고객 인용문으로 사용합니다.
 - 의미 있는 내용이 없는 응답("없음", "특별히 없음", 공백 등)은
   clauses를 빈 배열 []로 두세요.
 - 오탈자나 비문이 있어도 원문 그대로 두세요.`;
@@ -139,7 +203,8 @@ export async function runStage1({
   questionLabel: string;
   inputs: Stage1Input[];
 }): Promise<Stage1Output> {
-  const { output } = await generateText({
+  const traceLabel = `stage1:${questionLabel}`;
+  const { output } = await withClaudeGuard(traceLabel, () => streamStructured<Stage1ModelOutput>({
     model: anthropic(STAGE1_MODEL),
     // 표준 문항(6+4+1+1+1=13개)마다 이 함수가 호출되는데 시스템 프롬프트(few-shot 포함)가
     // 매번 동일하다. **이 AI SDK 버전은 `system` 단축 파라미터를 지원하지 않는다** — 넣으면
@@ -156,7 +221,7 @@ export async function runStage1({
       providerOptions: { anthropic: { cacheControl: { type: "ephemeral", ttl: "1h" } } },
     },
     prompt: `다음은 '${questionLabel}' 문항에 대한 응답자 ${inputs.length}명의 (점수, 이유) 데이터입니다.\n\n${toJsonl(inputs)}`,
-    output: Output.object({ schema: Stage1OutputSchema }),
+    output: Output.object({ schema: Stage1ModelOutputSchema }),
     // maxOutputTokens를 지정하지 않으면 SDK가 매우 큰 기본값(실측 128,000)을 잡아, 응답이
     // 끝나기 전까지 헤더조차 안 와서 undici 기본 300초 헤더 타임아웃에 걸린다(실측 확인 —
     // check:qualitative를 처음 돌렸을 때 HeadersTimeoutError로 재현됨). 100명 전체를 한 번에
@@ -170,20 +235,16 @@ export async function runStage1({
     // 예시로 규칙이 이미 명시된 분류·추출 작업이라 깊은 추론이 필요 없다 — **이 옵션을 절대
     // 지우지 말 것.** 지우면 다시 대용량 문항에서 잘림/타임아웃이 재현된다.
     reasoning: "none",
-    // PRD 10장: 재현성 확보를 위해 temperature=0을 요구하지만, claude-sonnet-5는 temperature
-    // 파라미터 자체를 지원하지 않아(SDK가 무시하고 경고만 남김, 실측 확인) 이 모델에서는 효과가
-    // 없다. 다른 모델로 STAGE1_MODEL을 바꿀 경우를 대비해 남겨둔다 — CLAUDE.md 참고.
-    temperature: 0, // claude-sonnet-5는 무시함 — stage1.ts의 상세 주석 참고
-  });
+  }, traceLabel));
 
-  return output;
+  return verifyRawClauses(output, inputs);
 }
 
 /**
  * PRD 6.6절 — 개선아이디어(58번 컬럼) 변형: 점수 없는 자유서술 단일 문항이라 극성 판정이
  * 필요 없다. 문장 분리만 수행한다.
  */
-export const Stage1ImprovementOutputSchema = z.object({
+const Stage1ImprovementModelOutputSchema = z.object({
   results: z.array(
     z.object({
       respondent_id: z.number(),
@@ -196,7 +257,37 @@ export const Stage1ImprovementOutputSchema = z.object({
   ),
 });
 
-export type Stage1ImprovementOutput = z.infer<typeof Stage1ImprovementOutputSchema>;
+type Stage1ImprovementModelOutput = z.infer<typeof Stage1ImprovementModelOutputSchema>;
+export interface Stage1ImprovementOutput {
+  results: Array<{
+    respondent_id: number;
+    clauses: Array<{
+      raw_clause: string | null;
+      analysis_clause: string;
+    }>;
+  }>;
+}
+
+function verifyImprovementRawClauses(
+  output: Stage1ImprovementModelOutput,
+  inputs: { respondent_id: number; reason: string }[],
+): Stage1ImprovementOutput {
+  const sourceByRespondent = new Map(inputs.map((input) => [input.respondent_id, input.reason]));
+  let unverifiedCount = 0;
+  const results = output.results.map((result) => ({
+    ...result,
+    clauses: result.clauses.map((clause) => {
+      const source = sourceByRespondent.get(result.respondent_id) ?? "";
+      const raw_clause = isVerbatimClause(source, clause.clause) ? clause.clause : null;
+      if (!raw_clause) unverifiedCount += 1;
+      return { raw_clause, analysis_clause: clause.clause };
+    }),
+  }));
+  if (unverifiedCount > 0) {
+    console.warn(`[qualitative] Stage1 improvement retained ${unverifiedCount} clause(s) for analysis but excluded them from direct quotes because raw text could not be verified`);
+  }
+  return { results };
+}
 
 const STAGE1_IMPROVEMENT_SYSTEM_PROMPT = `당신은 사용성테스트 주관식 응답을 분석하는 리서치 애널리스트입니다.
 이 문항은 점수 없이 자유서술로 개선 아이디어를 받는 질문입니다.
@@ -205,7 +296,7 @@ const STAGE1_IMPROVEMENT_SYSTEM_PROMPT = `당신은 사용성테스트 주관식
 
 # 절대 규칙
 - clause 필드는 원문을 그대로 복사하세요. 절대 의역·축약·맞춤법 교정을
-  하지 마세요. (이 값은 보고서에 실제 고객 인용문으로 그대로 실립니다.)
+  하지 마세요. 원문 대조에 통과한 값만 보고서의 실제 고객 인용문으로 사용합니다.
 - 의미 있는 내용이 없는 응답("없음", "특별히 없음", 공백 등)은
   clauses를 빈 배열 []로 두세요.
 - 오탈자나 비문이 있어도 원문 그대로 두세요.`;
@@ -221,15 +312,22 @@ export async function runStage1ImprovementIdea({
     .map((i) => JSON.stringify({ respondent_id: i.respondent_id, reason: i.reason }))
     .join("\n");
 
-  const { output } = await generateText({
+  const traceLabel = `stage1-improvement:${questionLabel}`;
+  const { output } = await withClaudeGuard(traceLabel, () => streamStructured<Stage1ImprovementModelOutput>({
     model: anthropic(STAGE1_MODEL),
-    system: STAGE1_IMPROVEMENT_SYSTEM_PROMPT,
+    // runStage1과 같은 Anthropic 프롬프트 캐시·메시지 전달 방식으로 통일한다.
+    // 스트리밍 전환 뒤에도 이 문항만 옛 system 단축값을 쓰면, 공급자/SDK 조합에 따라
+    // "System messages are not allowed" 오류가 재발할 수 있다.
+    instructions: {
+      role: "system",
+      content: STAGE1_IMPROVEMENT_SYSTEM_PROMPT,
+      providerOptions: { anthropic: { cacheControl: { type: "ephemeral", ttl: "1h" } } },
+    },
     prompt: `다음은 '${questionLabel}' 문항에 대한 응답자 ${inputs.length}명의 자유서술 응답입니다.\n\n${jsonl}`,
-    output: Output.object({ schema: Stage1ImprovementOutputSchema }),
+    output: Output.object({ schema: Stage1ImprovementModelOutputSchema }),
     maxOutputTokens: 32000, // 위 runStage1과 동일한 이유
     reasoning: "none", // 위 runStage1과 동일한 이유 — 절대 지우지 말 것
-    temperature: 0, // claude-sonnet-5는 무시함 — stage1.ts의 상세 주석 참고
-  });
+  }, traceLabel));
 
-  return output;
+  return verifyImprovementRawClauses(output, inputs);
 }

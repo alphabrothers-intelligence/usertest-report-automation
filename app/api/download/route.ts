@@ -14,6 +14,7 @@ export async function GET(request: Request): Promise<NextResponse | Response> {
   const { searchParams } = new URL(request.url);
   const blobUrl = searchParams.get("u");
   const fileName = searchParams.get("name") ?? "report.pdf";
+  const inline = searchParams.get("inline") === "1" && fileName.toLowerCase().endsWith(".pdf");
 
   if (!blobUrl) {
     return NextResponse.json({ error: "u 파라미터가 필요합니다." }, { status: 400 });
@@ -35,10 +36,20 @@ export async function GET(request: Request): Promise<NextResponse | Response> {
     return NextResponse.json({ error: "파일을 찾을 수 없습니다." }, { status: 404 });
   }
 
+  // DOCX 다운로드 추가(2026-07-23)로 이 라우트가 PDF 전용이 아니게 됐다 — 파일명 확장자로
+  // Content-Type을 정한다(고정 application/pdf였던 걸 일반화). 잘못된 MIME 타입을 주면
+  // 일부 브라우저·오피스 앱이 파일을 열지 못하거나 경고를 띄운다.
+  const lowerFileName = fileName.toLowerCase();
+  const contentType = lowerFileName.endsWith(".docx")
+    ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    : lowerFileName.endsWith(".hwpx")
+      ? "application/hwp+zip"
+      : "application/pdf";
+
   return new Response(result.stream, {
     headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${encodeURIComponent(fileName)}"`,
+      "Content-Type": contentType,
+      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(fileName)}"`,
     },
   });
 }

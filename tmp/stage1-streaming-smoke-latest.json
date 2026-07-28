@@ -1,0 +1,23 @@
+{
+  "updatedAt": "2026-07-27T09:15:45.615Z",
+  "event": "stage1_streaming_smoke_complete",
+  "status": "completed",
+  "question": "'펫과의 산책' 기능 만족도",
+  "apiCalls": 1,
+  "respondentsSent": 100,
+  "respondentsReturned": 100,
+  "missingRespondents": 0,
+  "clausesReturned": 190,
+  "unverifiedRawClauses": 2,
+  "unverifiedExamples": [
+    {
+      "respondentId": 7,
+      "analysisClause": "실제 걸음 수와 연동되어 활동을 기록하고 보상을 제공한다는 점에서 운동 동기부여와 재미 요소를 동시에 충족시켜 만족스러웠습니다. 지도에 경로가 표시되고 보상을 얻을 수 있어 꾸준히 사용할 유인이 있었으며, 펫과 함께 걷는 듯한 경험이 흥미로웠습니다."
+    },
+    {
+      "respondentId": 81,
+      "analysisClause": "4. 지도가 좀 더 섬새하게 표현되었으면 좋겠고 동네의 랜드마크(아파트, 학교, 공원, 마트 등)에는 이름을 적어주어 어딘지 알려줬겠음"
+    }
+  ],
+  "elapsedMs": 211500
+}
