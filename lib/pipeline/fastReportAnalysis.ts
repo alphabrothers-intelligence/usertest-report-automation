@@ -19,6 +19,7 @@ import {
 import { streamStructured, withClaudeGuard } from "./claudeGuard";
 import type { QuestionResult } from "./orchestrate";
 import { computeNps } from "@/lib/quant/basic";
+import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 
 const FAST_MODEL = process.env.ANTHROPIC_QUALITATIVE_FAST_MODEL ?? process.env.ANTHROPIC_STAGE2_MODEL ?? "claude-sonnet-5";
 
@@ -103,7 +104,10 @@ function standardPrompt(spec: Extract<QuestionSpec, { kind: "standard" }>): stri
   ].join("\n");
 }
 
-export async function runFastReportAnalysis(spec: QuestionSpec): Promise<QuestionResult> {
+export async function runFastReportAnalysis(
+  spec: QuestionSpec,
+  options: { onUsage?: (usage: ClaudeUsageRecord) => void } = {},
+): Promise<QuestionResult> {
   if (spec.kind === "improvement") {
     const traceLabel = `fast:${spec.label}`;
     const { output } = await withClaudeGuard(traceLabel, () => streamStructured<z.infer<typeof Stage2ImprovementOutputSchema>>({
@@ -127,7 +131,7 @@ export async function runFastReportAnalysis(spec: QuestionSpec): Promise<Questio
       hardTimeoutMs: 120_000,
       maxOutputTokens: 6000,
       reasoning: "none",
-    }, traceLabel));
+    }, traceLabel), { onUsage: options.onUsage });
     assertCounts(output, traceLabel);
     return {
       id: spec.id,
@@ -152,7 +156,7 @@ export async function runFastReportAnalysis(spec: QuestionSpec): Promise<Questio
     hardTimeoutMs: 120_000,
     maxOutputTokens: 8000,
     reasoning: "none",
-  }, traceLabel));
+  }, traceLabel), { onUsage: options.onUsage });
 
   const stage2ByPolarity: Partial<Record<Polarity, Stage2Output>> = {};
   const seen = new Set<Polarity>();

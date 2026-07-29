@@ -13,8 +13,7 @@
 // 금지. 결론은 객관적 제언 뉘앙스("~것을 제언함/추천함", "~할 필요가 있음", "~이 요구됨",
 // "~시급하다고 사료됨")로만. 정량 수치·정성 인사이트에 있는 내용만 사용(할루시네이션 금지).
 import { anthropic } from "@ai-sdk/anthropic";
-import { generateText } from "ai";
-import { logClaudeUsage } from "@/lib/claudeUsage";
+import pLimit from "p-limit";
 import type { QuantStats } from "@/lib/quant/compute";
 import {
   getReportById,
@@ -23,6 +22,8 @@ import {
   type QuestionWithApprovedCategories,
 } from "@/lib/db/reports";
 import { detectProductType, type ProductType } from "@/lib/report/productType";
+import { streamPlainText, withClaudeGuard } from "./claudeGuard";
+import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 
 const MODEL = process.env.ANTHROPIC_SECTION_ANALYSIS_MODEL ?? "claude-sonnet-5";
 
@@ -31,6 +32,14 @@ export interface SectionAnalyses {
   corePurchaseFactor?: string;
   fourValues?: string;
   uxQuality?: string;
+}
+
+export type SectionAnalysisKey = keyof SectionAnalyses;
+
+export interface SectionAnalysisRunHooks {
+  onSectionStart?: (key: SectionAnalysisKey) => void | Promise<void>;
+  onSectionComplete?: (key: SectionAnalysisKey) => void | Promise<void>;
+  onSectionError?: (key: SectionAnalysisKey, error: unknown) => void | Promise<void>;
 }
 
 // ── 공통 제언 뉘앙스 규칙(모든 프롬프트에 삽입) ───────────────────────────────
@@ -80,16 +89,40 @@ function repeatedComplaints(qual: QuestionWithApprovedCategories[], limit = 6): 
   return [...improvement, ...featureNeg].slice(0, limit);
 }
 
-async function generate(label: string, system: string, input: unknown, maxOutputTokens: number): Promise<string> {
-  const result = await generateText({
+async function generate(
+  label: string,
+  system: string,
+  input: unknown,
+  maxOutputTokens: number,
+  onUsage?: (usage: ClaudeUsageRecord) => void,
+): Promise<string> {
+  // 기존 Stage1·Stage2와 같은 스트리밍 가드를 사용한다. 이 신규 레이어가 비스트리밍
+  // 호출로 다시 HTTP hang을 만들지 않도록 하며, 문단형 결과는 구조화 스키마 대신 text로 받는다.
+  const { text } = await withClaudeGuard(`section-analysis:${label}`, () => streamPlainText({
     model: anthropic(MODEL),
-    system,
+    instructions: {
+      role: "system",
+      content: system,
+      providerOptions: { anthropic: { cacheControl: { type: "ephemeral", ttl: "1h" } } },
+    },
     prompt: JSON.stringify(input, null, 2),
     maxOutputTokens,
     reasoning: "none",
-  });
-  logClaudeUsage(`section-analysis:${label}`, result.usage);
-  return result.text.trim();
+    // 장문이 아닌 4개 종합 해석은 2분 안에 결과 또는 실패가 확정돼야 다음 단계를 막지 않는다.
+    hardTimeoutMs: 120_000,
+  }, `section-analysis:${label}`), { onUsage });
+  return normalizeSectionText(text);
+}
+
+/**
+ * 섹션 제목은 웹/PDF 템플릿이 이미 그린다. 모델이 제목을 한 번 더 되풀이하면 원본의
+ * 표·헤더 리듬이 깨지므로, 생성 결과의 맨 앞 장 제목만 제거한다. 내부 소제목([종합 해석] 등)은 유지한다.
+ */
+function normalizeSectionText(text: string): string {
+  return text
+    .trim()
+    .replace(/^(?:#{1,3}\s*)?(?:Ⅲ장?\.?\s*기능별 고객 경험 분석|Ⅳ\.?\s*핵심구매요소(?:\s*분석)?|Ⅴ\.?\s*4대 가치(?:\s*만족도)?(?:\s*조사 결과 분석)?|Ⅵ\.?\s*사용자 경험 품질 평가(?:\s*결과 분석)?|핵심구매요소 중요 순위 및 만족도 종합 해석)\s*\n+/u, "")
+    .trim();
 }
 
 // ── Ⅲ.2 기능별 고객 경험 분석 (SW형) ─────────────────────────────────────────
@@ -107,6 +140,9 @@ const FEATURE_SYSTEM = `당신은 사용성테스트 결과보고서 Ⅲ장 "기
 
 # 문체
 - 개조식 명사형 종결(~함/~짐/~가짐/~확인/~필요/~시급). 핵심 표현·수치에만 **굵게**.
+- 제공 수치만으로 직접 비교되는 경우에만 "가장 높음/낮음"을 쓴다. 중요도와 만족도의 관계를
+  원인·결과 또는 "가장 큰 gap"으로 단정하지 않는다.
+- "다수", "반복" 등 빈도 표현은 입력에 반복_불만 근거가 있을 때만 쓴다.
 ${NUANCE_RULES}`;
 
 // ── Ⅳ 핵심구매요소 분석 (제품형 공통) ────────────────────────────────────────
@@ -138,6 +174,8 @@ const FOUR_VALUES_SYSTEM = `당신은 사용성테스트 결과보고서의 "4�
 
 # 문체
 - 존댓말 "~습니다" 종결. 각 단락은 빈 줄로 구분. 핵심 표현에만 **굵게**.
+- 각 단락은 최대 4문장, 전체는 600자 이내로 작성합니다. 같은 사실을 문장만 바꾸어 반복하지 않습니다.
+- 입력의 긍정·개선 요지를 넘어 원인을 추정하거나 효과를 전망하지 않습니다.
 ${NUANCE_RULES}`;
 
 // ── Ⅵ.2 사용자 경험 품질 분석 (SW형 전용) ────────────────────────────────────
@@ -152,10 +190,13 @@ const UX_QUALITY_SYSTEM = `당신은 사용성테스트 결과보고서 Ⅵ장 "
 
 # 문체
 - 개조식과 "~습니다"를 원본처럼 혼용하되, 제언은 제언 뉘앙스로 끝낸다. 핵심 표현·수치에만 **굵게**.
+- 점수와 정성 불만은 함께 확인된 사실로만 서술합니다. "원인", "기인", "가능성이 높음"처럼
+  인과관계·추정을 표현하지 않습니다.
+- [종합 해석]은 4문장 이내, [세부 해석]의 항목별 설명은 각각 한 문장으로 제한합니다.
 ${NUANCE_RULES}`;
 
 // ── 개별 생성 함수 ───────────────────────────────────────────────────────────
-export async function runFeatureExperienceAnalysis(stats: QuantStats, qual: QuestionWithApprovedCategories[]): Promise<string> {
+export async function runFeatureExperienceAnalysis(stats: QuantStats, qual: QuestionWithApprovedCategories[], onUsage?: (usage: ClaudeUsageRecord) => void): Promise<string> {
   const byImportance = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
   const 기능 = byImportance.map((imp) => {
     const mean = stats.featureSatisfaction.find((f) => f.name === imp.name)?.mean ?? 0;
@@ -167,10 +208,10 @@ export async function runFeatureExperienceAnalysis(stats: QuantStats, qual: Ques
       부정인사이트: negativeInsights(qual, imp.name),
     };
   });
-  return generate("feature-experience", FEATURE_SYSTEM, { 기능, 반복_불만: repeatedComplaints(qual) }, 2600);
+  return generate("feature-experience", FEATURE_SYSTEM, { 기능, 반복_불만: repeatedComplaints(qual) }, 2600, onUsage);
 }
 
-export async function runCorePurchaseFactorAnalysis(stats: QuantStats, qual: QuestionWithApprovedCategories[], productType: ProductType): Promise<string> {
+export async function runCorePurchaseFactorAnalysis(stats: QuantStats, qual: QuestionWithApprovedCategories[], productType: ProductType, onUsage?: (usage: ClaudeUsageRecord) => void): Promise<string> {
   const sorted = [...stats.keyFactorDistribution].sort((a, b) => b.percentage - a.percentage);
   const 요인 = sorted.map((k, i) => ({ 요인명: k.label, 순위: i + 1, 비율: k.percentage }));
   const 상위3합계 = sorted.slice(0, 3).reduce((s, k) => s + k.percentage, 0);
@@ -179,10 +220,10 @@ export async function runCorePurchaseFactorAnalysis(stats: QuantStats, qual: Que
     상위3합계비율: Math.round(상위3합계 * 10) / 10,
     순위구성비: productType === "physical" ? stats.rankPositionComposition : undefined,
     반복_주관_불만: repeatedComplaints(qual),
-  }, 2200);
+  }, 2200, onUsage);
 }
 
-export async function runFourValuesAnalysis(stats: QuantStats, qual: QuestionWithApprovedCategories[]): Promise<string> {
+export async function runFourValuesAnalysis(stats: QuantStats, qual: QuestionWithApprovedCategories[], onUsage?: (usage: ClaudeUsageRecord) => void): Promise<string> {
   const 가치 = [
     { key: "values:functional", label: "기능적 가치", stat: stats.fourValues.functional },
     { key: "values:aesthetic", label: "심미적 가치", stat: stats.fourValues.aesthetic },
@@ -194,10 +235,10 @@ export async function runFourValuesAnalysis(stats: QuantStats, qual: QuestionWit
     긍정요지: insightsFor(qual, v.key, "positive"),
     개선요지: insightsFor(qual, v.key, "negative"),
   }));
-  return generate("four-values", FOUR_VALUES_SYSTEM, { 가치 }, 1800);
+  return generate("four-values", FOUR_VALUES_SYSTEM, { 가치 }, 1800, onUsage);
 }
 
-export async function runUxQualityAnalysis(stats: QuantStats, qual: QuestionWithApprovedCategories[]): Promise<string> {
+export async function runUxQualityAnalysis(stats: QuantStats, qual: QuestionWithApprovedCategories[], onUsage?: (usage: ClaudeUsageRecord) => void): Promise<string> {
   const usability = stats.uxQuality.usability.map((u) => ({ 항목: u.name, 점수: u.mean }));
   const fun = stats.uxQuality.fun.map((u) => ({ 항목: u.name, 점수: u.mean }));
   const avg = (arr: { 점수: number }[]) => Math.round((arr.reduce((s, x) => s + x.점수, 0) / (arr.length || 1)) * 100) / 100;
@@ -205,14 +246,17 @@ export async function runUxQualityAnalysis(stats: QuantStats, qual: QuestionWith
     실용성: usability, 실용성평균: avg(usability),
     즐거움: fun, 즐거움평균: avg(fun),
     조작_UI_불만: repeatedComplaints(qual),
-  }, 2200);
+  }, 2200, onUsage);
 }
 
 // ── 리포트 단위 오케스트레이터 ──────────────────────────────────────────────
 /** 이미 저장된 정량 통계 + 정성 카테고리를 재료로 섹션 분석 전체를 생성·저장한다.
  * 제품형에 따라 대상 섹션이 달라진다(실제품형엔 UX 품질·4대가치 종합·기능 티어 분석이 없음).
  * 각 섹션 생성은 독립적으로 try/catch — 하나가 실패해도 나머지는 저장된다. */
-export async function runSectionAnalysesForReport(reportId: string): Promise<SectionAnalyses> {
+export async function runSectionAnalysesForReport(
+  reportId: string,
+  options: { concurrency?: number; onUsage?: (usage: ClaudeUsageRecord) => void } & SectionAnalysisRunHooks = {},
+): Promise<SectionAnalyses> {
   const report = await getReportById(reportId);
   if (!report?.quant_stats) throw new Error("정량 통계가 없어 섹션 분석을 생성할 수 없습니다.");
   const stats = report.quant_stats;
@@ -221,26 +265,37 @@ export async function runSectionAnalysesForReport(reportId: string): Promise<Sec
 
   const analyses: SectionAnalyses = {};
   const tasks: { key: keyof SectionAnalyses; run: () => Promise<string> }[] = [
-    { key: "corePurchaseFactor", run: () => runCorePurchaseFactorAnalysis(stats, qual, productType) },
+    { key: "corePurchaseFactor", run: () => runCorePurchaseFactorAnalysis(stats, qual, productType, options.onUsage) },
   ];
   // SW형 전용 섹션(케어클 원본엔 없음).
   if (productType === "sw") {
     tasks.push(
-      { key: "featureExperience", run: () => runFeatureExperienceAnalysis(stats, qual) },
-      { key: "fourValues", run: () => runFourValuesAnalysis(stats, qual) },
-      { key: "uxQuality", run: () => runUxQualityAnalysis(stats, qual) },
+      { key: "featureExperience", run: () => runFeatureExperienceAnalysis(stats, qual, options.onUsage) },
+      { key: "fourValues", run: () => runFourValuesAnalysis(stats, qual, options.onUsage) },
+      { key: "uxQuality", run: () => runUxQualityAnalysis(stats, qual, options.onUsage) },
     );
   }
 
+  // 4개 분석은 최종 정성 분석 흐름의 일부지만, 한꺼번에 4개를 보내 API 연결/레이트리밋
+  // 위험을 키우지 않는다. 두 개씩만 실행해 기존 Stage1·Stage2와 독립적으로 안정성을 검증한다.
+  const concurrency = Math.min(2, Math.max(1, options.concurrency ?? 2));
+  const limit = pLimit(concurrency);
   await Promise.all(
-    tasks.map(async ({ key, run }) => {
+    tasks.map(({ key, run }) => limit(async () => {
       try {
+        await options.onSectionStart?.(key);
         const text = await run();
         if (text) analyses[key] = text;
+        await options.onSectionComplete?.(key);
       } catch (err) {
         console.error(`[sectionAnalysis] ${key} 실패:`, err);
+        try {
+          await options.onSectionError?.(key, err);
+        } catch (hookError) {
+          console.error(`[sectionAnalysis] ${key} 실패 이력 저장 실패:`, hookError);
+        }
       }
-    }),
+    })),
   );
 
   await saveReportSectionAnalyses(reportId, analyses);

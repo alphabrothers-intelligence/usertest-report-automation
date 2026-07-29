@@ -1,0 +1,23 @@
+{
+  "updatedAt": "2026-07-29T05:44:05.420Z",
+  "status": "completed",
+  "reportId": "dfc8de69-4430-41a2-a4bd-a4b426f0a426",
+  "productType": "sw",
+  "requestedSections": [
+    "featureExperience",
+    "corePurchaseFactor",
+    "fourValues",
+    "uxQuality"
+  ],
+  "completedSections": [
+    "featureExperience",
+    "corePurchaseFactor",
+    "fourValues",
+    "uxQuality"
+  ],
+  "failedSections": [],
+  "apiCallsPlanned": 4,
+  "concurrency": 2,
+  "baselinePipelineReexecuted": false,
+  "elapsedMs": 39905
+}

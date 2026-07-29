@@ -522,7 +522,7 @@ function questionText(stats: QuantStats, questionNo: number, fallback: string): 
   return stats.surveyQuestions[questionNo - 1]?.question || fallback;
 }
 
-/** 섹션 Ⅰ: 개요 — 제품 정보 표 + 설문 항목 표. 값이 없는 필드는 "입력 필요"로 남긴다(AI가 임의로 채우지 않는다는 원칙, PRD 5.0절). */
+/** 섹션 Ⅰ: 개요 — 제품 정보 표 + 설문 항목 표. 값이 없는 필드는 편집 시작 시 사라지는 안내문으로 둔다. */
 // --- Ⅰ. 개요 — PDF SectionOverview(lib/pdf/sectionsQuant.tsx)와 동일한 양식으로 렌더 --------
 // PDF의 OverviewTable/SurveyQuestionTable은 라벨 셀이 연한 파랑(#dfe6f7)이고 병합 셀·테두리가
 // 있는 진짜 표다. 웹의 EditableTable(열 헤더형, 회색 헤더)은 이 양식을 표현할 수 없어, 병합·
@@ -531,7 +531,7 @@ const OVERVIEW = {
   labelBg: "#dfe6f7", // PDF OverviewTable LABEL_BG
   navy: "#315c9c", // colors.navy
   border: "#d4d4d8", // colors.border
-  subtext: "#52525b", // colors.subtext (빈 값 "입력 필요")
+  subtext: "#52525b", // colors.subtext (빈 값 안내문)
   bannerBg: "#c0cdef", // colors.chartBannerBg (설문 표 헤더/푸터)
   stageBg: "#eef2fb", // 설문 표 단계(병합) 셀 배경
 } as const;
@@ -549,7 +549,7 @@ function overviewTableHtml(title: string, rows: OverviewCell[][]): string {
     const span = valueColSpan > 1 ? ` colspan="${valueColSpan}"` : "";
     const valueTd = c.value
       ? `<td${span} style="padding:8px 10px;border:${border};text-align:${align};vertical-align:${valign};line-height:1.5;${extra}">${escapeHtml(c.value)}</td>`
-      : `<td${span} style="padding:8px 10px;border:${border};text-align:${align};vertical-align:${valign};color:${OVERVIEW.subtext};${extra}">입력 필요</td>`;
+      : `<td${span} data-empty-placeholder="true" data-placeholder="입력 필요" style="padding:8px 10px;border:${border};text-align:${align};vertical-align:${valign};color:${OVERVIEW.subtext};${extra}">입력 필요</td>`;
     return labelTd + valueTd;
   };
   const body = rows
@@ -568,13 +568,13 @@ function overviewTableHtml(title: string, rows: OverviewCell[][]): string {
   );
 }
 
-/** PDF OverviewBullet 재현: • 라벨 : 값 (빈 값은 "입력 필요" 회색). */
+/** PDF OverviewBullet 재현: • 라벨 : 값 (빈 값은 편집 시작 시 사라지는 안내문). */
 function overviewBulletsHtml(items: { label: string; value?: string | null }[]): string {
   const rows = items
     .map((it) => {
       const value = it.value
         ? `<span>${escapeHtml(it.value)}</span>`
-        : `<span style="color:${OVERVIEW.subtext}">입력 필요</span>`;
+        : `<span data-empty-placeholder="true" data-placeholder="입력 필요" style="color:${OVERVIEW.subtext}">입력 필요</span>`;
       return `<p style="margin:0 0 5px;font-size:13px;line-height:1.5"><span style="font-weight:700">• ${escapeHtml(it.label)} : </span>${value}</p>`;
     })
     .join("");

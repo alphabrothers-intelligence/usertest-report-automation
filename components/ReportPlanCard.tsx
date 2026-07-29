@@ -36,9 +36,9 @@ export function ReportPlanCard({
     <div className="w-full rounded-lg border border-amber-200 bg-amber-50 px-5 py-4 text-base text-zinc-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-zinc-100">
       <p className="text-lg font-bold">이런 목차·섹션으로 보고서를 구성할 예정입니다</p>
       <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">
-        동의하시면 이 목차·섹션에 들어갈 정량 통계를 raw data로 분석합니다. 정성 분석(문항{" "}
-        {output.qualitativeQuestionCount}개, 시간·비용이 드는 작업)은 정량 통계 이후에 따로
-        진행 여부를 여쭤볼게요. 다른 방향을 원하시면 버튼 대신 채팅으로 말씀해주세요.
+        동의하시면 먼저 보고서 그래프에 필요한 응답 수치와 비율을 계산합니다. 그다음 서술형
+        응답 {output.qualitativeQuestionCount}개를 바탕으로 긍정·부정·중립 반응, 고객 경험,
+        개선 의견을 정리합니다. 다른 방향을 원하시면 버튼 대신 채팅으로 말씀해주세요.
       </p>
       <div className="mt-3 divide-y divide-amber-200/70 rounded-md border border-amber-200/70 dark:divide-amber-900/60 dark:border-amber-900/60">
         {output.sections.map((sec) => (
@@ -72,7 +72,7 @@ export function ReportPlanCard({
         onClick={onApprove}
         className="mt-4 rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900"
       >
-        동의하고 진행
+        목차 확인 후 다음 단계로
       </button>
     </div>
   );

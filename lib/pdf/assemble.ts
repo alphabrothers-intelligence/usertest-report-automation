@@ -4,11 +4,9 @@ import { registerFonts } from "./fonts";
 import { ReportDocument } from "./ReportDocument";
 import {
   getReportByFileUrl,
-  getQuestionsWithApprovedCategories,
-  getApprovedRecommendations,
+  getQuestionsWithAllCategories,
+  getAllRecommendations,
   getStrategicInput,
-  getPendingInsightReviews,
-  getPendingRecommendationReviews,
   saveReportResultSummary,
 } from "@/lib/db/reports";
 import { runResultSummary } from "@/lib/pipeline/summary";
@@ -24,8 +22,8 @@ export interface AssembleResult {
 }
 
 /**
- * 최종 PDF 조립 (PRD 8장). label·quotes가 확정돼도 insight/제언이 전부 승인되기 전에는
- * 문서를 발행하지 않는다는 원칙을 여기서 게이트로 강제한다.
+ * 최종 PDF 조립 (PRD 8장). 분석 초안은 웹 보고서에서 사용자가 바로 수정할 수 있으므로,
+ * 별도 검수 큐가 남아 있다는 이유로 보고서 생성을 막지 않는다.
  */
 export async function assembleReport(fileUrl: string): Promise<AssembleResult> {
   const report = await getReportByFileUrl(fileUrl);
@@ -33,20 +31,9 @@ export async function assembleReport(fileUrl: string): Promise<AssembleResult> {
     return { ok: false, error: "정량 통계가 없습니다. computeQuantStats를 먼저 호출하세요." };
   }
 
-  const pendingInsights = await getPendingInsightReviews(report.id);
-  const pendingRecommendations = await getPendingRecommendationReviews(report.id);
-  if (pendingInsights.length > 0 || pendingRecommendations.length > 0) {
-    return {
-      ok: false,
-      error: `아직 승인되지 않은 항목이 있습니다 (인사이트 ${pendingInsights.length}건, 제언 ${pendingRecommendations.length}건). 체크포인트를 먼저 완료하세요.`,
-      pendingInsightCount: pendingInsights.length,
-      pendingRecommendationCount: pendingRecommendations.length,
-    };
-  }
-
   const [questions, recommendations, strategicInput] = await Promise.all([
-    getQuestionsWithApprovedCategories(report.id),
-    getApprovedRecommendations(report.id),
+    getQuestionsWithAllCategories(report.id),
+    getAllRecommendations(report.id),
     getStrategicInput(report.id),
   ]);
 

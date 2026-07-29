@@ -16,6 +16,7 @@
     "check:qualitative-fast": "tsx --env-file=.env.local scripts/check-fast-qualitative-smoke.ts",
     "check:stage2-stream": "tsx --env-file=.env.local scripts/check-stage2-streaming-smoke.ts",
     "check:qualitative-load": "tsx --env-file=.env.local scripts/check-qualitative-three-question-load.ts",
+    "check:section-analysis": "tsx --env-file=.env.local scripts/check-section-analysis.ts",
     "check:qualitative": "tsx --env-file=.env.local scripts/run-qualitative-pipeline.ts",
     "analyze:nps": "tsx --env-file=.env.local scripts/reanalyze-nps.ts",
     "check:qualitative-fidelity": "tsx --env-file=.env.local scripts/check-qualitative-fidelity.ts",

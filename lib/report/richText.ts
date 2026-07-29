@@ -17,6 +17,8 @@ export type RichTextBlock = {
   kind: RichTextBlockKind;
   level?: 1 | 2 | 3;
   runs: RichTextRun[];
+  /** 원문에 있던 빈 줄. 화면·클립보드 모두에서 문단 간격으로 보존한다. */
+  empty?: boolean;
 };
 
 export function escapeHtml(value: string): string {
@@ -56,8 +58,10 @@ export function parseRichRuns(value: string, base: Omit<RichTextRun, "text"> = {
 export function parseRichText(value: string): RichTextBlock[] {
   return value
     .split(/\r?\n/)
-    .filter((line) => line.trim())
     .map((raw) => {
+      // 정성 분석 결과의 문단 사이 빈 줄은 의미 있는 레이아웃이다. 기존 filter는 이 줄을
+      // 버려 웹 화면과 HWP 붙여넣기 모두에서 문단이 한 덩어리로 붙는 원인이었다.
+      if (!raw.trim()) return { kind: "paragraph" as const, runs: [{ text: "" }], empty: true };
       const line = raw.trim();
       const tripleEmphasis = line.match(/^\*\*\*([\s\S]+)\*\*\*$/);
       const doubleEmphasis = tripleEmphasis ? null : line.match(/^\*\*([\s\S]+)\*\*$/);
@@ -91,6 +95,7 @@ export function runsToPlainText(runs: RichTextRun[]): string {
 
 export function richTextToHtml(value: string): string {
   return parseRichText(value).map((block) => {
+    if (block.empty) return `<p><br></p>`;
     const content = block.runs.map((run) => {
       const text = escapeHtml(run.text);
       if (run.bold && run.underline && run.italic) return `<strong><u><em>${text}</em></u></strong>`;
@@ -156,6 +161,10 @@ export function richTextToInlineHtml(value: string): string {
 export function richTextToClipboardHtml(value: string): string {
   const body = parseRichText(value)
     .map((block) => {
+      // 빈 <p>를 명시적으로 남겨야 HWP가 문단 경계를 자체 문단으로 변환한다.
+      if (block.empty) {
+        return `<p style="${HWP_CLIPBOARD_FONT_STYLE};margin:0 0 9pt;line-height:1.6">${withHwpClipboardFont("&nbsp;")}</p>`;
+      }
       const inner = block.runs.map(runToInlineHtml).join("");
       if (block.kind === "heading") {
         const size = block.level === 1 ? "16pt" : block.level === 2 ? "13pt" : "12pt";

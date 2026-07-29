@@ -1,6 +1,7 @@
 import { sql } from "./client";
 import type { QualitativeCallPlan, QualitativeStage1Checkpoint } from "@/lib/pipeline/orchestrate";
 import type { QuestionSpec } from "@/lib/pipeline/questions";
+import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 
 export type QualitativeJobStatus = "queued" | "running" | "completed" | "completed_with_failures" | "failed" | "cancelled";
 export type QualitativeJobPhase = "stage1" | "stage2";
@@ -30,6 +31,154 @@ export interface QualitativeJobItemRow {
   attempts: number;
   checkpoint: QualitativeStage1Checkpoint | null;
   last_error: string | null;
+}
+
+export interface QualitativeUsageSummary {
+  successful_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  calculated_cost_usd: number;
+  elapsed_ms: number;
+}
+
+export type QualitativeSectionAnalysisKey = "featureExperience" | "corePurchaseFactor" | "fourValues" | "uxQuality";
+export type QualitativeSectionAnalysisRunStatus = "running" | "completed" | "failed";
+
+export interface QualitativeSectionAnalysisRunRow {
+  id: string;
+  job_id: string;
+  report_id: string;
+  section_key: QualitativeSectionAnalysisKey;
+  attempt: number;
+  status: QualitativeSectionAnalysisRunStatus;
+  started_at: string;
+  completed_at: string | null;
+  elapsed_ms: number | null;
+  error_message: string | null;
+}
+
+const TOKEN_RATES = {
+  inputUsdPerMTokens: Number(process.env.QUALITATIVE_INPUT_USD_PER_MTOKENS ?? 3),
+  outputUsdPerMTokens: Number(process.env.QUALITATIVE_OUTPUT_USD_PER_MTOKENS ?? 15),
+  // Anthropic의 기본 프롬프트 캐시 단가 가정. 모델/계약별 값은 환경변수로 조정한다.
+  cacheReadUsdPerMTokens: Number(process.env.QUALITATIVE_CACHE_READ_USD_PER_MTOKENS ?? 0.3),
+  cacheWriteUsdPerMTokens: Number(process.env.QUALITATIVE_CACHE_WRITE_USD_PER_MTOKENS ?? 3.75),
+};
+
+function calculatedCost(usage: ClaudeUsageRecord): number {
+  // SDK의 inputTokens가 캐시 토큰을 포함할 수 있으므로 상세 값(noCacheTokens)을 우선한다.
+  const nonCachedInput = usage.noCacheTokens ?? usage.inputTokens ?? 0;
+  return Number((
+    (nonCachedInput / 1_000_000) * TOKEN_RATES.inputUsdPerMTokens
+    + ((usage.outputTokens ?? 0) / 1_000_000) * TOKEN_RATES.outputUsdPerMTokens
+    + ((usage.cacheReadTokens ?? 0) / 1_000_000) * TOKEN_RATES.cacheReadUsdPerMTokens
+    + ((usage.cacheWriteTokens ?? 0) / 1_000_000) * TOKEN_RATES.cacheWriteUsdPerMTokens
+  ).toFixed(8));
+}
+
+export async function saveQualitativeJobUsage(params: {
+  jobId: string;
+  itemId: string | null;
+  phase: "stage1" | "stage2" | "section_analysis";
+  usage: ClaudeUsageRecord;
+}): Promise<void> {
+  const { usage } = params;
+  await sql`
+    insert into qualitative_job_usage (
+      job_id, item_id, phase, label, attempt,
+      input_tokens, output_tokens, total_tokens, no_cache_tokens, cache_read_tokens, cache_write_tokens,
+      elapsed_ms,
+      input_usd_per_mtokens, output_usd_per_mtokens, cache_read_usd_per_mtokens, cache_write_usd_per_mtokens,
+      calculated_cost_usd
+    ) values (
+      ${params.jobId}, ${params.itemId}, ${params.phase}, ${usage.label}, ${usage.attempt},
+      ${usage.inputTokens}, ${usage.outputTokens}, ${usage.totalTokens}, ${usage.noCacheTokens}, ${usage.cacheReadTokens}, ${usage.cacheWriteTokens},
+      ${usage.elapsedMs},
+      ${TOKEN_RATES.inputUsdPerMTokens}, ${TOKEN_RATES.outputUsdPerMTokens}, ${TOKEN_RATES.cacheReadUsdPerMTokens}, ${TOKEN_RATES.cacheWriteUsdPerMTokens},
+      ${calculatedCost(usage)}
+    ) on conflict do nothing
+  `;
+}
+
+export async function getQualitativeJobUsageSummary(jobId: string): Promise<QualitativeUsageSummary> {
+  const [summary] = await sql<QualitativeUsageSummary[]>`
+    select
+      count(*)::int as successful_calls,
+      coalesce(sum(input_tokens), 0)::int as input_tokens,
+      coalesce(sum(output_tokens), 0)::int as output_tokens,
+      coalesce(sum(total_tokens), 0)::int as total_tokens,
+      coalesce(sum(cache_read_tokens), 0)::int as cache_read_tokens,
+      coalesce(sum(cache_write_tokens), 0)::int as cache_write_tokens,
+      coalesce(sum(calculated_cost_usd), 0)::float8 as calculated_cost_usd,
+      coalesce(sum(elapsed_ms), 0)::int as elapsed_ms
+    from qualitative_job_usage
+    where job_id = ${jobId}
+  `;
+  return summary ?? {
+    successful_calls: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0,
+    cache_read_tokens: 0, cache_write_tokens: 0, calculated_cost_usd: 0, elapsed_ms: 0,
+  };
+}
+
+/**
+ * 4개 상위 섹션 분석의 실행 이력은 14문항 작업 상태와 분리한다.
+ * 따라서 이 단계가 부분 실패해도 기존 정성 분석을 실패로 되돌리지 않는다.
+ */
+export async function startQualitativeSectionAnalysisRun(params: {
+  jobId: string;
+  reportId: string;
+  sectionKey: QualitativeSectionAnalysisKey;
+}): Promise<QualitativeSectionAnalysisRunRow> {
+  const [run] = await sql<QualitativeSectionAnalysisRunRow[]>`
+    insert into qualitative_section_analysis_runs (job_id, report_id, section_key, attempt)
+    values (
+      ${params.jobId},
+      ${params.reportId},
+      ${params.sectionKey},
+      coalesce((
+        select max(attempt) + 1
+        from qualitative_section_analysis_runs
+        where job_id = ${params.jobId} and section_key = ${params.sectionKey}
+      ), 1)
+    )
+    returning *
+  `;
+  return run;
+}
+
+export async function completeQualitativeSectionAnalysisRun(runId: string): Promise<void> {
+  await sql`
+    update qualitative_section_analysis_runs
+    set status = 'completed',
+        completed_at = now(),
+        elapsed_ms = greatest(0, floor(extract(epoch from (now() - started_at)) * 1000)::int),
+        error_message = null,
+        updated_at = now()
+    where id = ${runId}
+  `;
+}
+
+export async function failQualitativeSectionAnalysisRun(runId: string, error: string): Promise<void> {
+  await sql`
+    update qualitative_section_analysis_runs
+    set status = 'failed',
+        completed_at = now(),
+        elapsed_ms = greatest(0, floor(extract(epoch from (now() - started_at)) * 1000)::int),
+        error_message = ${error.slice(0, 2000)},
+        updated_at = now()
+    where id = ${runId}
+  `;
+}
+
+export async function getQualitativeSectionAnalysisRuns(jobId: string): Promise<QualitativeSectionAnalysisRunRow[]> {
+  return sql<QualitativeSectionAnalysisRunRow[]>`
+    select * from qualitative_section_analysis_runs
+    where job_id = ${jobId}
+    order by created_at, section_key, attempt
+  `;
 }
 
 export async function createQualitativeJob(params: {

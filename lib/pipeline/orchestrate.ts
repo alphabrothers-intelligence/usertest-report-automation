@@ -28,6 +28,7 @@ import {
 } from "./stage2";
 import { scoreConfidence, type ConfidenceLevel } from "./confidence";
 import { runFastReportAnalysis } from "./fastReportAnalysis";
+import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 
 // 크레딧·레이트리밋 상태가 불명확한 기본 환경에서는 보수적 동시성으로 시작한다.
 // 실제 측정 후 PIPELINE_CONCURRENCY로만 올린다; 코드에서 임의로 상향하지 않는다.
@@ -160,9 +161,12 @@ export type QualitativeStage1Checkpoint =
  * Stage1만 실행한다. 대형 응답을 받는 가장 긴 단계이므로, 작업 큐에서는 이 함수 하나를
  * 단일 요청으로 실행하고 결과를 체크포인트로 저장한다.
  */
-export async function runQualitativeStage1(spec: QuestionSpec): Promise<QualitativeStage1Checkpoint> {
+export async function runQualitativeStage1(
+  spec: QuestionSpec,
+  options: { onUsage?: (usage: ClaudeUsageRecord) => void } = {},
+): Promise<QualitativeStage1Checkpoint> {
   if (QUALITATIVE_ANALYSIS_MODE === "fast") {
-    return { mode: "fast", result: await runFastReportAnalysis(spec) };
+    return { mode: "fast", result: await runFastReportAnalysis(spec, options) };
   }
   if (spec.kind === "improvement") {
     const stage1 = await runStage1ImprovementIdea({ questionLabel: spec.label, inputs: spec.inputs });

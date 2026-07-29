@@ -136,6 +136,16 @@ function EditableRichStaticBlock({
   function onEditorMouseDown(event: MouseEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement;
     if (target.closest("[data-ai-summary]")) event.preventDefault();
+
+    // 개요의 "입력 필요"는 실제 보고서 내용이 아닌 안내문이다. 사용자가 해당 셀/문장을
+    // 누르는 즉시 비워, 일반 입력 필드의 placeholder처럼 바로 작성할 수 있게 한다.
+    const placeholder = target.closest<HTMLElement>("[data-empty-placeholder='true']");
+    if (placeholder && placeholder.textContent?.trim() === placeholder.dataset.placeholder) {
+      placeholder.textContent = "";
+      placeholder.removeAttribute("data-empty-placeholder");
+      placeholder.removeAttribute("data-placeholder");
+      placeholder.style.removeProperty("color");
+    }
   }
 
   async function downloadEmbeddedChart(index: number) {

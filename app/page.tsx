@@ -21,13 +21,7 @@ import { ChatMarkdown, CollapsibleChatMarkdown } from "@/components/ChatMarkdown
 import { PRODUCT_INFO_FIELD_LABELS, type ProductInfo } from "@/lib/productInfo/types";
 import type { PipelineResult } from "@/lib/pipeline/orchestrate";
 import { QualitativeResultsAccordion } from "@/components/QualitativeResults";
-import { PolarityReview, type PolarityReviewItem } from "@/components/PolarityReview";
-import { InsightEditor, type InsightReviewItem } from "@/components/InsightEditor";
-import {
-  RecommendationReview,
-  type RecommendationReviewItem,
-  type HedgeViolation,
-} from "@/components/RecommendationReview";
+import { type HedgeViolation } from "@/components/RecommendationReview";
 
 interface ValidateInputOutput {
   fileName: string | null;
@@ -124,10 +118,10 @@ function QuantStatsCard({
   if (state !== "output-available") {
     return (
       <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-5 py-4 text-base text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
-        <p className="font-medium text-zinc-700 dark:text-zinc-300">정량 통계 계산 중...</p>
+        <p className="font-medium text-zinc-700 dark:text-zinc-300">그래프용 응답 수치 계산 중...</p>
         <p className="mt-1 text-sm">
-          방금 동의하신 목차 중 {QUANT_STATS_SECTION_TITLES}에 들어갈 정량 통계를 raw data로
-          계산하고 있어요.
+          방금 확인하신 목차 중 {QUANT_STATS_SECTION_TITLES}에 들어갈 그래프와 표를 위해 raw data의
+          응답 수치와 비율을 계산하고 있어요.
         </p>
       </div>
     );
@@ -136,7 +130,7 @@ function QuantStatsCard({
   if (!output?.ok || !output.stats) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-4 text-base text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-        {output?.error ?? "정량 통계 계산 중 오류가 발생했습니다."}
+        {output?.error ?? "그래프용 응답 수치 계산 중 오류가 발생했습니다."}
       </div>
     );
   }
@@ -175,12 +169,21 @@ function useElapsedSeconds(): number {
 function QualitativeAnalysisCard({
   state,
   output,
+  onGenerateReport,
 }: {
   state: string;
   output?: RunQualitativeAnalysisOutput;
+  onGenerateReport: () => void;
 }) {
   const elapsed = useElapsedSeconds();
-  const [jobProgress, setJobProgress] = useState<{ completed: number; failed: number; total: number; status: string } | null>(null);
+  const [jobProgress, setJobProgress] = useState<{
+    completed: number;
+    failed: number;
+    total: number;
+    status: string;
+    startedAt: string | null;
+    completedAt: string | null;
+  } | null>(null);
   const [jobError, setJobError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -197,6 +200,8 @@ function QualitativeAnalysisCard({
           failed: data.job.failed_items,
           total: data.job.total_items,
           status: data.job.status,
+          startedAt: data.job.started_at ?? null,
+          completedAt: data.job.completed_at ?? null,
         });
       }
       return data.job.status as string;
@@ -245,32 +250,59 @@ function QualitativeAnalysisCard({
           <>
             <p className="font-medium">예상보다 많이 오래 걸리고 있어요 ({elapsedLabel})</p>
             <p className="mt-1 text-sm">
-              서버에서 계속 처리 중일 수 있지만, 보통 1~2분이면 끝나는 작업이라 이 정도로 길어지는
-              건 정상 범위를 벗어난 상태예요. 조금 더 기다려보시거나, 계속 안 끝나면 페이지를
+              서버에서 계속 처리 중일 수 있지만, 보통 7~10분이면 끝나는 작업입니다. 조금 더 기다려보시거나, 계속 안 끝나면 페이지를
               새로고침한 뒤 다시 시도해주세요 — raw data와 정량 통계는 이미 저장되어 있어서
               다시 시작해도 처음부터 다시 하지 않아도 됩니다.
             </p>
           </>
         ) : isSlowerThanExpected ? (
-          <p>정성 응답 분석 중... 예상(1~2분)보다 조금 더 걸리고 있어요 ({elapsedLabel})</p>
+          <p>응답 내용 분석을 준비하고 있어요. 진행 상태를 확인 중입니다. ({elapsedLabel})</p>
         ) : (
-          <p>정성 응답 분석 중... (14개 문항 병렬 처리, 1~2분 정도 걸릴 수 있어요 · {elapsedLabel})</p>
+          <p>응답 내용 분석을 시작하고 있어요. 보통 약 7~10분 걸립니다. ({elapsedLabel})</p>
         )}
       </div>
     );
   }
 
   if (output?.ok && output.queued && output.jobId) {
-    const progress = jobProgress ?? { completed: 0, failed: 0, total: output.totalQuestions ?? 14, status: "queued" };
+    const progress = jobProgress ?? {
+      completed: 0,
+      failed: 0,
+      total: output.totalQuestions ?? 14,
+      status: "queued",
+      startedAt: null,
+      completedAt: null,
+    };
     const done = progress.completed + progress.failed;
+    const isFinished = ["completed", "completed_with_failures"].includes(progress.status);
+    const startedAt = progress.startedAt ? new Date(progress.startedAt).getTime() : null;
+    const finishedAt = progress.completedAt ? new Date(progress.completedAt).getTime() : null;
+    // 완료된 작업은 DB에 기록된 시작·종료 시각으로 정확히 보여주고, 진행 중인 작업은
+    // 카드가 표시된 뒤의 실시간 경과 타이머를 보여준다(렌더 중 Date.now 호출 금지).
+    const jobElapsedSeconds = startedAt && finishedAt
+      ? Math.max(0, Math.floor((finishedAt - startedAt) / 1000))
+      : elapsed;
+    const elapsedLabel = `${Math.floor(jobElapsedSeconds / 60)}분 ${jobElapsedSeconds % 60}초`;
+    if (isFinished) {
+      return (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4 text-base text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+          <p className="font-semibold">응답 내용 분석이 완료되었습니다 · {done}/{progress.total} 문항</p>
+          <p className="mt-1 text-sm">실제 소요 시간 {elapsedLabel} · 긍정·부정·중립 반응과 고객 경험 분석 초안을 저장했습니다.</p>
+          {progress.failed > 0 && <p className="mt-2 text-sm text-amber-800">일부 문항({progress.failed}개)은 분석에 실패했습니다. 나머지 결과로 보고서를 만들 수 있습니다.</p>}
+          <button type="button" onClick={onGenerateReport} className="mt-4 rounded-full bg-[#315c9c] px-5 py-2 text-sm font-semibold text-white hover:bg-[#294c81]">
+            분석 결과를 바탕으로 보고서 만들기
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="rounded-lg border border-sky-200 bg-sky-50 px-5 py-4 text-base text-sky-950 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
-        <p className="font-semibold">정성 응답 분석 진행 중 · {done}/{progress.total} 문항 완료</p>
-        <p className="mt-1 text-sm">문항별 Stage1·Stage2를 3개씩 병렬 처리하며, 완료된 결과부터 저장합니다.</p>
+        <p className="font-semibold">응답 내용 분석 진행 중 · {done}/{progress.total} 문항 완료</p>
+        <p className="mt-1 text-sm">서술형 답변을 바탕으로 긍정·부정·중립 반응과 고객 경험을 정리하고 있습니다. 경과 {elapsedLabel} · 보통 약 7~10분 걸리며, 완료된 문항부터 바로 저장합니다.</p>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-sky-100 dark:bg-sky-900">
           <div className="h-full bg-sky-600 transition-all" style={{ width: `${Math.round((done / Math.max(progress.total, 1)) * 100)}%` }} />
         </div>
-        <p className="mt-2 text-xs text-sky-700 dark:text-sky-300">상태: {progress.status}{progress.failed > 0 ? ` · 실패 ${progress.failed}문항` : ""}</p>
+        <p className="mt-2 text-xs text-sky-700 dark:text-sky-300">진행 상태: {progress.status}{progress.failed > 0 ? ` · 실패 ${progress.failed}문항` : ""}</p>
         {jobError && <p className="mt-2 text-sm text-red-700 dark:text-red-300">{jobError}</p>}
       </div>
     );
@@ -295,66 +327,6 @@ function QualitativeAnalysisCard({
       <QualitativeResultsAccordion questions={output.questions} />
     </div>
   );
-}
-
-interface PolarityReviewQueueOutput {
-  ok: boolean;
-  error?: string;
-  items?: PolarityReviewItem[];
-}
-
-function PolarityReviewQueueCard({
-  state,
-  output,
-}: {
-  state: string;
-  output?: PolarityReviewQueueOutput;
-}) {
-  if (state !== "output-available") {
-    return (
-      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-5 py-4 text-base text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
-        체크포인트 A 항목 조회 중...
-      </div>
-    );
-  }
-  if (!output?.ok || !output.items) {
-    return (
-      <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-4 text-base text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-        {output?.error ?? "체크포인트 A 조회 중 오류가 발생했습니다."}
-      </div>
-    );
-  }
-  return <PolarityReview items={output.items} />;
-}
-
-interface InsightReviewQueueOutput {
-  ok: boolean;
-  error?: string;
-  items?: InsightReviewItem[];
-}
-
-function InsightReviewQueueCard({
-  state,
-  output,
-}: {
-  state: string;
-  output?: InsightReviewQueueOutput;
-}) {
-  if (state !== "output-available") {
-    return (
-      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-5 py-4 text-base text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
-        체크포인트 B 항목 조회 중...
-      </div>
-    );
-  }
-  if (!output?.ok || !output.items) {
-    return (
-      <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-4 text-base text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-        {output?.error ?? "체크포인트 B 조회 중 오류가 발생했습니다."}
-      </div>
-    );
-  }
-  return <InsightEditor items={output.items} />;
 }
 
 interface ResultSummaryOutput {
@@ -428,36 +400,6 @@ function RecommendationDraftCard({
       <p className="mt-2 whitespace-pre-wrap">{output.draft}</p>
     </div>
   );
-}
-
-interface RecommendationReviewQueueOutput {
-  ok: boolean;
-  error?: string;
-  items?: RecommendationReviewItem[];
-}
-
-function RecommendationReviewQueueCard({
-  state,
-  output,
-}: {
-  state: string;
-  output?: RecommendationReviewQueueOutput;
-}) {
-  if (state !== "output-available") {
-    return (
-      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-5 py-4 text-base text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
-        제언 검수 항목 조회 중...
-      </div>
-    );
-  }
-  if (!output?.ok || !output.items) {
-    return (
-      <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-4 text-base text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-        {output?.error ?? "제언 검수 항목 조회 중 오류가 발생했습니다."}
-      </div>
-    );
-  }
-  return <RecommendationReview items={output.items} />;
 }
 
 interface SaveStrategicInputOutput {
@@ -615,9 +557,18 @@ export default function Chat() {
   // two children with the same key" 경고, 2026-07-20 라이브 테스트 — 목차 동의로 넘어가는
   // 턴에서 재현됨). 원인이 라이브러리 내부라 여기서 직접 고칠 수 없으니, 렌더링 직전에 같은
   // id를 가진 메시지는 마지막 것만 남기고 걸러낸다 — 카드가 두 번 뜨는 걸 막는 가장 확실한 지점.
-  const messages = rawMessages.filter(
-    (m, i) => rawMessages.findLastIndex((m2) => m2.id === m.id) === i,
-  );
+  const messages = rawMessages
+    .filter((m, i) => rawMessages.findLastIndex((m2) => m2.id === m.id) === i)
+    // 카드 버튼이 서버에 전달하는 내부 명령은 대화 흐름을 진행하기 위한 신호일 뿐, 사용자가
+    // 직접 작성한 메시지가 아니다. 따라서 주황색 사용자 말풍선으로 반복 표시하지 않는다.
+    .filter((m) => {
+      if (m.role !== "user") return true;
+      const text = m.parts
+        .filter((part): part is Extract<(typeof m.parts)[number], { type: "text" }> => part.type === "text")
+        .map((part) => part.text.trim())
+        .join("\n");
+      return !/^(다음 기업\/제품 정보를 저장해주세요\.|확인했어요, 이 기업 정보로 저장해주세요\.|이 목차\/섹션 구성에 동의합니다\.)/.test(text);
+    });
 
   function handleUploaded(file: UploadedFile) {
     setShowAttachHint(false);
@@ -728,13 +679,12 @@ export default function Chat() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#f7f6f2] px-4">
         <div className="flex w-full max-w-4xl flex-col items-center gap-6">
-          <h1 className="text-2xl font-semibold tracking-[-0.02em] text-[#2f2a26]">
-            사용성테스트 결과보고서 자동생성
-          </h1>
+          <div className="text-center">
+            <h1 className="text-3xl font-semibold tracking-[-0.03em] text-[#2f2a26]">사용성테스트 결과보고서</h1>
+            <p className="mt-2 text-sm text-[#81786e]">raw data를 올리면 보고서에 필요한 수치와 응답 내용을 차례로 정리합니다.</p>
+          </div>
           {composerForm}
-          <p className="text-sm text-[#81786e]">
-            raw data(xlsx/csv)를 첨부하거나 메시지를 보내 대화를 시작하세요.
-          </p>
+          <p className="text-sm text-[#81786e]">xlsx·csv 파일을 첨부하거나, 만들고 싶은 보고서를 말씀해주세요.</p>
         </div>
       </div>
     );
@@ -742,10 +692,11 @@ export default function Chat() {
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-[#f7f6f2]">
-      <div className="flex w-full min-w-0 max-w-4xl flex-1 flex-col px-4 py-8">
-        <h1 className="mb-6 text-xl font-semibold tracking-[-0.02em] text-[#2f2a26]">
-          사용성테스트 결과보고서 자동생성
-        </h1>
+      <div className="flex w-full min-w-0 max-w-5xl flex-1 flex-col px-4 py-7">
+        <div className="mb-8 flex items-center justify-between border-b border-[#e5e0d7] pb-4">
+          <h1 className="text-lg font-semibold tracking-[-0.02em] text-[#2f2a26]">사용성테스트 결과보고서</h1>
+          <span className="rounded-full bg-[#ece8df] px-3 py-1 text-xs font-medium text-[#746b60]">보고서 작성 도우미</span>
+        </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-4 pb-32">
           {messages.map((message) => (
@@ -753,14 +704,21 @@ export default function Chat() {
               key={message.id}
               className={`min-w-0 whitespace-pre-wrap break-words text-base ${
                 message.role === "user"
-                  ? "self-end rounded-2xl bg-[#d97757] px-4 py-2 text-white shadow-sm"
-                  : "self-start text-[#302b27]"
-              } max-w-full`}
+                  ? "self-end max-w-[82%] rounded-2xl rounded-br-md bg-[#e4a17e] px-4 py-3 text-white shadow-sm"
+                  : "self-start w-full max-w-4xl text-[#302b27]"
+              }`}
             >
               {message.parts.map((part, i) => {
                 if (part.type === "text") {
                   if (message.role !== "user") {
-                    return <ChatMarkdown key={i} text={part.text} />;
+                    return (
+                      <div key={i} className="flex max-w-3xl gap-3 py-1">
+                        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#315c9c] text-xs font-bold text-white" aria-hidden>
+                          AI
+                        </span>
+                        <ChatMarkdown text={part.text} />
+                      </div>
+                    );
                   }
                   // 사용자 메시지는 buildMessageText가 심어 보낸 [업로드된 파일] 블록(모델용)을
                   // 그대로 다시 보여주지 않고 작은 칩으로만 표시하고, 긴 텍스트는 접어둔다
@@ -867,7 +825,7 @@ export default function Chat() {
                         output={part.output as ReportPlanOutput | undefined}
                         onApprove={() =>
                           sendMessage({
-                            text: "이 목차/섹션 구성에 동의합니다. 정량 통계 계산을 진행해주세요.",
+                            text: "이 목차/섹션 구성에 동의합니다. 그래프에 필요한 응답 수치와 비율 계산을 진행해주세요.",
                           })
                         }
                       />
@@ -880,26 +838,9 @@ export default function Chat() {
                       <QualitativeAnalysisCard
                         state={part.state}
                         output={part.output as RunQualitativeAnalysisOutput | undefined}
-                      />
-                    </div>
-                  );
-                }
-                if (part.type === "tool-getPolarityReviewQueue") {
-                  return (
-                    <div key={i} className="mt-2 w-full max-w-2xl">
-                      <PolarityReviewQueueCard
-                        state={part.state}
-                        output={part.output as PolarityReviewQueueOutput | undefined}
-                      />
-                    </div>
-                  );
-                }
-                if (part.type === "tool-getInsightReviewQueue") {
-                  return (
-                    <div key={i} className="mt-2 w-full max-w-2xl">
-                      <InsightReviewQueueCard
-                        state={part.state}
-                        output={part.output as InsightReviewQueueOutput | undefined}
+                        onGenerateReport={() =>
+                          sendMessage({ text: "분석 결과를 바탕으로 보고서를 만들어주세요." })
+                        }
                       />
                     </div>
                   );
@@ -923,16 +864,6 @@ export default function Chat() {
                       <RecommendationDraftCard
                         state={part.state}
                         output={part.output as RecommendationDraftOutput | undefined}
-                      />
-                    </div>
-                  );
-                }
-                if (part.type === "tool-getRecommendationReviewQueue") {
-                  return (
-                    <div key={i} className="mt-2 w-full max-w-2xl">
-                      <RecommendationReviewQueueCard
-                        state={part.state}
-                        output={part.output as RecommendationReviewQueueOutput | undefined}
                       />
                     </div>
                   );

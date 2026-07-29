@@ -3,11 +3,9 @@ import { put } from "@vercel/blob";
 import { buildReportDocx } from "./ReportDocx";
 import {
   getReportByFileUrl,
-  getQuestionsWithApprovedCategories,
-  getApprovedRecommendations,
+  getQuestionsWithAllCategories,
+  getAllRecommendations,
   getStrategicInput,
-  getPendingInsightReviews,
-  getPendingRecommendationReviews,
   saveReportResultSummary,
 } from "@/lib/db/reports";
 import { runResultSummary } from "@/lib/pipeline/summary";
@@ -21,12 +19,11 @@ export interface AssembleDocxResult {
 }
 
 /**
- * 최종 DOCX 조립(2026-07-23 추가) — lib/pdf/assemble.ts와 완전히 같은 게이트·데이터 소스를
- * 쓴다(체크포인트 A/B 미승인 시 실패, resultSummary는 저장된 값을 우선 재사용). PDF와 별도 함수로 둔
+ * 최종 DOCX 조립(2026-07-23 추가) — lib/pdf/assemble.ts와 같은 초안 포함 데이터 소스를
+ * 쓴다(resultSummary는 저장된 값을 우선 재사용). PDF와 별도 함수로 둔
  * 이유는 renderToBuffer(react-pdf)와 Packer.toBuffer(docx)가 서로 다른 렌더러라 자연스럽게
- * 갈라지기 때문 — 게이트 로직이 두 곳에 중복되지만, 이 프로젝트는 게이트 체크(pending
- * insight/recommendation 조회)가 가벼운 조회라 중복 비용이 낮고, 두 함수를 하나로 합치면
- * "PDF만 실패해도 DOCX까지 막힌다" 같은 불필요한 결합이 생겨 오히려 더 나쁘다고 판단했다.
+ * 갈라지기 때문이다. 분석 초안은 웹 보고서에서 바로 수정할 수 있으므로, PDF와 마찬가지로
+ * 승인 대기 항목 때문에 DOCX 생성을 막지 않는다.
  */
 export async function assembleReportDocx(
   fileUrl: string,
@@ -37,20 +34,9 @@ export async function assembleReportDocx(
     return { ok: false, error: "정량 통계가 없습니다. computeQuantStats를 먼저 호출하세요." };
   }
 
-  const pendingInsights = await getPendingInsightReviews(report.id);
-  const pendingRecommendations = await getPendingRecommendationReviews(report.id);
-  if (pendingInsights.length > 0 || pendingRecommendations.length > 0) {
-    return {
-      ok: false,
-      error: `아직 승인되지 않은 항목이 있습니다 (인사이트 ${pendingInsights.length}건, 제언 ${pendingRecommendations.length}건). 체크포인트를 먼저 완료하세요.`,
-      pendingInsightCount: pendingInsights.length,
-      pendingRecommendationCount: pendingRecommendations.length,
-    };
-  }
-
   const [questions, recommendations, strategicInput] = await Promise.all([
-    getQuestionsWithApprovedCategories(report.id),
-    getApprovedRecommendations(report.id),
+    getQuestionsWithAllCategories(report.id),
+    getAllRecommendations(report.id),
     getStrategicInput(report.id),
   ]);
 

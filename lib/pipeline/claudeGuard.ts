@@ -6,7 +6,7 @@
  * 무한 재시도는 크레딧·대기 시간을 다시 폭증시키므로 금지한다.
  */
 import { streamText } from "ai";
-import { logClaudeUsage, usageFromResult } from "@/lib/claudeUsage";
+import { logClaudeUsage, toClaudeUsageRecord, usageFromResult, type ClaudeUsageRecord } from "@/lib/claudeUsage";
 
 // 정상적인 대형 구조화 응답은 90초를 넘길 수 있다(기존 실측 99초, Stage1 100명 단일
 // 스모크 테스트 179.97초). 따라서 전체 요청에는 여유를 두고, 실질적인 hang 감지는
@@ -43,7 +43,11 @@ function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-export async function withClaudeGuard<T>(label: string, operation: () => Promise<T>): Promise<T> {
+export async function withClaudeGuard<T>(
+  label: string,
+  operation: () => Promise<T>,
+  options: { onUsage?: (usage: ClaudeUsageRecord) => void } = {},
+): Promise<T> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     const startedAt = Date.now();
@@ -51,7 +55,9 @@ export async function withClaudeGuard<T>(label: string, operation: () => Promise
       const result = await operation();
       const elapsedMs = Date.now() - startedAt;
       console.info(`[claude] ${label} succeeded in ${elapsedMs}ms (attempt ${attempt}/${MAX_ATTEMPTS})`);
-      logClaudeUsage(label, usageFromResult(result), { elapsedMs, attempt });
+      const usage = usageFromResult(result);
+      logClaudeUsage(label, usage, { elapsedMs, attempt });
+      options.onUsage?.(toClaudeUsageRecord(label, usage, { elapsedMs, attempt }));
       return result;
     } catch (error) {
       lastError = error;
@@ -138,6 +144,69 @@ export async function streamStructured<T>(
     }
     const usage = await result.usage;
     return { output, usage };
+  } finally {
+    clearTimeout(hardTimeout);
+  }
+}
+
+/**
+ * 긴 자유 형식 본문을 **스트리밍**으로 받는다.
+ *
+ * 섹션 종합 해석처럼 JSON 스키마가 필요 없는 결과도 `generateText`로 받으면, 대형 출력에서
+ * HTTP 연결이 조용히 멈추는 문제를 다시 만들 수 있다. 따라서 Stage1·Stage2의
+ * `streamStructured`와 동일한 chunk/hard timeout 정책을 적용한다.
+ */
+export async function streamPlainText(
+  options: Record<string, unknown> & { hardTimeoutMs?: number },
+  traceLabel?: string,
+): Promise<{ text: string; usage: unknown }> {
+  const { hardTimeoutMs, ...streamOptions } = options;
+  const externalSignal = streamOptions.abortSignal as AbortSignal | undefined;
+  const abortController = new AbortController();
+  const abortSignal = externalSignal
+    ? AbortSignal.any([externalSignal, abortController.signal])
+    : abortController.signal;
+  const effectiveHardTimeoutMs = Math.max(1_000, hardTimeoutMs ?? CLAUDE_HARD_TIMEOUT_MS);
+  const hardTimeout = setTimeout(() => {
+    abortController.abort(new Error(`[claude] ${traceLabel ?? "stream"} hard timeout after ${effectiveHardTimeoutMs}ms`));
+  }, effectiveHardTimeoutMs);
+  const providedOnChunk = options.onChunk;
+  const providedOnError = options.onError;
+  const providedOnFinish = options.onFinish;
+  let chunkCount = 0;
+
+  try {
+    const result = streamText({
+      ...(streamOptions as Parameters<typeof streamText>[0]),
+      abortSignal,
+      timeout: { chunkMs: CLAUDE_CHUNK_TIMEOUT_MS, totalMs: CLAUDE_TIMEOUT_MS },
+      onChunk: (event) => {
+        chunkCount += 1;
+        if (chunkCount === 1 && traceLabel) {
+          console.info(`[claude] ${traceLabel} first stream chunk received`);
+        }
+        if (typeof providedOnChunk === "function") {
+          providedOnChunk(event);
+        }
+      },
+      onError: ({ error }) => {
+        console.error(`[claude] ${traceLabel ?? "stream"} stream error`, error);
+        if (typeof providedOnError === "function") {
+          providedOnError({ error });
+        }
+      },
+      onFinish: (event) => {
+        if (traceLabel) {
+          console.info(`[claude] ${traceLabel} stream finished (${chunkCount} chunks, reason ${event.finishReason})`);
+        }
+        if (typeof providedOnFinish === "function") {
+          providedOnFinish(event);
+        }
+      },
+    });
+    const text = await result.text;
+    const usage = await result.usage;
+    return { text, usage };
   } finally {
     clearTimeout(hardTimeout);
   }

@@ -141,3 +141,53 @@ create table if not exists qualitative_job_items (
   unique (job_id, question_key)
 );
 create index if not exists qualitative_job_items_claim_idx on qualitative_job_items(job_id, status, phase, created_at);
+
+-- Claude가 응답에서 반환한 실제 토큰 사용량을 작업 단위로 보관한다.
+-- 실패·중단 요청은 제공자가 사용량을 반환하지 않을 수 있어, 성공 응답에서 확인된 값만 저장한다.
+create table if not exists qualitative_job_usage (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid not null references qualitative_jobs(id) on delete cascade,
+  item_id uuid references qualitative_job_items(id) on delete set null,
+  phase text not null check (phase in ('stage1', 'stage2', 'section_analysis')),
+  label text not null,
+  attempt int not null default 1,
+  input_tokens int,
+  output_tokens int,
+  total_tokens int,
+  no_cache_tokens int,
+  cache_read_tokens int,
+  cache_write_tokens int,
+  elapsed_ms int not null,
+  input_usd_per_mtokens numeric(12,6) not null,
+  output_usd_per_mtokens numeric(12,6) not null,
+  cache_read_usd_per_mtokens numeric(12,6) not null,
+  cache_write_usd_per_mtokens numeric(12,6) not null,
+  calculated_cost_usd numeric(14,8) not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists qualitative_job_usage_job_id_idx on qualitative_job_usage(job_id, created_at);
+create unique index if not exists qualitative_job_usage_call_unique_idx
+  on qualitative_job_usage(job_id, coalesce(item_id, '00000000-0000-0000-0000-000000000000'::uuid), phase, label, attempt);
+
+-- 14개 문항 Stage1·Stage2가 끝난 뒤 이어지는 섹션 단위 분석의 운영 이력.
+-- 사용자 화면에는 노출하지 않는다. 각 분석의 성공/실패·실행 시간만 내부 검증에 사용한다.
+-- 동일 작업을 재실행하는 경우도 비교할 수 있도록 attempt별 행을 분리한다.
+create table if not exists qualitative_section_analysis_runs (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid not null references qualitative_jobs(id) on delete cascade,
+  report_id uuid not null references reports(id) on delete cascade,
+  section_key text not null check (section_key in ('featureExperience', 'corePurchaseFactor', 'fourValues', 'uxQuality')),
+  attempt int not null default 1,
+  status text not null check (status in ('running', 'completed', 'failed')) default 'running',
+  started_at timestamptz not null default now(),
+  completed_at timestamptz,
+  elapsed_ms int,
+  error_message text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (job_id, section_key, attempt)
+);
+create index if not exists qualitative_section_analysis_runs_job_id_idx
+  on qualitative_section_analysis_runs(job_id, created_at);
+create index if not exists qualitative_section_analysis_runs_report_id_idx
+  on qualitative_section_analysis_runs(report_id, created_at);
