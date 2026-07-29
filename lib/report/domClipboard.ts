@@ -16,7 +16,18 @@
 import { escapeHtml } from "./richText";
 
 export const CLIPBOARD_ROOT_FONT =
-  "'맑은 고딕', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif";
+  "'맑은 고딕', 'Malgun Gothic', sans-serif";
+
+// 한글(HWP)은 부모 div의 CSS font-family를 상속하지 않고 기본 글꼴(함초롱바탕)으로
+// 붙여넣는 경우가 있다. CSS 선언만 신뢰하지 않고, 구형 HTML 파서도 이해하는 `font face`
+// 와 각 문단의 인라인 선언을 함께 넣는다. 이 값은 RTF 글꼴표의 f0(맑은 고딕)과도 같은
+// 이름을 사용해야 HTML/RTF 어느 쪽을 선택해도 결과가 일치한다.
+const HWP_FONT_FACE = "맑은 고딕";
+const HWP_FONT_STYLE = "font-family:'맑은 고딕','Malgun Gothic',sans-serif;mso-fareast-font-family:'맑은 고딕'";
+
+function withHwpFont(html: string): string {
+  return `<font face="${HWP_FONT_FACE}" style="${HWP_FONT_STYLE}">${html}</font>`;
+}
 
 const SKIP_TAGS = new Set(["BUTTON", "SVG", "SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "INPUT", "TEXTAREA"]);
 const BLOCK_DISPLAYS = new Set([
@@ -91,7 +102,9 @@ function hasBlockChild(el: Element): boolean {
 /** 서식 유지에 필요한 계산된 스타일만 인라인 선언 목록으로 뽑는다. */
 function extractStyleDeclarations(el: Element, options: { includeFontSize?: boolean } = {}): string[] {
   const computed = getComputedStyle(el);
-  const declarations: string[] = [];
+  // 한글은 루트 컨테이너의 글꼴 상속을 누락할 수 있으므로 모든 문단·셀의 스타일에
+  // 글꼴을 명시한다. `font face`도 별도로 감싸므로 CSS를 무시하는 버전도 대응한다.
+  const declarations: string[] = [HWP_FONT_STYLE];
   const weight = parseInt(computed.fontWeight, 10);
   if (Number.isFinite(weight) && weight >= 600) declarations.push("font-weight:700");
   if (computed.fontStyle === "italic") declarations.push("font-style:italic");
@@ -151,6 +164,7 @@ function walkTableCell(cell: Element): string {
     // 사이가 벌어져 보이는 게 실측 확인됐다(2026-07-26). 셀 안 텍스트를 줄바꿈되지 않게
     // 고정해서 애초에 이 상황(좁은 열 + 줄바꿈 + 균등폭 정렬)이 발생하지 않게 막는다.
     "white-space:nowrap",
+    HWP_FONT_STYLE,
   ];
   const weight = parseInt(computed.fontWeight, 10);
   if (Number.isFinite(weight) && weight >= 600) declarations.push("font-weight:700");
@@ -159,7 +173,7 @@ function walkTableCell(cell: Element): string {
     declarations.push(`text-align:${computed.textAlign}`);
   }
   const tag = cell.tagName === "TH" ? "th" : "td";
-  return `<${tag} style="${declarations.join(";")}">${inner || "&nbsp;"}</${tag}>`;
+  return `<${tag} style="${declarations.join(";")}">${withHwpFont(inner || "&nbsp;")}</${tag}>`;
 }
 
 function walkTable(table: Element): string {
@@ -177,7 +191,7 @@ function walkTable(table: Element): string {
 function walkBlock(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) {
     const text = (node.textContent ?? "").trim();
-    return text ? `<p style="margin:0 0 6pt;line-height:1.6">${escapeHtml(text)}</p>` : "";
+    return text ? `<p style="${HWP_FONT_STYLE};margin:0 0 6pt;line-height:1.6">${withHwpFont(escapeHtml(text))}</p>` : "";
   }
   if (node.nodeType !== Node.ELEMENT_NODE) return "";
   const el = node as Element;
@@ -185,7 +199,7 @@ function walkBlock(node: Node): string {
   if (el.tagName === "TABLE") return walkTable(el);
   if (!isBlockDisplay(el)) {
     const inline = walkInline(el);
-    return inline ? `<p style="margin:0 0 6pt;line-height:1.6">${inline}</p>` : "";
+    return inline ? `<p style="${HWP_FONT_STYLE};margin:0 0 6pt;line-height:1.6">${withHwpFont(inline)}</p>` : "";
   }
   if (hasBlockChild(el)) {
     // 레이아웃 전용 컨테이너 — 자체 태그 없이 자식만 이어붙인다(불필요한 중첩 방지).
@@ -195,18 +209,18 @@ function walkBlock(node: Node): string {
   // 핵심이므로 절대 버리면 안 된다 — trim이 nbsp를 지워 "내용 없음"으로 판정하기 전에 먼저
   // 빈 문단으로 보존한다(2026-07-28).
   if ((el.tagName === "P" || el.tagName === "DIV") && (el.textContent ?? "").replace(/ /g, "").trim() === "") {
-    return `<p style="margin:0;line-height:1.6">&nbsp;</p>`;
+    return `<p style="${HWP_FONT_STYLE};margin:0;line-height:1.6">${withHwpFont("&nbsp;")}</p>`;
   }
   const inner = Array.from(el.childNodes).map(walkInline).join("").trim();
   if (!inner) return "";
   const declarations = extractStyleDeclarations(el);
   const isBullet = el.tagName === "LI";
   if (isBullet) declarations.push("padding-left:15pt", "text-indent:-15pt");
-  return `<p style="margin:0 0 6pt;line-height:1.6;${declarations.join(";")}">${isBullet ? "• " : ""}${inner}</p>`;
+  return `<p style="margin:0 0 6pt;line-height:1.6;${declarations.join(";")}">${withHwpFont(`${isBullet ? "• " : ""}${inner}`)}</p>`;
 }
 
 function wrap(body: string): string {
-  return `<div style="font-family:${CLIPBOARD_ROOT_FONT};font-size:11pt;color:#000000">${body}</div>`;
+  return `<div style="font-family:${CLIPBOARD_ROOT_FONT};mso-fareast-font-family:'맑은 고딕';font-size:11pt;color:#000000">${withHwpFont(body)}</div>`;
 }
 
 /**

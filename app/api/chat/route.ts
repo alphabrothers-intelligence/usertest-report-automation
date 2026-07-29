@@ -39,8 +39,10 @@ import {
   getStrategicInput,
   saveProductInfo,
   saveReportResultSummary,
+  getQuestionsWithAllCategories,
 } from "@/lib/db/reports";
 import { createQualitativeJob } from "@/lib/db/qualitativeJobs";
+import { detectProductType } from "@/lib/report/productType";
 
 export const maxDuration = 300; // Vercel Fluid Compute 기본 실행시간 (PRD 10장)
 
@@ -503,7 +505,8 @@ export async function POST(req: Request) {
         }
         // 이미 생성한 결과 요약은 재사용한다. 사용자가 보고서 서식만 반복해서 확인할 때
         // Claude 토큰이 다시 나가지 않도록 하되, 정량 통계를 새로 계산하면 캐시는 자동 초기화된다.
-        const summary = report.result_summary ?? (await runResultSummary(report.quant_stats));
+        const qualitative = report.result_summary ? [] : await getQuestionsWithAllCategories(report.id);
+        const summary = report.result_summary ?? (await runResultSummary({ quantStats: report.quant_stats, qualitative }));
         if (!report.result_summary) await saveReportResultSummary(report.id, summary);
         return { ok: true, summary };
       },
@@ -545,7 +548,7 @@ export async function POST(req: Request) {
           };
         }
 
-        const draft = await runRecommendation({ sectionLabel, dataSummary });
+        const draft = await runRecommendation({ sectionLabel, dataSummary, productType: detectProductType(report.quant_stats) });
         const hedgeViolations = checkHedgeWording(draft);
 
         if (section !== "strategic_draft") {
@@ -585,6 +588,7 @@ export async function POST(req: Request) {
         const draft = await runRecommendation({
           sectionLabel: `'${featureName}' 기능개선제안(As-is→To-be)`,
           dataSummary,
+          productType: detectProductType(report.quant_stats),
         });
         const hedgeViolations = checkHedgeWording(draft);
         await saveRecommendation({ reportId: report.id, section, draft });

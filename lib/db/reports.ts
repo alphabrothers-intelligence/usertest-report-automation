@@ -13,8 +13,19 @@ export interface ReportRow {
   product_info: ProductInfo | null;
   /** 정량 통계에서 한 번만 만든 Claude 결과 요약. 재렌더링 때 재사용한다. */
   result_summary: string | null;
+  /** 섹션 단위 정성 분석(Ⅲ.2 기능 분석·Ⅳ 핵심구매요소·Ⅴ.2 4대가치 종합·Ⅵ.2 UX 품질).
+   * lib/pipeline/sectionAnalysis.ts가 생성해 저장한다. 웹 뷰어가 인라인 편집한다. */
+  section_analyses: SectionAnalyses | null;
   created_at: string;
   updated_at: string;
+}
+
+/** reports.section_analyses jsonb의 형태. sectionAnalysis.ts의 SectionAnalyses와 동일. */
+export interface SectionAnalyses {
+  featureExperience?: string;
+  corePurchaseFactor?: string;
+  fourValues?: string;
+  uxQuality?: string;
 }
 
 /**
@@ -65,6 +76,7 @@ export async function upsertReportQuantStats(params: {
       respondent_count = excluded.respondent_count,
       quant_stats = excluded.quant_stats,
       result_summary = null,
+      section_analyses = null,
       updated_at = now()
     returning id
   `;
@@ -73,6 +85,11 @@ export async function upsertReportQuantStats(params: {
 
 export async function getReportByFileUrl(fileUrl: string): Promise<ReportRow | null> {
   const [row] = await sql<ReportRow[]>`select * from reports where file_url = ${fileUrl}`;
+  return row ?? null;
+}
+
+export async function getReportById(reportId: string): Promise<ReportRow | null> {
+  const [row] = await sql<ReportRow[]>`select * from reports where id = ${reportId}`;
   return row ?? null;
 }
 
@@ -107,6 +124,20 @@ export async function saveReportResultSummary(reportId: string, resultSummary: s
   `;
 }
 
+/** 섹션 단위 정성 분석을 저장한다(부분 병합 — 이미 저장된 섹션은 이번에 없으면 유지). */
+export async function saveReportSectionAnalyses(
+  reportId: string,
+  analyses: Partial<SectionAnalyses>,
+): Promise<void> {
+  await sql`
+    update reports
+    set
+      section_analyses = coalesce(section_analyses, '{}'::jsonb) || ${sql.json(JSON.parse(JSON.stringify(analyses)))}::jsonb,
+      updated_at = now()
+    where id = ${reportId}
+  `;
+}
+
 /**
  * 정성 파이프라인 결과를 report에 영속화한다. 재실행 시 이전 문항·절·카테고리를 전부
  * 지우고 새로 채운다(체크포인트 승인 이력까지 포함해 초기화 — PRD가 재실행 시 승인 이력
@@ -120,12 +151,14 @@ export async function saveQualitativeResults(
     await tx`delete from questions where report_id = ${reportId}`;
 
     for (const q of pipeline.questions) {
-      // 극성 요약(polarity_summaries)은 여기서 안 채운다 — 2026-07-21부터 기본 파이프라인과
-      // 분리된 별도 opt-in 기능이라(lib/pipeline/generatePolaritySummaries.ts), 이 시점엔
-      // 아직 존재하지 않는다. null로 남겨두면 사용자가 나중에 요청했을 때만 채워진다.
+      // 극성 요약은 별도 opt-in으로 비워 둔다. 다만 NPS 판단문은 NPS 문항의 기존 고속
+      // 분석 1회에 함께 생성되는 선택 산출물이므로 이 JSON에만 보관한다.
+      const persistedSummaries = q.kind === "standard" && q.npsJudgment
+        ? { nps_judgment: q.npsJudgment }
+        : null;
       const [questionRow] = await tx<{ id: string }[]>`
-        insert into questions (report_id, question_key, label, kind)
-        values (${reportId}, ${q.id}, ${q.label}, ${q.kind})
+        insert into questions (report_id, question_key, label, kind, polarity_summaries)
+        values (${reportId}, ${q.id}, ${q.label}, ${q.kind}, ${persistedSummaries ? tx.json(persistedSummaries) : null})
         returning id
       `;
       const questionId = questionRow.id;
@@ -189,13 +222,16 @@ export async function saveQualitativeQuestionResult(
   q: QuestionResult,
 ): Promise<void> {
   await sql.begin(async (tx) => {
+    const persistedSummaries = q.kind === "standard" && q.npsJudgment
+      ? { nps_judgment: q.npsJudgment }
+      : null;
     const [questionRow] = await tx<{ id: string }[]>`
-      insert into questions (report_id, question_key, label, kind)
-      values (${reportId}, ${q.id}, ${q.label}, ${q.kind})
+      insert into questions (report_id, question_key, label, kind, polarity_summaries)
+      values (${reportId}, ${q.id}, ${q.label}, ${q.kind}, ${persistedSummaries ? tx.json(persistedSummaries) : null})
       on conflict (report_id, question_key) do update set
         label = excluded.label,
         kind = excluded.kind,
-        polarity_summaries = null
+        polarity_summaries = excluded.polarity_summaries
       returning id
     `;
     const questionId = questionRow.id;
@@ -421,7 +457,10 @@ export interface QuestionRow {
   kind: "standard" | "improvement";
   // 극성별 짧은 개조식 총평(positive/negative/neutral) 또는 4대 가치용 한 단락 존댓말 요약
   // (combined) — 문항 종류에 따라 둘 중 하나를 채운다(2026-07-28).
-  polarity_summaries: Partial<Record<Polarity | "combined", string>> | null;
+  polarity_summaries: (Partial<Record<Polarity | "combined", string>> & {
+    /** NPS 문항의 정량 근거 판단문. 기존 극성 요약과 충돌하지 않는 별도 키다. */
+    nps_judgment?: { lines: string[] };
+  }) | null;
 }
 
 export interface QuestionWithApprovedCategories extends QuestionRow {

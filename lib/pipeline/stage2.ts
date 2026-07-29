@@ -25,12 +25,22 @@ export const Stage2OutputSchema = z.object({
 
 export type Stage2Output = z.infer<typeof Stage2OutputSchema>;
 
+/** NPS 문항에만 함께 생성하는 원본 NPS 결과표 하단의 3개 판단문. */
+export const NpsJudgmentSchema = z.object({
+  // groups와 별개의 선택 필드로 둬 기존 문항별 카테고리 구조를 바꾸지 않는다.
+  lines: z.array(z.string()).length(3).describe("NPS 결과표 아래 판단문 3개. 화살표 기호는 넣지 않음"),
+});
+
+export type NpsJudgment = z.infer<typeof NpsJudgmentSchema>;
+
 /**
  * 고속 경로용 묶음 출력. 기존에는 같은 문항의 긍정·부정·중립을 각각 호출했지만,
  * 이 구조는 세 극성을 한 번의 구조화 응답으로 돌려 반복 프롬프트와 대기열을 제거한다.
  */
 export const Stage2CombinedOutputSchema = z.object({
   groups: z.array(Stage2OutputSchema),
+  // NPS가 아닌 문항에서는 생략한다. 기존 상세 경로와 저장 데이터는 영향받지 않는다.
+  nps_judgment: NpsJudgmentSchema.optional(),
 });
 type Stage2CombinedOutput = z.infer<typeof Stage2CombinedOutputSchema>;
 

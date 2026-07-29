@@ -11,14 +11,6 @@ import { useMemo, useRef, useState } from "react";
 import type { ReportQuadrantBlock } from "@/lib/report/sections";
 import { downloadSvgAsPng } from "@/lib/report/exportImage";
 
-const PRIORITY_COLORS: Record<number, string> = {
-  "-2": "#b4c6e7",
-  "-1": "#d9e1f2",
-  0: "#ffffff",
-  1: "#fce4d6",
-  2: "#f8cbad",
-};
-
 type Cell = { x: number; y: number };
 
 function cellId({ x, y }: Cell) {
@@ -33,10 +25,10 @@ function snapToCell(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max - 1, Math.floor(value)));
 }
 
-function priorityColor(x: number, y: number) {
-  const columnScore = x < -2 ? 0 : x < 2 ? 1 : 2;
-  const rowScore = y >= 8 ? 0 : y >= 6 ? 1 : 2;
-  return PRIORITY_COLORS[columnScore + rowScore - 2];
+function priorityColor(block: ReportQuadrantBlock, x: number, y: number) {
+  // 기본 3×3 영역도 값으로 보관되어 있으므로, 우측 패널에서 바꾼 영역 색상이
+  // 실제 10×10 격자에 즉시 반영된다. 범위 바깥은 원본처럼 흰색으로 둔다.
+  return block.zones.find((zone) => x >= zone.x0 && x < zone.x1 && y >= zone.y0 && y < zone.y1)?.color ?? "#ffffff";
 }
 
 function wrapLabel(text: string, maxChars = 8) {
@@ -137,7 +129,7 @@ export function EditableQuadrantChart({ block, onChange }: { block: ReportQuadra
           {cells.map((cell) => {
             const box = cellBox(cell);
             const isSelected = selectedCell?.x === cell.x && selectedCell?.y === cell.y;
-            return <rect key={`cell-${cellId(cell)}`} x={box.x} y={box.y} width={box.width} height={box.height} fill={priorityColor(cell.x, cell.y)} stroke={isSelected ? "#315c9c" : "#9a9a9a"} strokeWidth={isSelected ? 2 : 0.45} className="cursor-text" onClick={() => setSelectedCell(cell)} />;
+            return <rect key={`cell-${cellId(cell)}`} x={box.x} y={box.y} width={box.width} height={box.height} fill={priorityColor(block, cell.x, cell.y)} stroke={isSelected ? "#315c9c" : "#9a9a9a"} strokeWidth={isSelected ? 2 : 0.45} className="cursor-text" onClick={() => setSelectedCell(cell)} />;
           })}
 
           <rect x={left} y={top} width={plotSize} height={plotSize} fill="none" stroke="#18181b" strokeWidth="1.2" pointerEvents="none" />

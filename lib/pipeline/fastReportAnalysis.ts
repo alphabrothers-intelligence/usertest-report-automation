@@ -18,6 +18,7 @@ import {
 } from "./stage2";
 import { streamStructured, withClaudeGuard } from "./claudeGuard";
 import type { QuestionResult } from "./orchestrate";
+import { computeNps } from "@/lib/quant/basic";
 
 const FAST_MODEL = process.env.ANTHROPIC_QUALITATIVE_FAST_MODEL ?? process.env.ANTHROPIC_STAGE2_MODEL ?? "claude-sonnet-5";
 
@@ -39,7 +40,16 @@ const FAST_STANDARD_SYSTEM = `당신은 사용성테스트 결과보고서 작�
 - insight는 보고서 개조식 문체로 명사형 종결만 씁니다("~함", "~강화", "~부합", "~필요" 등).
   "~다"로 끝나는 서술형 문장(예: "~부합한다", "~높인다", "~유발한다")은 절대 쓰지 마세요.
 - 단순 개선 제안·선호·정보 요청은 구체적 손해가 없으면 neutral로 분류합니다.
-- 입력에 해당 극성의 의미 단위가 없으면 그 극성 group은 만들지 마세요.`;
+- 입력에 해당 극성의 의미 단위가 없으면 그 극성 group은 만들지 마세요.
+
+# NPS 문항에서만 추가 출력
+- 입력에 nps_quantitative_context가 있을 때에만 nps_judgment.lines를 정확히 3개 작성합니다.
+- 각 줄은 화면에서 자동으로 붙는 화살표를 제외한 한 문장으로 쓰며, 번호·글머리표·화살표를 넣지 마세요.
+- 제공된 NPS 수치(평균, NPS, 구매·중립·비구매 고객 비율)는 그대로 사용하고, 계산하거나 다른 수치를 만들지 마세요.
+- 판단은 수치와 reason 원문에서 확인되는 사실에만 근거합니다. 외부 벤치마크, 원문에 없는 기능·원인, 단정적 시장 전망은 쓰지 마세요.
+- 1번은 NPS 점수와 고객군 비율의 사실 기반 판단, 2번은 중립/비구매 고객 비율과 전환·개선 필요성, 3번은 reason에 반복된 불편·개선 요구 반영 필요성을 다룹니다.
+- 보고서 개조식 문체로 "~필요함", "~확인됨", "~사료됨"처럼 종결하고, 각 줄은 110자 이내로 간결하게 씁니다.
+- NPS가 아닌 문항에서는 nps_judgment를 절대 만들지 마세요.`;
 
 const FAST_IMPROVEMENT_SYSTEM = `당신은 사용성테스트 결과보고서 작성 애널리스트입니다.
 자유서술 개선 아이디어 전체를 실제 언급된 구체적 주제·맥락별로 4~8개 카테고리로 정리하세요.
@@ -68,6 +78,29 @@ function assertCounts(output: { total_clause_count: number; categories: Array<{ 
   if (count !== output.total_clause_count) {
     throw new Error(`${label} 절 집계 불일치: total ${output.total_clause_count}, 카테고리 합 ${count}`);
   }
+}
+
+function standardPrompt(spec: Extract<QuestionSpec, { kind: "standard" }>): string {
+  if (spec.id !== "nps") return `'${spec.label}' 문항의 원문 응답입니다.\n\n${JSON.stringify(spec.inputs)}`;
+
+  // NPS 수치는 모델이 계산하는 값이 아니라 deterministic quant 결과를 주입한다.
+  const nps = computeNps(spec.inputs.map((input) => input.score));
+  return [
+    `'${spec.label}' 문항의 원문 응답입니다.`,
+    "",
+    "nps_quantitative_context (이 수치만 사용):",
+    JSON.stringify({
+      average_purchase_or_recommendation_intent: nps.rawMean,
+      nps_score: nps.npsScore,
+      promoters_pct: nps.promoterPct,
+      passives_pct: nps.passivePct,
+      detractors_pct: nps.detractorPct,
+      respondent_count: nps.n,
+    }),
+    "",
+    "원문 응답:",
+    JSON.stringify(spec.inputs),
+  ].join("\n");
 }
 
 export async function runFastReportAnalysis(spec: QuestionSpec): Promise<QuestionResult> {
@@ -112,7 +145,7 @@ export async function runFastReportAnalysis(spec: QuestionSpec): Promise<Questio
       content: FAST_STANDARD_SYSTEM,
       providerOptions: { anthropic: { cacheControl: { type: "ephemeral", ttl: "1h" } } },
     },
-    prompt: `'${spec.label}' 문항의 원문 응답입니다.\n\n${JSON.stringify(spec.inputs)}`,
+    prompt: standardPrompt(spec),
     output: Output.object({ schema: Stage2CombinedOutputSchema }),
     // 90s→120s로 상향한 근거는 위 개선아이디어 분기 주석 참고 — 표준 문항 쪽이 실패 사례
     // 대부분(펫 레이싱·기능적/심미적/경제적/사회공공적 가치·유사서비스·전반적만족도)이었다.
@@ -137,5 +170,6 @@ export async function runFastReportAnalysis(spec: QuestionSpec): Promise<Questio
     clauses: [],
     stage2ByPolarity,
     stage2Failures: [],
+    npsJudgment: spec.id === "nps" ? output.nps_judgment : undefined,
   };
 }

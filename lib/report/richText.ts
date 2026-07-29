@@ -114,7 +114,12 @@ export function richTextToHtml(value: string): string {
 // 스타일 + 의미 태그**로만 써야 한다. 붙여넣을 때 워드프로세서는 CSS 클래스를 버리고 인라인
 // 스타일과 <b>/<u>/<i> 같은 태그만 해석하기 때문이다. 글꼴도 인라인 font-family로 지정해야
 // 맑은 고딕이 유지된다(PRD 3.3.2).
-export const CLIPBOARD_FONT_FAMILY = "'맑은 고딕', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif";
+export const CLIPBOARD_FONT_FAMILY = "'맑은 고딕', 'Malgun Gothic', sans-serif";
+const HWP_CLIPBOARD_FONT_STYLE = "font-family:'맑은 고딕','Malgun Gothic',sans-serif;mso-fareast-font-family:'맑은 고딕'";
+
+function withHwpClipboardFont(html: string): string {
+  return `<font face="맑은 고딕" style="${HWP_CLIPBOARD_FONT_STYLE}">${html}</font>`;
+}
 
 /** run(굵게/밑줄/기울임)을 인라인 스타일 + 의미 태그로 변환 — 붙여넣기 호환성을 위해 둘 다 쓴다. */
 function runToInlineHtml(run: RichTextRun): string {
@@ -154,18 +159,18 @@ export function richTextToClipboardHtml(value: string): string {
       const inner = block.runs.map(runToInlineHtml).join("");
       if (block.kind === "heading") {
         const size = block.level === 1 ? "16pt" : block.level === 2 ? "13pt" : "12pt";
-        return `<p style="margin:12pt 0 6pt;font-weight:700;font-size:${size};line-height:1.4">${inner}</p>`;
+        return `<p style="${HWP_CLIPBOARD_FONT_STYLE};margin:12pt 0 6pt;font-weight:700;font-size:${size};line-height:1.4">${withHwpClipboardFont(inner)}</p>`;
       }
       if (block.kind === "arrow") {
-        return `<p style="margin:0 0 5pt;font-weight:700;font-style:italic;line-height:1.5">→ ${inner}</p>`;
+        return `<p style="${HWP_CLIPBOARD_FONT_STYLE};margin:0 0 5pt;font-weight:700;font-style:italic;line-height:1.5">${withHwpClipboardFont(`→ ${inner}`)}</p>`;
       }
       if (block.kind === "bullet") {
-        return `<p style="margin:0 0 5pt;padding-left:15pt;text-indent:-15pt;line-height:1.5">• ${inner}</p>`;
+        return `<p style="${HWP_CLIPBOARD_FONT_STYLE};margin:0 0 5pt;padding-left:15pt;text-indent:-15pt;line-height:1.5">${withHwpClipboardFont(`• ${inner}`)}</p>`;
       }
-      return `<p style="margin:0 0 6pt;line-height:1.6">${inner}</p>`;
+      return `<p style="${HWP_CLIPBOARD_FONT_STYLE};margin:0 0 6pt;line-height:1.6">${withHwpClipboardFont(inner)}</p>`;
     })
     .join("");
-  return `<div style="font-family:${CLIPBOARD_FONT_FAMILY};font-size:11pt;color:#000000">${body}</div>`;
+  return `<div style="font-family:${CLIPBOARD_FONT_FAMILY};mso-fareast-font-family:'맑은 고딕';font-size:11pt;color:#000000">${withHwpClipboardFont(body)}</div>`;
 }
 
 const PLAIN_TEXT_BLOCK_TAGS = new Set([

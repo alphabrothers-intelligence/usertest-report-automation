@@ -24,6 +24,7 @@ import {
   type Stage2ClauseInput,
   type Stage2Output,
   type Stage2ImprovementOutput,
+  type NpsJudgment,
 } from "./stage2";
 import { scoreConfidence, type ConfidenceLevel } from "./confidence";
 import { runFastReportAnalysis } from "./fastReportAnalysis";
@@ -62,6 +63,8 @@ export interface StandardQuestionResult {
   clauses: FlaggedClause[];
   stage2ByPolarity: Partial<Record<Polarity, Stage2Output>>;
   stage2Failures: string[];
+  /** NPS 문항에만 존재하는 3개 정량 근거 판단문. */
+  npsJudgment?: NpsJudgment;
 }
 
 export interface ImprovementQuestionResult {

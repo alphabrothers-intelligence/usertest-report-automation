@@ -9,9 +9,18 @@ import { runPolaritySummaries, runValueSummary } from "./polaritySummary";
 import type { Polarity } from "./stage1";
 import {
   getQuestionsWithAllCategories,
+  getReportById,
   saveQuestionPolaritySummaries,
   type QuestionWithApprovedCategories,
 } from "@/lib/db/reports";
+import { detectProductType, type ProductType } from "@/lib/report/productType";
+
+/** 4대 가치 조사 결과 요약 형식이 제품형별로 다르므로, report의 저장된 정량 통계로 판별한다.
+ * 정량 통계가 없으면(비정상) SW형으로 폴백한다. */
+async function resolveProductType(reportId: string): Promise<ProductType> {
+  const report = await getReportById(reportId);
+  return report?.quant_stats ? detectProductType(report.quant_stats) : "sw";
+}
 
 // 극성 총평은 부가 기능이며, 기본 분석과 경쟁하지 않도록 보수적으로 두 개만 동시에 실행한다.
 // 환경변수로만 조정할 수 있고 PIPELINE_CONCURRENCY와 분리해 둔다.
@@ -66,7 +75,7 @@ export async function runPolaritySummariesForQuestion(
     throw new Error("이 문항에는 긍정·부정·중립으로 분류된 정성 카테고리가 없어 요약을 만들 수 없습니다.");
   }
   const summaries = question.question_key.startsWith("values:")
-    ? { combined: await runValueSummary({ valueLabel: question.label, byPolarity }) }
+    ? { combined: await runValueSummary({ valueLabel: question.label, byPolarity, productType: await resolveProductType(reportId) }) }
     : await runPolaritySummaries({ questionLabel: question.label, byPolarity });
   await saveQuestionPolaritySummaries(question.id, summaries);
   return summaries;
@@ -76,6 +85,7 @@ export async function runPolaritySummariesForReport(
   reportId: string,
 ): Promise<GeneratePolaritySummariesResult> {
   const questions = await getQuestionsWithAllCategories(reportId);
+  const productType = await resolveProductType(reportId);
   const limit = pLimit(CONCURRENCY);
 
   let summariesGenerated = 0;
@@ -105,7 +115,7 @@ export async function runPolaritySummariesForReport(
         let summaries: Partial<Record<Polarity | "combined", string>> = {};
         try {
           if (isValueQuestion) {
-            const combined = await runValueSummary({ valueLabel: q.label, byPolarity });
+            const combined = await runValueSummary({ valueLabel: q.label, byPolarity, productType });
             if (combined) summaries = { combined };
           } else {
             summaries = await runPolaritySummaries({ questionLabel: q.label, byPolarity });

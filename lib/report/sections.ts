@@ -120,6 +120,13 @@ export type ReportPolarityBlock = {
   positive: number;
   negative: number;
   neutral: number;
+  /** 원본 도넛 오른쪽 범례. 값뿐 아니라 범례 명칭·색상도 보고서별로 편집할 수 있다. */
+  positiveLabel?: string;
+  negativeLabel?: string;
+  neutralLabel?: string;
+  positiveColor?: string;
+  negativeColor?: string;
+  neutralColor?: string;
 };
 
 /** 원본 보고서의 번호형 소제목 상자와 Q 문항 제목을 위한 구조 블록.

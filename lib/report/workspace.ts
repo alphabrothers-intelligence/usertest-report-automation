@@ -4,8 +4,9 @@ import type { QuantStats } from "@/lib/quant/compute";
 import type { CategoryCount } from "@/lib/quant/basic";
 // 타입만 가져온다(import type) — reports.ts가 postgres를 import하지만, 타입 전용 import는
 // 컴파일 시 제거되므로 클라이언트 번들에 DB 클라이언트가 딸려오지 않는다.
-import type { QuestionWithApprovedCategories, CategoryRow, RecommendationRow } from "@/lib/db/reports";
+import type { QuestionWithApprovedCategories, CategoryRow, RecommendationRow, SectionAnalyses } from "@/lib/db/reports";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
+import { donutSvg, satisfactionHistogramSvg } from "@/lib/report/chartSvg";
 import {
   chartBlock,
   headingBlock,
@@ -35,6 +36,7 @@ import {
 // domClipboard가 계산된 스타일을 굳혀 한글 붙여넣기에도 배경색이 유지된다.
 const POLARITY_ORDER = ["positive", "negative", "neutral"] as const;
 const POLARITY_LABEL: Record<string, string> = { positive: "긍정", negative: "부정", neutral: "중립" };
+type PolaritySummaryText = Partial<Record<"positive" | "negative" | "neutral" | "combined", string>>;
 const POLARITY_BANNER: Record<string, { bg: string; color: string }> = {
   positive: { bg: "#c0cdef", color: "#1e293b" },
   negative: { bg: "#fde4d0", color: "#c2410c" },
@@ -76,45 +78,6 @@ function categoryHtml(cat: CategoryRow): string[] {
 // 도넛 색상은 원본 이미지 기준(배너보다 살짝 진한 톤). 도넛은 표시 전용이라 data-copy-ignore로
 // 감싸 "서식 유지 복사" 대상에서 뺀다(SVG는 한글 붙여넣기에 안 실리므로 %표/요약 텍스트가 수치를
 // 전달한다).
-const DONUT_COLOR: Record<string, string> = { positive: "#5b73c4", negative: "#e07a3f", neutral: "#b8b8b8" };
-
-function polarXY(cx: number, cy: number, r: number, deg: number): [number, number] {
-  const rad = (deg * Math.PI) / 180;
-  return [cx + r * Math.cos(rad), cy - r * Math.sin(rad)];
-}
-
-/** 긍정/부정/중립 비율을 반원 도넛 게이지 SVG 문자열로 만든다(원본 감정분석 차트 형식). */
-function donutSvg(counts: Record<string, number>): string {
-  // 원본 반원 도넛의 비율·범례 배치를 따른다. 색상만으로 극성을 추측하게 하지 않고
-  // 우측 범례에 긍정/부정/중립을 명시한다.
-  const cx = 125, cy = 126, R = 100, Ri = 58;
-  const total = counts.positive + counts.negative + counts.neutral;
-  if (total <= 0) return "";
-  const paths: string[] = [];
-  const labels: string[] = [];
-  let a = 180;
-  for (const pol of POLARITY_ORDER) {
-    const frac = counts[pol] / total;
-    if (frac <= 0) continue;
-    const a0 = a;
-    const a1 = a - frac * 180;
-    const [ox0, oy0] = polarXY(cx, cy, R, a0);
-    const [ox1, oy1] = polarXY(cx, cy, R, a1);
-    const [ix1, iy1] = polarXY(cx, cy, Ri, a1);
-    const [ix0, iy0] = polarXY(cx, cy, Ri, a0);
-    paths.push(
-      `<path d="M ${ox0.toFixed(1)} ${oy0.toFixed(1)} A ${R} ${R} 0 0 1 ${ox1.toFixed(1)} ${oy1.toFixed(1)} L ${ix1.toFixed(1)} ${iy1.toFixed(1)} A ${Ri} ${Ri} 0 0 0 ${ix0.toFixed(1)} ${iy0.toFixed(1)} Z" fill="${DONUT_COLOR[pol]}"/>`,
-    );
-    const [lx, ly] = polarXY(cx, cy, (R + Ri) / 2, (a0 + a1) / 2);
-    labels.push(`<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle" dominant-baseline="central">${((frac) * 100).toFixed(1)}%</text>`);
-    a = a1;
-  }
-  const legend = POLARITY_ORDER.map((pol, index) => {
-    const y = 55 + index * 21;
-    return `<rect x="252" y="${y - 9}" width="10" height="10" fill="${DONUT_COLOR[pol]}"/><text x="268" y="${y}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="11" fill="#4b5563">${POLARITY_LABEL[pol]}</text>`;
-  }).join("");
-  return `<svg viewBox="0 0 330 145" width="100%" style="max-width:330px" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="주관식 응답 감정 분석: 긍정, 부정, 중립 비율">${paths.join("")}${labels.join("")}${legend}</svg>`;
-}
 
 /** 긍정/부정/중립 % + 건수 표(원본 감정분석 하단 표 형식). */
 function polarityTableHtml(counts: Record<string, number>): string {
@@ -128,9 +91,9 @@ function polarityTableHtml(counts: Record<string, number>): string {
 }
 
 /** 극성별 응답 요약([긍정/부정/중립 의견 요약])을 원본 "응답 요약" 박스 형식 HTML로 만든다. */
-export function responseSummaryHtml(ps: Partial<Record<string, string>> | null | undefined, questionKey?: string): string {
+export function responseSummaryHtml(ps: PolaritySummaryText | null | undefined, questionKey?: string): string {
   const rows: string[] = [];
-  const add = (pol: string, label: string) => {
+  const add = (pol: "positive" | "negative" | "neutral", label: string) => {
     const text = ps?.[pol];
     if (text) rows.push(`<p style="font-weight:700;margin:6pt 0 2pt"><strong>[${label} 의견 요약]</strong></p><p style="margin:0 0 4pt">${richTextToInlineHtml(text)}</p>`);
   };
@@ -146,50 +109,6 @@ export function responseSummaryHtml(ps: Partial<Record<string, string>> | null |
     ? `<div data-copy-ignore contenteditable="false" style="margin:0 0 6pt;text-align:right"><button type="button" data-ai-summary="${escapeHtml(questionKey)}" style="border:1px solid #315c9c;border-radius:3pt;background:#ffffff;color:#315c9c;padding:3pt 7pt;font-size:9pt;font-weight:700;cursor:pointer">AI 요약 생성</button></div>`
     : "";
   return questionKey ? `<div data-summary-key="${escapeHtml(questionKey)}">${action}${content}</div>` : content;
-}
-
-// --- 원본 8·11·14페이지 "만족도 분포도"(0~10점 세로 막대) + "주요 키워드 도출"(워드클라우드) ---
-/** 0~10점 응답자 수 배열을 원본 "만족도 분포도" 세로 막대그래프 SVG로 그린다(웹 표시 전용 —
- * SVG라 한글 붙여넣기엔 안 실리고, 아래 감정분석 %표·키워드가 수치를 전달한다). */
-function satisfactionHistogramSvg(distribution: number[]): string {
-  // 원본의 Excel형 그래프 규칙: 가로 격자·Y축 눈금·X/Y축 제목·최빈 점수 강조.
-  // SVG 하나를 웹 표시와 PNG 저장에 공용으로 쓰므로 출력물에서도 동일한 축이 유지된다.
-  const width = 560, height = 280;
-  const margin = { top: 18, right: 18, bottom: 46, left: 52 };
-  const maxCount = Math.max(1, ...distribution);
-  const niceMax = Math.max(5, Math.ceil(maxCount / 5) * 5);
-  const plotW = width - margin.left - margin.right;
-  const plotH = height - margin.top - margin.bottom;
-  const slot = plotW / distribution.length;
-  const barW = slot * 0.68;
-  const baseY = margin.top + plotH;
-  const grid: string[] = [];
-  for (let tick = 0; tick <= niceMax; tick += niceMax / 5) {
-    const y = baseY - (tick / niceMax) * plotH;
-    grid.push(
-      `<line x1="${margin.left}" y1="${y.toFixed(1)}" x2="${width - margin.right}" y2="${y.toFixed(1)}" stroke="#e5e7eb" stroke-width="1"/>` +
-      `<text x="${margin.left - 8}" y="${(y + 4).toFixed(1)}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="10" text-anchor="end" fill="#6b7280">${Math.round(tick)}</text>`,
-    );
-  }
-  const parts = distribution.map((count, i) => {
-    const cx = margin.left + slot * i + slot / 2;
-    const h = (count / niceMax) * plotH;
-    const y = baseY - h;
-    const valueLabel = count > 0
-      ? `<text x="${cx.toFixed(1)}" y="${(y - 5).toFixed(1)}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="11" font-weight="700" text-anchor="middle" fill="#4b5563">${count}</text>`
-      : "";
-    return (
-      `<rect x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" fill="${count === maxCount && count > 0 ? "#078c44" : "#2ed6a4"}"/>` +
-      valueLabel +
-      `<text x="${cx.toFixed(1)}" y="${(baseY + 18).toFixed(1)}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="11" text-anchor="middle" fill="#4b5563">${i}</text>`
-    );
-  });
-  return (
-    `<svg viewBox="0 0 ${width} ${height}" width="100%" style="max-width:${width}px" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="만족도 점수별 응답자 수 분포">` +
-    `${grid.join("")}<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${baseY}" stroke="#9ca3af"/><line x1="${margin.left}" y1="${baseY}" x2="${width - margin.right}" y2="${baseY}" stroke="#9ca3af"/>${parts.join("")}` +
-    `<text x="${width / 2}" y="${height - 8}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="12" text-anchor="middle" fill="#4b5563">만족도 점수</text>` +
-    `<text x="16" y="${height / 2}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="12" text-anchor="middle" fill="#4b5563" transform="rotate(-90 16 ${height / 2})">응답자 수</text></svg>`
-  );
 }
 
 /** 정성 문항(question_key "feature:펫 꾸미기")을 정량 featureSatisfaction(name은 정식 표시명이라
@@ -421,7 +340,7 @@ function valueMeanSdTableHtml(mean: number, sd: number): string {
  * Ⅴ장에는 Ⅲ장의 긍정·부정·중립 총평을 그대로 나열하지 않는다. `combined`에는 가치 문항 전용
  * 프롬프트가 만든 3~4문장 존댓말 요약이 저장된다. 이전에 생성해 둔 보고서는 combined 키가
  * 없을 수 있으므로, 그 경우에만 기존 극성 요약을 읽는 호환 경로를 둔다. */
-export function valueSummaryBoxHtml(label: string, summaries: Partial<Record<string, string>> | null | undefined, questionKey?: string): string {
+export function valueSummaryBoxHtml(label: string, summaries: PolaritySummaryText | null | undefined, questionKey?: string): string {
   const text = summaries?.combined
     ?? (summaries
       ? (["positive", "negative", "neutral"] as const)
@@ -896,7 +815,7 @@ function buildFeatureAnalysisText(
   return parts.join("");
 }
 
-function buildFeatureSection(stats: QuantStats, qual: QuestionWithApprovedCategories[]): ReportBlock[] {
+function buildFeatureSection(stats: QuantStats, qual: QuestionWithApprovedCategories[], analysis?: string): ReportBlock[] {
   const ranked = [...stats.featureSatisfaction].sort((a, b) => b.mean - a.mean);
   const featureQual = questionsByKeyPrefix(qual, "feature:");
   const rankedImportance = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
@@ -951,7 +870,8 @@ function buildFeatureSection(stats: QuantStats, qual: QuestionWithApprovedCatego
     textBlock({
       id: "feature-analysis-summary",
       label: "기능별 중요 순위 및 만족도 종합 해석",
-      html: buildFeatureAnalysisText(stats, rankedImportance, featureQual),
+      // 저장된 LLM 섹션 분석이 있으면 그걸 쓰고(원본 서술과 동일 구조), 없으면 규칙 기반 fallback.
+      html: analysis ? richTextToHtml(analysis) : buildFeatureAnalysisText(stats, rankedImportance, featureQual),
       styled: true,
     }),
   ];
@@ -962,7 +882,7 @@ function buildFeatureSection(stats: QuantStats, qual: QuestionWithApprovedCatego
  * relativeImportance/rankPositionComposition은 Q12 "기능(펫과의 산책 등) 중요도" 데이터라
  * Ⅲ장 소속이고, Ⅳ장의 핵심구매요소는 Q13/Q16 "성취및보상요소" 같은 추상 요인이라 서로 다른
  * 데이터다 — buildFeatureSection으로 옮겼다). */
-function buildCorePurchaseFactorSection(stats: QuantStats): ReportBlock[] {
+function buildCorePurchaseFactorSection(stats: QuantStats, analysis?: string): ReportBlock[] {
   const rankedKeyFactors = [...stats.keyFactorDistribution].sort((a, b) => b.percentage - a.percentage);
   return [
     headingBlock({ id: "core-result-heading", variant: "numbered", number: "1", text: "핵심구매요소 조사 결과" }),
@@ -973,6 +893,11 @@ function buildCorePurchaseFactorSection(stats: QuantStats): ReportBlock[] {
       headers: ["No", "핵심 기능", "순위", "비율"],
       rows: rankedKeyFactors.map((item, i) => [i + 1, item.label, `${i + 1}위`, `${item.percentage}%`]),
     }),
+    // 원본 31쪽 "2 핵심구매요소 분석" — 정성 카테고리를 재료로 LLM이 생성(sectionAnalysis.ts).
+    headingBlock({ id: "core-analysis-heading", variant: "numbered", number: "2", text: "핵심구매요소 분석" }),
+    analysis
+      ? textBlock({ id: "core-analysis-summary", label: "핵심구매요소 중요 순위 및 만족도 종합 해석", html: richTextToHtml(analysis), styled: true })
+      : textBlock({ id: "core-analysis-summary", label: "핵심구매요소 분석", html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`, pending: true }),
   ];
 }
 
@@ -1000,7 +925,7 @@ function buildFourValuesAnalysisText(
 }
 
 /** 섹션 Ⅴ: 4대 가치 만족도. */
-function buildFourValuesSection(stats: QuantStats, qual: QuestionWithApprovedCategories[]): ReportBlock[] {
+function buildFourValuesSection(stats: QuantStats, qual: QuestionWithApprovedCategories[], analysis?: string): ReportBlock[] {
   const rows: { label: string; mean: number; sd: number }[] = [
     { label: "기능적 가치", mean: stats.fourValues.functional.mean, sd: stats.fourValues.functional.sd },
     { label: "심미적 가치", mean: stats.fourValues.aesthetic.mean, sd: stats.fourValues.aesthetic.sd },
@@ -1023,14 +948,14 @@ function buildFourValuesSection(stats: QuantStats, qual: QuestionWithApprovedCat
     textBlock({
       id: "four-values-analysis-summary",
       label: "4대 가치 만족도 종합 해석",
-      html: buildFourValuesAnalysisText(rows, qual),
+      html: analysis ? richTextToHtml(analysis) : buildFourValuesAnalysisText(rows, qual),
       styled: true,
     }),
   ];
 }
 
 /** 섹션 Ⅵ: 사용자 경험 품질 평가 — 실용성/즐거움 평균·표준편차 표. */
-function buildUxQualitySection(stats: QuantStats): ReportBlock[] {
+function buildUxQualitySection(stats: QuantStats, analysis?: string): ReportBlock[] {
   const usability = stats.uxQuality.usability;
   const fun = stats.uxQuality.fun;
   return [
@@ -1068,6 +993,11 @@ function buildUxQualitySection(stats: QuantStats): ReportBlock[] {
         ...fun.map((item) => ["즐거움", item.name, item.mean, item.sd]),
       ],
     }),
+    // 원본 40쪽 "2 사용자 경험 품질 평가 결과 분석"(종합 해석 + 세부 해석) — LLM 생성.
+    headingBlock({ id: "ux-analysis-heading", variant: "numbered", number: "2", text: "사용자 경험 품질 평가 결과 분석" }),
+    analysis
+      ? textBlock({ id: "ux-analysis-summary", label: "사용자 경험 품질 평가 결과 분석", html: richTextToHtml(analysis), styled: true })
+      : textBlock({ id: "ux-analysis-summary", label: "사용자 경험 품질 평가 결과 분석", html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`, pending: true }),
   ];
 }
 
@@ -1204,7 +1134,18 @@ function npsReferenceHtml(stats: QuantStats): string {
 
 /** 원본 43쪽 수치표 아래의 삼각형 판단문. 회사 내부 기준 비교는 일반화할 수 없으므로,
  * NPS 부호와 응답 비율이라는 현재 raw data 근거만 사용한다. */
-function npsJudgmentHtml(nps: QuantStats["nps"]): string {
+function npsJudgmentHtml(
+  nps: QuantStats["nps"],
+  generated?: { lines: string[] } | null,
+): string {
+  const generatedLines = generated?.lines?.filter((line) => typeof line === "string" && line.trim()) ?? [];
+  if (generatedLines.length === 3) {
+    return [
+      `<div style="margin:8pt 0 0;font-family:'맑은 고딕','Malgun Gothic',sans-serif;font-size:10.5pt;line-height:1.7">`,
+      ...generatedLines.map((line, index) => `<p style="margin:0 ${index === 2 ? "0" : "0 5pt"};padding-left:14pt;text-indent:-12pt">▶ ${escapeHtml(line.trim())}</p>`),
+      `</div>`,
+    ].join("");
+  }
   const marketability = nps.npsScore >= 0 ? "양호한 시장성" : "낮은 시장성";
   const urgency = nps.npsScore >= 0 ? "추세를 지속적으로 관리할 필요가 있음" : "개선 전략의 수립이 시급하다고 사료됨";
   return [
@@ -1258,6 +1199,7 @@ function buildNpsSection(stats: QuantStats, qual: QuestionWithApprovedCategories
   // 종합 만족도·추천 의향·개선 아이디어는 설문지의 마지막 문항 순서로 유지한다.
   // priorService는 이보다 앞선 유사 서비스 경험 문항이므로, 뒤쪽에 끼워 넣지 않는다.
   const [overallQuestion] = questionsByKeys(qual, ["overallSatisfaction"]);
+  const [npsQuestion] = questionsByKeys(qual, ["nps"]);
   const [improvementQuestion] = questionsByKeys(qual, ["improvementIdea"]);
   const overallSurvey = findSurveyQuestion(stats, "종합 만족도", 0);
   const improvementSurvey = findSurveyQuestion(stats, "개선 아이디어", 0);
@@ -1273,7 +1215,7 @@ function buildNpsSection(stats: QuantStats, qual: QuestionWithApprovedCategories
       detractorPct: stats.nps.detractorPct,
     }),
     richStaticBlock({ id: "nps-reference-and-summary", html: npsReferenceHtml(stats) }),
-    richStaticBlock({ id: "nps-judgments", html: npsJudgmentHtml(stats.nps) }),
+    richStaticBlock({ id: "nps-judgments", html: npsJudgmentHtml(stats.nps, npsQuestion?.polarity_summaries?.nps_judgment) }),
     headingBlock({
       id: "nps-overall-question",
       variant: "question",
@@ -1429,20 +1371,23 @@ export function buildReportWorkspaceSeed(input: {
   qualitative?: QuestionWithApprovedCategories[] | null;
   /** DB에 저장된 제언 초안(승인 여부 무관). 없으면 Ⅸ장 제언은 "대기"로 표시된다. */
   recommendations?: RecommendationRow[] | null;
+  /** DB에 저장된 섹션 단위 정성 분석(Ⅲ.2·Ⅳ·Ⅴ.2·Ⅵ.2). 없으면 규칙 기반 fallback/대기 표시. */
+  sectionAnalyses?: SectionAnalyses | null;
 }): ReportWorkspaceSeed {
   const { productInfo, fileName, resultSummary } = input;
   const stats = normalizeQuantStats(input.quantStats);
   const qual = orderQualitativeQuestions(stats, input.qualitative ?? []);
   const recommendations = input.recommendations ?? [];
+  const sa = input.sectionAnalyses ?? {};
   const plan = buildReportPlan(stats.featureSatisfaction.map((f) => f.name));
 
   const blocksByNumeral: Record<string, ReportBlock[]> = {
     I: buildOverviewSection(stats, productInfo, fileName),
     II: buildDemographicsSection(stats),
-    III: buildFeatureSection(stats, qual),
-    IV: buildCorePurchaseFactorSection(stats),
-    V: buildFourValuesSection(stats, qual),
-    VI: buildUxQualitySection(stats),
+    III: buildFeatureSection(stats, qual, sa.featureExperience),
+    IV: buildCorePurchaseFactorSection(stats, sa.corePurchaseFactor),
+    V: buildFourValuesSection(stats, qual, sa.fourValues),
+    VI: buildUxQualitySection(stats, sa.uxQuality),
     VII: buildCrossAnalysisSection(stats),
     VIII: buildNpsSection(stats, qual),
     IX: buildConclusionSection(stats, resultSummary, qual, recommendations),

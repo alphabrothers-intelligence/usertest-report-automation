@@ -88,6 +88,7 @@ export async function GET(request: Request) {
       resultSummary: report.result_summary,
       qualitative,
       recommendations,
+      sectionAnalyses: report.section_analyses,
     }),
   });
 }

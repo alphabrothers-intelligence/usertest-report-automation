@@ -156,10 +156,20 @@ export function tryOfficeCompatibleCopy(html: string): boolean {
     }
 }
 
+// 한글은 붙여넣기 시 바깥 div의 글꼴 상속을 버리고 기본 글꼴(함초롱바탕)으로 대체하는
+// 경우가 있다. 따라서 복사 전용 HTML에는 CSS뿐 아니라 구형 Office/HWP 파서가 직접 읽는
+// `<font face>`를 실제 본문 전체에 붙인다. 이 함수는 버튼 복사와 ClipboardItem 폴백이
+// 같은 HTML을 사용하도록 단일 진입점에 둔다.
+function ensureHwpFontHtml(html: string): string {
+  const fontStyle = "font-family:'맑은 고딕','Malgun Gothic',sans-serif;mso-fareast-font-family:'맑은 고딕';";
+  return `<div style="${fontStyle}font-size:11pt;color:#000000;line-height:1.6"><font face="맑은 고딕" style="${fontStyle}">${html}</font></div>`;
+}
+
 export async function writeRichClipboard(html: string) {
-  const wrapped = /^\s*<div[^>]*font-family/i.test(html)
-    ? html
-    : `<div style="font-family:${CLIPBOARD_FONT_FAMILY};font-size:11pt;color:#000000;line-height:1.6">${html}</div>`;
+  // 이미 글꼴 div로 감싼 HTML이라도 `font face`까지 보장해야 HWP의 HTML 파서가 맑은
+  // 고딕을 선택한다. 중첩 div는 HWP/Word 모두 정상적으로 처리하며, 서식 정보가 빠지는
+  // 것보다 이중 보장이 안전하다.
+  const wrapped = ensureHwpFontHtml(html);
   const plainText = htmlToPlainText(wrapped);
   const rtf = htmlToRtf(wrapped);
   if (tryOfficeCompatibleCopy(wrapped)) return;

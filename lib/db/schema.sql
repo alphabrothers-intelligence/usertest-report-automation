@@ -24,6 +24,10 @@ alter table reports add column if not exists product_info jsonb;
 -- raw data를 다시 정량 계산하면 reports.ts의 upsert가 이 값을 null로 돌려 최신 통계와만 연결한다.
 alter table reports add column if not exists result_summary text;
 
+-- 섹션 단위 정성 분석(Ⅲ.2 기능 분석·Ⅳ 핵심구매요소·Ⅴ.2 4대가치 종합·Ⅵ.2 UX 품질).
+-- lib/pipeline/sectionAnalysis.ts가 저장된 카테고리를 재료로 생성한다. 정량 재계산 시 초기화된다.
+alter table reports add column if not exists section_analyses jsonb;
+
 -- 정성 처리 대상 14개 문항 (PRD 6.1절).
 create table if not exists questions (
   id uuid primary key default gen_random_uuid(),

@@ -452,7 +452,7 @@ async function sectionNpsAndImprovement(
     ),
     spacer(),
   ];
-  for (const line of npsJudgmentLines(nps)) {
+  for (const line of npsJudgmentLines(nps, npsQuestion?.polarity_summaries?.nps_judgment)) {
     blocks.push(
       new Paragraph({
         spacing: { after: 60 },

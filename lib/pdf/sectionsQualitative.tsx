@@ -193,7 +193,17 @@ export interface JudgmentSegment {
   underline?: boolean;
 }
 
-export function npsJudgmentLines(nps: NpsResult): JudgmentSegment[][] {
+export function npsJudgmentLines(
+  nps: NpsResult,
+  generated?: { lines: string[] } | null,
+): JudgmentSegment[][] {
+  // NPS 문항의 기존 Stage2 호출에서 생성·저장한 판단문이 있으면 이를 우선한다.
+  // 세 줄 형식이 불완전한 기존 데이터/실패 데이터는 아래의 정량 기반 문구로 안전하게 폴백한다.
+  const generatedLines = generated?.lines?.map((line) => line.trim()).filter(Boolean);
+  if (generatedLines?.length === 3) {
+    return generatedLines.map((text) => [{ text }]);
+  }
+
   const marketability = nps.npsScore >= 0 ? "양호한 시장성" : "낮은 시장성";
   const urgency =
     nps.npsScore >= 0
@@ -338,7 +348,7 @@ export function SectionNpsAndImprovement({
       {/* 판단 문구는 표 위가 아니라 표 아래에 온다(원본 43페이지 순서 그대로,
           2026-07-21 재대조로 순서를 바로잡았다 — 기존엔 표 앞에 있었다). */}
       <View style={{ marginTop: 8 }}>
-        {npsJudgmentLines(stats.nps).map((segments, i) => (
+        {npsJudgmentLines(stats.nps, npsQuestion?.polarity_summaries?.nps_judgment).map((segments, i) => (
           <View key={i} style={{ flexDirection: "row", marginTop: 3 }} wrap={false}>
             <TriangleBullet />
             <Text style={[styles.body, { flex: 1 }]}>

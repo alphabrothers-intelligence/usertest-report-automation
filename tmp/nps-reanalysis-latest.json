@@ -1,0 +1,20 @@
+{
+  "updatedAt": "2026-07-29T01:14:51.513Z",
+  "status": "completed",
+  "reportId": "dfc8de69-4430-41a2-a4bd-a4b426f0a426",
+  "questionKey": "nps",
+  "apiCalls": 1,
+  "elapsedMs": 34749,
+  "npsJudgment": {
+    "lines": [
+      "NPS -41점으로 매우 낮은 수준이며 추천고객 12%에 비해 비추천고객 53%가 압도적으로 많아 부정적 인식이 우세한 것으로 확인됨",
+      "중립고객 35%와 비추천고객 53%가 전체 88%를 차지해 전환 잠재층이 넓으므로 개선을 통한 promoter 전환 노력 필요함",
+      "reason에서 반복된 차별성 부족, 재미 결여, 버그·완성도 문제, 과금 구조에 대한 불만이 낮은 추천 의향의 핵심 원인으로 사료됨"
+    ]
+  },
+  "polarityGroups": {
+    "positive": 4,
+    "negative": 6,
+    "neutral": 3
+  }
+}
