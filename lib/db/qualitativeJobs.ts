@@ -44,7 +44,7 @@ export interface QualitativeUsageSummary {
   elapsed_ms: number;
 }
 
-export type QualitativeSectionAnalysisKey = "featureExperience" | "corePurchaseFactor" | "fourValues" | "uxQuality";
+export type QualitativeSectionAnalysisKey = "featureExperience" | "corePurchaseFactor" | "fourValues" | "uxQuality" | "crossAnalysis";
 export type QualitativeSectionAnalysisRunStatus = "running" | "completed" | "failed";
 
 export interface QualitativeSectionAnalysisRunRow {
@@ -207,6 +207,22 @@ export async function getQualitativeJob(jobId: string): Promise<QualitativeJobRo
     select j.*, r.file_url
     from qualitative_jobs j join reports r on r.id = j.report_id
     where j.id = ${jobId}
+  `;
+  return job ?? null;
+}
+
+/**
+ * 보고서 생성 전, 해당 원본 데이터의 가장 최근 정성 응답 분석 작업이 실제로 끝났는지 확인한다.
+ * 채팅 문구가 아니라 DB 작업 상태를 기준으로 다음 단계를 열기 위해 사용한다.
+ */
+export async function getLatestQualitativeJobForReport(reportId: string): Promise<QualitativeJobRow | null> {
+  const [job] = await sql<QualitativeJobRow[]>`
+    select j.*, r.file_url
+    from qualitative_jobs j
+    join reports r on r.id = j.report_id
+    where j.report_id = ${reportId}
+    order by j.created_at desc
+    limit 1
   `;
   return job ?? null;
 }

@@ -1,108 +1,182 @@
 // 사용성테스트 결과 요약 생성 (Ⅸ장 "1. 사용성테스트 결과 요약").
 //
-// **2026-07-29 사용자 지시로 6.9절 프롬프트를 원본 보고서(리바랩스·케어클) 대조 결과에 맞춰
-// 재설계했다.** 원본의 결과 요약은 "각 섹션의 독립 요약"이 아니라, NPS(시장성)가 왜 낮은지 →
-// 무엇이 구매 전환을 막는지를 항목별로 입증하는 "논증"이다. 그래서 핵심구매요소는 '구매 결정
-// 요인', NPS는 '시장성 판정 + 구매전환 부족 진단'으로 프레이밍한다. 근거는 정량 통계 + 이미
-// 저장된 카테고리 인사이트만 쓴다(raw 응답 재분석 없음).
+// **2026-07-30 원본 페이지(50~52) 재대조로 아키텍처를 바꿨다.** 처음엔(2026-07-29) 이 표를
+// 정량+정성 카테고리에서 "새로 다시 분석"하도록 만들었는데, 실제로 재생성해 원본과 대조해보니
+// 분량·형식이 크게 달랐다(사용자 지적, 2026-07-30) — 원본을 정밀히 다시 읽어보면 이 표의
+// 각 행은 새로운 분석이 아니라 **이미 작성된 Ⅲ.2/Ⅳ.2/Ⅴ.2/Ⅵ.2/Ⅶ의 압축본**이다(예: Ⅳ.2가
+// 4문단인데 Ⅸ.1 핵심구매요소 행은 2문장, Ⅵ.2 [종합해석]의 실용성·즐거움 두 문장이 Ⅸ.1
+// UX행에 거의 그대로 재사용됨). 그래서 `runResultSummary`는 이제 raw 정량·카테고리가 아니라
+// **`lib/pipeline/sectionAnalysis.ts`가 만든 섹션 텍스트를 압축 재료로 받는다** — 새 해석을
+// 더하지 않고 이미 확정된 문장에서 핵심만 추린다. sectionAnalyses가 없는 오래된 report(구버전
+// 캐시 등)에 대비해 raw 정량+카테고리 fallback 경로도 유지한다.
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
-import { logClaudeUsage } from "@/lib/claudeUsage";
+import { logClaudeUsage, type ClaudeUsageLike } from "@/lib/claudeUsage";
 import type { QuantStats } from "@/lib/quant/compute";
-import type { QuestionWithApprovedCategories } from "@/lib/db/reports";
+import type { QuestionWithApprovedCategories, SectionAnalyses } from "@/lib/db/reports";
 import { detectProductType, type ProductType } from "@/lib/report/productType";
+import { splitCrossAnalysisText, shortenFactorLabel } from "./sectionAnalysis";
 
 const SUMMARY_MODEL = process.env.ANTHROPIC_SUMMARY_MODEL ?? "claude-sonnet-5";
 
-const SUMMARY_SYSTEM_PROMPT = `당신은 사용성테스트 결과보고서의 "사용성테스트 결과 요약" 섹션을 작성합니다.
-이 보고서는 제품 시장성 테스트 + 개선방안 산출물입니다. 각 항목(섹션)의 정량 수치와 카테고리
-인사이트를 항목별 개조식 불릿으로 종합하되, 궁극적으로 "이 결과가 사용자의 구매 전환·시장성에
-어떤 의미인지"가 드러나도록 씁니다.
+// 각 행의 목표 형식을 원본 50~52쪽 문구 패턴 그대로 예시로 박아둔다 — "요약해라"는 지시만으로는
+// 모델이 재분석(사실상 Ⅲ~Ⅵ을 다시 쓰는 것)으로 흐르기 쉬워서, 실제 원본 문장 리듬을 예시로
+// 주는 편이 훨씬 안정적이었다(2026-07-30 실측).
+const SUMMARY_SYSTEM_PROMPT = `당신은 사용성테스트 결과보고서 Ⅸ장 "1. 사용성테스트 결과 요약" 표의 4개 항목을 작성합니다.
+이 표는 앞 장의 결과를 원본 51~52쪽 형식으로 **짧게 압축**한 것입니다 — 상세 논증을 반복하지 마세요.
+입력에 제공된 재료(표현어·수치·요지)만 사용하고, 새로운 해석·원인·수치를 지어내지 마세요.
 
-# 항목별 지침
-- 기능별 고객 경험 평가: 상대중요도-만족도 gap 관점에서 우선/차우선 개선 대상을 짚는다.
-  (예: "높은 상대 중요도와 낮은 만족도를 가지므로 우선 개선 필요.")
-- 핵심구매요소: 상위 요인(순위·비율)을 '구매 결정 요인'으로 서술하고, 이를 개선하면 구매 전환
-  제고로 이어질 수 있음을 연결한다.
-- 4대 가치 만족도: 가치별로 긍정 평가 요지 + 개선 필요 요소를 한 불릿으로 종합한다.
-- 종합 만족도·NPS: NPS 부호로 시장성 수준을 진단하고(음수=낮은 시장성), 중립·비추천 비율이
-  높으면 '구매 전환을 일으키는 요소가 부족함'으로 해석한다.
+# 당신이 작성하는 항목 (이 4개만, 아래 제목을 정확히)
+## 기능별 고객 경험 평가
+## 핵심구매요소
+## 4대 가치 만족도
+## 종합 만족도 및 NPS 지수
+(사용자 경험 품질·교차 분석 행은 다른 단계에서 원문 그대로 채우므로 절대 작성하지 마라.)
 
-# 공통 규칙 (반드시 준수)
-- 제공된 정량 수치와 카테고리 인사이트에 있는 내용만 쓴다. 새 사실·수치·외부 시장 기준을
-  지어내지 않는다. 수치는 제공된 값을 토씨 그대로 인용한다.
-- 결론·권고는 반드시 객관적 제언 뉘앙스로만 끝낸다: "~것을 제언함", "~것을 추천함",
-  "~할 필요가 있음", "~이 요구됨", "~시급하다고 사료됨". 명령형("~하라", "~해야 한다")과
-  주관적 단정을 절대 쓰지 않는다.
-- 개조식 명사형 종결(~함/~됨/~판단됨/~시사함/~확인됨/~도출됨/~필요)을 기본으로 한다.
-- "사실 서술 → 함의/제언" 2단으로 쓰고, 도출되는 함의·제언 앞에만 화살표(→)를 붙인다.
-  묶음이 필요하면 [대괄호 소제목]으로 그룹핑한다.
-- 핵심 키워드·수치에만 굵게(**...**)를 쓴다.
+## 기능별 고객 경험 평가
+"입력.기능별_행_재료"의 각 항목을 원본 51쪽 형식 그대로:
+• [{기능명}] {중요도표현} 상대 중요도와 {만족도표현} 만족도를 가지므로 {판정}.
+→ '{개선동작1}', '{개선동작2}'{, '{개선동작3}'}을 통해 {~하는 전략/방향성} 제안
+- {중요도표현}·{만족도표현}은 입력 재료의 값을 **그대로** 쓴다(임의로 바꾸지 말 것).
+- {판정}은 입력 "판정후보" 중 하나를 tier·성격에 맞게 고른다.
+- "→" 줄의 '개선동작'은 "개선항목_후보"(부정 카테고리 라벨)를 **개선 동작 명사구**로 바꿔 2~3개를
+  작은따옴표로 나열한다(예: "GPS 부정확"→'GPS 및 걸음 수 측정 정확도 개선"). 문제 서술이 아니라 동작으로.
+- tier가 "우선"인 기능의 "→" 줄은 "'중립·부정' 응답층을 '긍정'으로 전환하는 전략 제안"으로 끝맺는다.
+  tier가 "차우선"인 기능의 "→" 줄은 "…를 통해 …하는 방향성 제안" 또는 "차별화 요소로 발전시키는 전략 제안"으로 끝맺는다.
 
-# 출력
-- 항목마다 "## 항목명" 소제목 아래 불릿(-)으로 3~5개. 입력에 존재하는 항목만 작성한다.`;
+## 핵심구매요소
+정확히 2개 불릿(원본 51쪽, "•"):
+• 전체 응답자 {응답자수}명 중 {상위3합계비율}%가 '{1위}({비율}%)', '{2위}({비율}%)', '{3위}({비율}%)'을 가장 중요한 핵심구매요소로 선택함. 이는 {상위 3개를 각각 한 단어로 규정한 3축(예: 보상(동기), 비주얼(첫인상), 안정성(기본 신뢰))}이 서비스 설치 및 지속 사용 결정에 가장 중요하게 작용함을 시사함.
+• {상위 요인에 근거한 우선 확보→고도화 순서의 개선 우선순위}가 고객의 구매 전환을 이끌어낼 수 있을 것으로 사료됨.
 
-/** 정성 카테고리에서 특정 문항의 상위 부정/개선 인사이트를 뽑는다(결과 요약 근거용). */
-function negativeInsights(qualitative: QuestionWithApprovedCategories[], questionKey: string, limit = 3): string[] {
-  return qualitative
-    .find((q) => q.question_key === questionKey)
-    ?.categories.filter((c) => c.polarity === "negative")
-    .slice(0, limit)
-    .map((c) => c.insight_final ?? c.insight_draft) ?? [];
+## 4대 가치 만족도
+"입력.4대가치_재료"의 순서(기능적→심미적→경제적→사회·공공적)대로, 가치마다 [가치명] 소제목 한 줄 + 그 다음 줄에 요지 한 문장(원본 51쪽):
+• [{가치명}]
+{긍정요지를 한 구절로}, 다만/그러나 {개선요지를 한 구절로}에 대한 개선 필요.
+- 반드시 4개 가치를 이 순서로 모두 쓴다.
+
+## 종합 만족도 및 NPS 지수
+정확히 2개 소제목, 각 1문장(원본 52쪽):
+• [종합 만족도 개선 필요]
+중립 고객({종합만족도중립구간비율}%) 비율이 높은 편으로 이는 사용자들의 구매 전환을 일으키는 요소가 적은 것으로 판단됨. {이들을 타깃으로 불편 요소를 최소화하면 전체 만족도를 끌어올릴 수 있다는 취지 한 문장}.
+• [NPS 조사]
+구매의향, 추천의향을 NPS 지수로 환산했을 때, {NPS점수}로 '{NPS<0이면 낮은, 아니면 높은} 시장성' 수준으로 판단되어 개선 전략의 수립이 시급하다고 사료됨.
+
+# 공통 규칙
+- 제공 재료에 없는 사실·원인·수치를 추가하지 않는다. 제언은 객관적 뉘앙스("~제언함/~필요가 있음/~사료됨")로만 끝낸다.
+- 불릿은 "•", 소제목은 "[대괄호]", 화살표는 "→"만 쓴다. 핵심 수치·표현에만 **굵게**(한 줄 최대 1개).
+- 내부 집계 수치·필드명("clauseCount" 등)을 절대 출력하지 않는다.
+- 장 제목·인사말·데이터 없음 안내를 출력하지 않는다. 위 4개 "## 제목"과 그 본문만 출력한다.`;
+
+// sectionAnalyses가 전혀 없을 때(구버전 캐시 등)만 쓰는 축약 fallback 프롬프트 — 압축 대상이
+// 없으므로 정량+카테고리에서 최소한의 개조식 요약만 만든다(원본 형식 재현은 보장하지 않는다).
+const FALLBACK_SYSTEM_PROMPT = `당신은 사용성테스트 결과보고서 Ⅸ장 "결과 요약" 표를 작성합니다. 아직 장별 상세
+분석이 없어, 정량 수치와 정성 카테고리 인사이트만으로 항목별 개조식 요약을 만듭니다.
+각 항목 2~3개 불릿, 제공된 수치·인사이트만 사용, 제언은 객관적 뉘앙스로만("~제언함/추천함/필요가
+있음/요구됨/시급하다고 사료됨"). 아래 제목을 정확히 쓰고 입력에 있는 항목만 작성하세요:
+## 기능별 고객 경험 평가
+## 핵심구매요소
+## 4대 가치 만족도
+## 사용자 경험 품질 평가
+## 교차 분석
+## 종합 만족도 및 NPS 지수`;
+
+// Ⅸ.1은 Ⅲ.2보다 거친 3단계 표현어를 쓴다(원본 51쪽: 산책 imp 2.96="높은"·sat 6.35="낮은",
+// 성장 imp 1.37="높은"·sat 6.81="보통 수준의", 거점 imp 0.26="보통의"·sat 6.35="낮은",
+// 꾸미기 imp 0.23="낮은"·sat 7.20="높은"). 표현어를 모델이 즉흥으로 고르지 않게 코드에서 확정한다.
+function importanceLabel3(score: number): string {
+  if (score >= 1.0) return "높은";
+  if (score >= 0.25) return "보통의";
+  return "낮은";
 }
-function positiveInsights(qualitative: QuestionWithApprovedCategories[], questionKey: string, limit = 2): string[] {
-  return qualitative
-    .find((q) => q.question_key === questionKey)
-    ?.categories.filter((c) => c.polarity === "positive")
-    .slice(0, limit)
-    .map((c) => c.insight_final ?? c.insight_draft) ?? [];
+function satisfactionLabel3(mean: number): string {
+  if (mean >= 7.0) return "높은";
+  if (mean >= 6.5) return "보통 수준의";
+  return "낮은";
 }
 
-/** 정량 통계 + 저장된 카테고리 인사이트를 결과 요약 프롬프트 입력(항목별)으로 조립한다.
- * 존재하는 항목만 담으므로 제품형에 따라 항목 집합이 달라진다. */
+/** Ⅸ.1 "기능별 고객 경험 평가" 행 재료 — Ⅲ.2의 우선/차우선 tier만(비우선 제외). 원본 표현어·판정
+ * 후보를 코드에서 확정해 넘기고, 개선 동작으로 바꿀 부정 카테고리 라벨을 재료로 준다. */
+function buildFeatureRowMaterial(stats: QuantStats, qualitative: QuestionWithApprovedCategories[]): Record<string, unknown>[] {
+  const ranked = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
+  const total = ranked.length;
+  const firstGroupSize = Math.ceil(total / 3);
+  const secondGroupSize = Math.ceil((total - firstGroupSize) / 2);
+  return ranked.slice(0, firstGroupSize + secondGroupSize).map((item, index) => {
+    const mean = stats.featureSatisfaction.find((f) => f.name === item.name)?.mean ?? 0;
+    const tier = index < firstGroupSize ? "우선" : "차우선";
+    const negatives = qualitative
+      .find((q) => q.question_key === `feature:${item.name}`)
+      ?.categories.filter((c) => c.polarity === "negative")
+      .slice(0, 3)
+      .map((c) => c.label) ?? [];
+    return {
+      기능명: item.name,
+      중요도표현: importanceLabel3(item.score),
+      만족도표현: satisfactionLabel3(mean),
+      tier,
+      // 우선 tier의 판정 후보 2종, 차우선 tier의 판정 후보 2종(원본 51쪽 문구)
+      판정후보: tier === "우선"
+        ? ["우선 개선 필요", "핵심 기능 개선 대상으로 설정"]
+        : ["차우선 개선 제안", "보완적 차우선 개선 필요"],
+      개선항목_후보: negatives,
+    };
+  });
+}
+
+/** Ⅸ.1 "4대 가치 만족도" 행 재료 — 원본 51쪽처럼 가치마다 [가치명]+긍정/개선 요지로 압축하기
+ * 위해 per-value 긍정·개선 요지를 준다(원본 순서: 기능적→심미적→경제적→사회·공공적). */
+function buildFourValuesRowMaterial(stats: QuantStats, qualitative: QuestionWithApprovedCategories[]): Record<string, unknown>[] {
+  const requiredInsights = (questionKey: string, polarity: "positive" | "negative", limit: number) =>
+    qualitative.find((q) => q.question_key === questionKey)?.categories
+      .filter((c) => c.polarity === polarity).slice(0, limit)
+      .map((c) => (c.insight_final ?? c.insight_draft).trim()).filter(Boolean) ?? [];
+  return [
+    { key: "values:functional", label: "기능적 가치" },
+    { key: "values:aesthetic", label: "심미적 가치" },
+    { key: "values:economic", label: "경제적 가치" },
+    { key: "values:social", label: "사회·공공적 가치" },
+  ].map((v) => ({
+    가치명: v.label,
+    긍정요지: requiredInsights(v.key, "positive", 2),
+    개선요지: requiredInsights(v.key, "negative", 3),
+  }));
+}
+
+/** 정량 통계 + (있으면) 저장된 섹션 텍스트를 결과 요약 프롬프트 입력으로 조립한다.
+ * 사용자 경험 품질·교차 분석 행은 LLM이 만들지 않고 runResultSummary가 앞장 종합해석을
+ * 그대로 붙이므로 여기 입력에서도 제외한다(원본 52쪽이 이 두 행만 앞장 종합해석 전문을
+ * 그대로 옮기기 때문 — 압축하면 원본보다 내용이 크게 줄어든다). */
 export function buildResultSummaryInput(
   quantStats: QuantStats,
   qualitative: QuestionWithApprovedCategories[],
   productType: ProductType,
+  sectionAnalyses?: SectionAnalyses | null,
 ): Record<string, unknown> {
   const input: Record<string, unknown> = {};
+  input["기능별_행_재료"] = buildFeatureRowMaterial(quantStats, qualitative);
 
-  input["기능별 고객 경험 평가"] = quantStats.featureSatisfaction.map((f) => {
-    const importance = quantStats.relativeImportance.find((r) => r.name === f.name)?.score ?? null;
-    return {
-      기능명: f.name,
-      평균만족도: f.mean,
-      상대중요도: importance,
-      대표_부정_인사이트: negativeInsights(qualitative, `feature:${f.name}`),
-    };
-  });
+  // 핵심구매요소 행: 원본 51쪽처럼 "N명 중 X%가 상위3(요인명(%))을 선택" 문장을 만들 재료.
+  const n = quantStats.respondentCount;
+  const sortedFactors = [...quantStats.keyFactorDistribution].sort((a, b) => b.percentage - a.percentage);
+  input["핵심구매요소_재료"] = {
+    응답자수: n,
+    상위3: sortedFactors.slice(0, 3).map((k) => ({ 요인명: shortenFactorLabel(k.label), 명: Math.round((k.percentage / 100) * n), 비율: k.percentage })),
+    상위3합계비율: Math.round(sortedFactors.slice(0, 3).reduce((s, k) => s + k.percentage, 0) * 10) / 10,
+  };
+  // 4대 가치 행: per-value 긍정/개선 요지(원본 순서 고정).
+  input["4대가치_재료"] = buildFourValuesRowMaterial(quantStats, qualitative);
 
-  input["핵심구매요소"] = [...quantStats.keyFactorDistribution]
-    .sort((a, b) => b.percentage - a.percentage)
-    .map((k, i) => ({ 요인명: k.label, 순위: i + 1, 비율: k.percentage }));
-
-  input["4대 가치 만족도"] = [
-    { key: "values:functional", label: "기능적 가치", stat: quantStats.fourValues.functional },
-    { key: "values:aesthetic", label: "심미적 가치", stat: quantStats.fourValues.aesthetic },
-    { key: "values:economic", label: "경제적 가치", stat: quantStats.fourValues.economic },
-    { key: "values:social", label: "사회·공공적 가치", stat: quantStats.fourValues.social },
-  ].map((v) => ({
-    가치명: v.label,
-    평균: v.stat.mean,
-    대표_긍정_인사이트: positiveInsights(qualitative, v.key),
-    대표_부정_인사이트: negativeInsights(qualitative, v.key),
-  }));
-
-  if (productType === "sw") {
-    input["사용자 경험 품질 평가"] = {
-      실용성: quantStats.uxQuality.usability.map((u) => ({ 항목: u.name, 평균: u.mean })),
-      즐거움: quantStats.uxQuality.fun.map((u) => ({ 항목: u.name, 평균: u.mean })),
-    };
-    input["교차 분석"] = quantStats.crossAnalysis;
-  }
-
-  input["종합 만족도 및 NPS 지수"] = {
-    종합만족도평균: quantStats.overallSatisfaction.mean,
+  // 원본 52쪽 [종합 만족도 개선 필요]의 "중립 고객(39%)"은 NPS passives(35%)가 아니라 종합만족도
+  // 7~8점 구간 비율이다(원본 44쪽). 분포가 있으면 그 값을, 없으면(구버전) NPS passives로 대체한다.
+  const dist = quantStats.overallSatisfactionDistribution;
+  const distTotal = dist?.reduce((s, c) => s + c, 0) ?? 0;
+  const 종합만족도중립구간비율 = dist && distTotal > 0
+    ? Math.round(((dist[7] ?? 0) + (dist[8] ?? 0)) / distTotal * 100)
+    : quantStats.nps.passivePct;
+  input["NPS_수치"] = {
+    종합만족도평균: quantStats.overallSatisfaction.mean.toFixed(2),
+    종합만족도중립구간비율,
     NPS점수: quantStats.nps.npsScore,
     구매고객비율: quantStats.nps.promoterPct,
     중립고객비율: quantStats.nps.passivePct,
@@ -112,20 +186,118 @@ export function buildResultSummaryInput(
   return input;
 }
 
+/** UX 품질 섹션 텍스트에서 "[종합 해석]" 블록만 뽑는다([세부 해석] 앞까지). 원본 52쪽 결과요약의
+ * "사용자 경험 품질 평가" 행은 이 종합해석 전문을 그대로 옮긴다. */
+function uxOverviewOnly(uxText: string): string {
+  const detailIndex = uxText.indexOf("[세부 해석]");
+  const overview = (detailIndex >= 0 ? uxText.slice(0, detailIndex) : uxText).trim();
+  // 섹션 헤더가 배너로 이미 있으므로 "[종합 해석]" 라벨 줄은 뺀다.
+  return overview.replace(/^\[종합 해석\]\s*/u, "").trim();
+}
+
+/** 교차분석 원문에서 연령대·성별의 "[종합 분석]" 부분만 뽑아 원본 52쪽 결과요약 형식
+ * ("[연령대별 차이] … [성별에 따른 차이] …")으로 재조립한다. */
+function crossSummaryOnly(crossText: string): string {
+  const { age, gender } = splitCrossAnalysisText(crossText);
+  const jonghap = (part: string): string => {
+    const idx = part.indexOf("[종합 분석]");
+    return idx >= 0 ? part.slice(idx + "[종합 분석]".length).trim() : "";
+  };
+  const ageJong = jonghap(age);
+  const genderJong = jonghap(gender);
+  const blocks: string[] = [];
+  if (ageJong) blocks.push(`[연령대별 차이]\n${ageJong}`);
+  if (genderJong) blocks.push(`[성별에 따른 차이]\n${genderJong}`);
+  return blocks.join("\n\n");
+}
+
+/** sectionAnalyses가 아예 없을 때(구버전 캐시)만 쓰는 fallback 입력 — 예전 raw 조립 방식. */
+function buildFallbackInput(
+  quantStats: QuantStats,
+  qualitative: QuestionWithApprovedCategories[],
+  productType: ProductType,
+): Record<string, unknown> {
+  const negativeInsights = (questionKey: string, limit = 3) =>
+    qualitative.find((q) => q.question_key === questionKey)?.categories
+      .filter((c) => c.polarity === "negative").slice(0, limit)
+      .map((c) => c.insight_final ?? c.insight_draft) ?? [];
+  const positiveInsights = (questionKey: string, limit = 2) =>
+    qualitative.find((q) => q.question_key === questionKey)?.categories
+      .filter((c) => c.polarity === "positive").slice(0, limit)
+      .map((c) => c.insight_final ?? c.insight_draft) ?? [];
+
+  const input: Record<string, unknown> = {
+    "기능별 고객 경험 평가": quantStats.featureSatisfaction.map((f) => ({
+      기능명: f.name,
+      평균만족도: f.mean,
+      상대중요도: quantStats.relativeImportance.find((r) => r.name === f.name)?.score ?? null,
+      대표_부정_인사이트: negativeInsights(`feature:${f.name}`),
+    })),
+    "핵심구매요소": [...quantStats.keyFactorDistribution]
+      .sort((a, b) => b.percentage - a.percentage)
+      .map((k, i) => ({ 요인명: shortenFactorLabel(k.label), 순위: i + 1, 비율: k.percentage })),
+    "4대 가치 만족도": [
+      { key: "values:functional", label: "기능적 가치", stat: quantStats.fourValues.functional },
+      { key: "values:aesthetic", label: "심미적 가치", stat: quantStats.fourValues.aesthetic },
+      { key: "values:economic", label: "경제적 가치", stat: quantStats.fourValues.economic },
+      { key: "values:social", label: "사회·공공적 가치", stat: quantStats.fourValues.social },
+    ].map((v) => ({
+      가치명: v.label, 평균: v.stat.mean,
+      대표_긍정_인사이트: positiveInsights(v.key), 대표_부정_인사이트: negativeInsights(v.key),
+    })),
+  };
+  if (productType === "sw") {
+    input["사용자 경험 품질 평가"] = {
+      실용성: quantStats.uxQuality.usability.map((u) => ({ 항목: u.name, 평균: u.mean })),
+      즐거움: quantStats.uxQuality.fun.map((u) => ({ 항목: u.name, 평균: u.mean })),
+    };
+    input["교차 분석"] = quantStats.crossAnalysis;
+  }
+  input["종합 만족도 및 NPS 지수"] = {
+    종합만족도평균: quantStats.overallSatisfaction.mean,
+    NPS점수: quantStats.nps.npsScore,
+    구매고객비율: quantStats.nps.promoterPct,
+    중립고객비율: quantStats.nps.passivePct,
+    비추천고객비율: quantStats.nps.detractorPct,
+  };
+  return input;
+}
+
 export async function runResultSummary(params: {
   quantStats: QuantStats;
   qualitative?: QuestionWithApprovedCategories[];
+  sectionAnalyses?: SectionAnalyses | null;
+  /** 재생성 실험·비용 추적용. 원본 대비 재생성 시 토큰/비용 기록에 쓴다(2026-07-30). */
+  onUsage?: (usage: ClaudeUsageLike) => void;
 }): Promise<string> {
   const productType = detectProductType(params.quantStats);
-  const input = buildResultSummaryInput(params.quantStats, params.qualitative ?? [], productType);
+  const hasSectionAnalyses = Boolean(
+    params.sectionAnalyses && Object.values(params.sectionAnalyses).some((value) => typeof value === "string" && value.trim()),
+  );
+  const input = hasSectionAnalyses
+    ? buildResultSummaryInput(params.quantStats, params.qualitative ?? [], productType, params.sectionAnalyses)
+    : buildFallbackInput(params.quantStats, params.qualitative ?? [], productType);
 
   const result = await generateText({
     model: anthropic(SUMMARY_MODEL),
-    system: SUMMARY_SYSTEM_PROMPT,
+    system: hasSectionAnalyses ? SUMMARY_SYSTEM_PROMPT : FALLBACK_SYSTEM_PROMPT,
     prompt: JSON.stringify(input, null, 2),
-    maxOutputTokens: 2500,
+    maxOutputTokens: 2000,
     reasoning: "none",
   });
   logClaudeUsage("result-summary", result.usage);
-  return result.text;
+  if (result.usage) params.onUsage?.(result.usage);
+
+  // 사용자 경험 품질·교차 분석 행은 LLM 압축 없이 앞장 종합해석을 그대로 붙인다(원본 52쪽 형식).
+  // sectionAnalyses가 있을 때만 append하며, 없으면 fallback 프롬프트가 이미 전 항목을 생성한다.
+  if (!hasSectionAnalyses || productType !== "sw") return result.text;
+  const parts = [result.text.trim()];
+  if (params.sectionAnalyses?.uxQuality) {
+    parts.push(`## 사용자 경험 품질 평가\n${uxOverviewOnly(params.sectionAnalyses.uxQuality)}`);
+  }
+  if (params.sectionAnalyses?.crossAnalysis) {
+    const cross = crossSummaryOnly(params.sectionAnalyses.crossAnalysis);
+    if (cross) parts.push(`## 교차 분석\n${cross}`);
+  }
+  return parts.join("\n\n");
 }

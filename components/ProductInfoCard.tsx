@@ -103,8 +103,8 @@ export function ProductInfoSavedCard({
 
   return (
     <div className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4 text-base text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
-      <p className="text-base font-semibold">기업 정보를 저장했습니다</p>
-      <ProductInfoFieldList info={output.saved} />
+      <p className="text-base font-semibold">기업/제품 정보를 보고서에 반영했습니다.</p>
+      <p className="mt-1 text-sm">다음으로 보고서 목차를 확인해주세요.</p>
     </div>
   );
 }

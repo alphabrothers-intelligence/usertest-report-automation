@@ -25,6 +25,9 @@ const allowedStyleProperties = new Set([
   "text-decoration", "text-align", "line-height", "margin", "margin-top",
   "margin-right", "margin-bottom", "margin-left", "padding", "padding-top",
   "padding-right", "padding-bottom", "padding-left", "text-indent",
+  // 원본 보고서형 분석 박스의 제목띠·테두리는 편집 가능한 본문 안에서도 유지되어야 한다.
+  "border", "border-top", "border-right", "border-bottom", "border-left",
+  "border-collapse", "width", "table-layout", "vertical-align",
 ]);
 
 function sanitizeStyle(value: string): string {

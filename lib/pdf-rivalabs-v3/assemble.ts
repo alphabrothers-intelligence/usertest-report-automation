@@ -50,7 +50,7 @@ export async function assembleReport(fileUrl: string): Promise<AssembleResult> {
     getStrategicInput(report.id),
   ]);
 
-  const resultSummary = report.result_summary ?? (await runResultSummary({ quantStats: report.quant_stats, qualitative: questions }));
+  const resultSummary = report.result_summary ?? (await runResultSummary({ quantStats: report.quant_stats, qualitative: questions, sectionAnalyses: report.section_analyses }));
   if (!report.result_summary) await saveReportResultSummary(report.id, resultSummary);
 
   registerFonts();

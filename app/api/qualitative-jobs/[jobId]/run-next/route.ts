@@ -10,7 +10,7 @@ import {
   failQualitativeSectionAnalysisRun,
   saveQualitativeJobUsage,
 } from "@/lib/db/qualitativeJobs";
-import { getReportById, saveQualitativeQuestionResult } from "@/lib/db/reports";
+import { getReportById, getQuestionsWithAllCategories, saveQualitativeQuestionResult, saveRecommendation } from "@/lib/db/reports";
 import { detectProductType } from "@/lib/report/productType";
 import { loadWallaFromUrl } from "@/lib/walla/loadFromUrl";
 import { normalizeWallaRows } from "@/lib/walla/normalize";
@@ -21,6 +21,8 @@ import {
   type QualitativeStage1Checkpoint,
 } from "@/lib/pipeline/orchestrate";
 import { runSectionAnalysesForReport } from "@/lib/pipeline/sectionAnalysis";
+import { runDevPriorityRecommendation } from "@/lib/pipeline/recommendation";
+import { runFeatureCustomerRecommendations } from "@/lib/pipeline/customerRecommendations";
 import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 
 // 한 호출은 Stage1 또는 Stage2 하나만 처리한다. Vercel의 요청 제한보다 작은 작업 단위다.
@@ -41,7 +43,9 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
     if (item.phase === "stage1") {
       const loaded = await loadWallaFromUrl(job.file_url);
       if (!loaded.ok || !loaded.parsed || !loaded.validation?.valid) {
-        throw new Error(loaded.fetchError ?? "WALLA raw data를 다시 읽지 못했습니다.");
+        throw new Error(
+          loaded.fetchError ?? "원본 파일을 다시 읽지 못했습니다. 파일을 다시 첨부한 뒤 재시도해주세요.",
+        );
       }
       const records = normalizeWallaRows(loaded.parsed.headerRow, loaded.parsed.dataRows);
       const spec = buildQuestionSpecs(records).find((candidate) => candidate.id === item.question_key);
@@ -84,7 +88,7 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
         const report = await getReportById(job.report_id);
         const requested = report?.quant_stats && detectProductType(report.quant_stats) === "physical"
           ? ["corePurchaseFactor"] as const
-          : ["featureExperience", "corePurchaseFactor", "fourValues", "uxQuality"] as const;
+          : ["featureExperience", "corePurchaseFactor", "fourValues", "uxQuality", "crossAnalysis"] as const;
         const sectionUsages: ClaudeUsageRecord[] = [];
         const sectionRunIds = new Map<string, string>();
         const generated = await runSectionAnalysesForReport(job.report_id, {
@@ -128,6 +132,55 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
       } catch (sectionError) {
         console.error("[qualitative-job] 섹션 분석 후속 단계 실패", sectionError);
         sectionAnalyses = { status: "partial", completed: [], failed: ["section-analysis"] };
+      }
+
+      // Ⅸ.2 개선 전략 제언 · Ⅸ.3 기능별 고객 제언 종합 — 둘 다 이미 저장된 정량+정성 결과만
+      // 재료로 쓰므로(2026-07-30 신규), 위 섹션 분석과 마찬가지로 실패해도 Stage1·Stage2 상태를
+      // 되돌리지 않도록 별도로 격리한다. 체크포인트 B 대상②라 초안 상태로 저장될 뿐, 승인 전엔
+      // 최종 문서에 반영되지 않는다(assembleReport의 게이트가 그대로 지킨다).
+      try {
+        const report = await getReportById(job.report_id);
+        if (report?.quant_stats) {
+          const qualitative = await getQuestionsWithAllCategories(job.report_id);
+          const productType = detectProductType(report.quant_stats);
+          const recUsages: ClaudeUsageRecord[] = [];
+
+          // Promise.all은 한쪽이 스키마 검증 실패 등으로 reject하면 이미 성공해 비용을 지불한
+          // 다른 쪽 결과까지 버린다(2026-07-30 실측 — Ⅸ.3 스키마 실패로 Ⅸ.2가 저장 전에 유실됨).
+          // allSettled로 서로 독립적으로 저장해, 한쪽이 실패해도 다른 쪽 결과는 지킨다.
+          const [devPriorityResult, featureCustomerResult] = await Promise.allSettled([
+            runDevPriorityRecommendation(report.quant_stats, qualitative, productType, (u) => recUsages.push(u)),
+            runFeatureCustomerRecommendations(report.quant_stats, qualitative, (u) => recUsages.push(u)),
+          ]);
+
+          if (devPriorityResult.status === "fulfilled") {
+            await saveRecommendation({ reportId: job.report_id, section: "dev_priority", draft: devPriorityResult.value });
+          } else {
+            console.error("[qualitative-job] Ⅸ.2 개발우선순위제언 생성 실패", devPriorityResult.reason);
+          }
+          if (featureCustomerResult.status === "fulfilled") {
+            await saveRecommendation({
+              reportId: job.report_id,
+              section: "feature_customer_recommendations",
+              draft: JSON.stringify(featureCustomerResult.value),
+            });
+          } else {
+            console.error("[qualitative-job] Ⅸ.3 기능별 고객 제언 종합 생성 실패", featureCustomerResult.reason);
+          }
+
+          try {
+            await Promise.all(recUsages.map((usage) => saveQualitativeJobUsage({
+              jobId,
+              itemId: null,
+              phase: "section_analysis",
+              usage,
+            })));
+          } catch (usageError) {
+            console.error("[qualitative-job] Ⅸ.2/Ⅸ.3 사용량 저장 실패", usageError);
+          }
+        }
+      } catch (recommendationError) {
+        console.error("[qualitative-job] Ⅸ.2/Ⅸ.3 자동 생성 실패", recommendationError);
       }
     }
 

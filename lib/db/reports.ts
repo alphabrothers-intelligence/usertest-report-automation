@@ -3,6 +3,23 @@ import type { QuantStats } from "@/lib/quant/compute";
 import type { PipelineResult, QuestionResult } from "@/lib/pipeline/orchestrate";
 import type { Polarity } from "@/lib/pipeline/stage1";
 import type { ProductInfo } from "@/lib/productInfo/types";
+import type { SectionAnalyses } from "@/lib/pipeline/sectionAnalysis";
+import { encodeImprovementLabel, type Stage2ImprovementOutput } from "@/lib/pipeline/stage2";
+
+/** 개선아이디어 2단 출력을 flat categories 행으로 펼친다(label에 대분류소분류 인코딩,
+ * 인사이트는 없으므로 빈 문자열). 렌더링·복잡도 집계는 decodeImprovementLabel로 복원한다. */
+function improvementCategoryRows(questionId: string, stage2: Stage2ImprovementOutput) {
+  return stage2.major_categories.flatMap((major) =>
+    major.subcategories.map((sub) => ({
+      question_id: questionId,
+      polarity: null as Polarity | null,
+      label: encodeImprovementLabel(major.label, sub.label),
+      clause_count: sub.clause_count,
+      quotes: sub.quotes,
+      insight_draft: "",
+    })),
+  );
+}
 
 export interface ReportRow {
   id: string;
@@ -21,12 +38,7 @@ export interface ReportRow {
 }
 
 /** reports.section_analyses jsonb의 형태. sectionAnalysis.ts의 SectionAnalyses와 동일. */
-export interface SectionAnalyses {
-  featureExperience?: string;
-  corePurchaseFactor?: string;
-  fourValues?: string;
-  uxQuality?: string;
-}
+export type { SectionAnalyses };
 
 /**
  * 제품 정보(PRD 5.0절)는 raw data 업로드보다 먼저 대화에 나올 수 있어, quant_stats와
@@ -86,6 +98,27 @@ export async function upsertReportQuantStats(params: {
 export async function getReportByFileUrl(fileUrl: string): Promise<ReportRow | null> {
   const [row] = await sql<ReportRow[]>`select * from reports where file_url = ${fileUrl}`;
   return row ?? null;
+}
+
+export interface RecentReportSummary {
+  id: string;
+  file_name: string | null;
+  file_url: string;
+  updated_at: string;
+  company_name: string | null;
+}
+
+/** 채팅 좌측 "저장된 보고서" 목록용(2026-07-30 신규) — 정량 통계가 있어(=웹뷰어로 열 수 있는)
+ * report만 최신순으로 반환한다. 이 앱은 별도 로그인·사용자 구분이 없는 단일 팀용 내부 도구라
+ * 사용자별로 거르지 않고 전체를 보여준다. */
+export async function getRecentReports(limit = 30): Promise<RecentReportSummary[]> {
+  return sql<RecentReportSummary[]>`
+    select id, file_name, file_url, updated_at, product_info->>'companyName' as company_name
+    from reports
+    where quant_stats is not null
+    order by updated_at desc
+    limit ${limit}
+  `;
 }
 
 export async function getReportById(reportId: string): Promise<ReportRow | null> {
@@ -164,17 +197,8 @@ export async function saveQualitativeResults(
       const questionId = questionRow.id;
 
       if (q.kind === "improvement") {
-        if (q.stage2.categories.length > 0) {
-          const rows = q.stage2.categories.map((c) => ({
-            question_id: questionId,
-            polarity: null as Polarity | null,
-            label: c.label,
-            clause_count: c.clause_count,
-            quotes: c.quotes,
-            insight_draft: c.insight,
-          }));
-          await tx`insert into categories ${tx(rows)}`;
-        }
+        const rows = improvementCategoryRows(questionId, q.stage2);
+        if (rows.length > 0) await tx`insert into categories ${tx(rows)}`;
         continue;
       }
 
@@ -239,16 +263,8 @@ export async function saveQualitativeQuestionResult(
     await tx`delete from categories where question_id = ${questionId}`;
 
     if (q.kind === "improvement") {
-      if (q.stage2.categories.length > 0) {
-        await tx`insert into categories ${tx(q.stage2.categories.map((c) => ({
-          question_id: questionId,
-          polarity: null as Polarity | null,
-          label: c.label,
-          clause_count: c.clause_count,
-          quotes: c.quotes,
-          insight_draft: c.insight,
-        })))}`;
-      }
+      const rows = improvementCategoryRows(questionId, q.stage2);
+      if (rows.length > 0) await tx`insert into categories ${tx(rows)}`;
       return;
     }
 

@@ -43,7 +43,7 @@ export async function assembleReportDocx(
   // PDF 조립이 바로 앞에서 만든 동일한 요약을 받으면 재사용한다. PDF/DOCX를 동시에
   // 요청해 같은 Claude 요약을 두 번 만드는 낭비를 막되, 보고서 본문 내용은 바꾸지 않는다.
   // PDF를 거치지 않고 DOCX만 다시 만들 때도 저장된 요약을 우선 사용한다.
-  const resultSummary = suppliedResultSummary ?? report.result_summary ?? (await runResultSummary({ quantStats: report.quant_stats, qualitative: questions }));
+  const resultSummary = suppliedResultSummary ?? report.result_summary ?? (await runResultSummary({ quantStats: report.quant_stats, qualitative: questions, sectionAnalyses: report.section_analyses }));
   if (!suppliedResultSummary && !report.result_summary) await saveReportResultSummary(report.id, resultSummary);
 
   const doc = await buildReportDocx({

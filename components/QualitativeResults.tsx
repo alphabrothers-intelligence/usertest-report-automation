@@ -19,16 +19,34 @@ function CategoryList({ categories }: { categories: { label: string; clause_coun
 
 function QuestionAccordionItem({ q }: { q: QuestionResult }) {
   if (q.kind === "improvement") {
-    const totalCount = q.stage2.categories.reduce((sum, c) => sum + c.clause_count, 0);
+    // 2단 구조(대분류→소분류→인용): 개선 아이디어는 원본처럼 인사이트 없이 인용만 담는다.
+    const subCount = q.stage2.major_categories.reduce((sum, m) => sum + m.subcategories.length, 0);
+    const totalCount = q.stage2.major_categories.reduce(
+      (sum, m) => sum + m.subcategories.reduce((s, sub) => s + sub.clause_count, 0),
+      0,
+    );
     return (
       <details className="group border-b border-zinc-100 py-3 last:border-b-0 dark:border-zinc-800">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm">
           <span className="font-medium text-zinc-900 dark:text-zinc-50">{q.label}</span>
           <span className="text-sm text-zinc-500 dark:text-zinc-400">
-            카테고리 {q.stage2.categories.length}개 · {totalCount}건
+            대분류 {q.stage2.major_categories.length}개 · 소분류 {subCount}개 · {totalCount}건
           </span>
         </summary>
-        <CategoryList categories={q.stage2.categories} />
+        <div className="mt-1.5 space-y-2 text-sm leading-relaxed">
+          {q.stage2.major_categories.map((major) => (
+            <div key={major.label}>
+              <p className="font-semibold text-zinc-900 dark:text-zinc-50">[{major.label}]</p>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                {major.subcategories.map((sub) => (
+                  <li key={sub.label}>
+                    &lt;{sub.label}&gt; ({sub.clause_count}건)
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       </details>
     );
   }

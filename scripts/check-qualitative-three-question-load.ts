@@ -87,7 +87,7 @@ async function main() {
               stage2Polarities: Object.keys(question.stage2ByPolarity),
               stage2Failures: question.stage2Failures,
             }
-          : { categories: question.stage2.categories.length }),
+          : { majorCategories: question.stage2.major_categories.length, subcategories: question.stage2.major_categories.reduce((s, m) => s + m.subcategories.length, 0) }),
       })),
       failedQuestionCount: result.failedQuestionCount,
       failedQuestions: result.failedQuestions,

@@ -14,6 +14,7 @@ import { isVerbatimClause, type Polarity } from "./stage1";
 import {
   Stage2CombinedOutputSchema,
   Stage2ImprovementOutputSchema,
+  type Stage2ImprovementOutput,
   type Stage2Output,
 } from "./stage2";
 import { streamStructured, withClaudeGuard } from "./claudeGuard";
@@ -52,14 +53,33 @@ const FAST_STANDARD_SYSTEM = `당신은 사용성테스트 결과보고서 작�
 - 보고서 개조식 문체로 "~필요함", "~확인됨", "~사료됨"처럼 종결하고, 각 줄은 110자 이내로 간결하게 씁니다.
 - NPS가 아닌 문항에서는 nps_judgment를 절대 만들지 마세요.`;
 
-const FAST_IMPROVEMENT_SYSTEM = `당신은 사용성테스트 결과보고서 작성 애널리스트입니다.
-자유서술 개선 아이디어 전체를 실제 언급된 구체적 주제·맥락별로 4~8개 카테고리로 정리하세요.
-내부적으로 의미 단위 수를 세되 개별 절 목록은 출력하지 마세요.
-quotes는 입력 reason에 문자 그대로 연속해 등장하는 문장만 1~2개 선택하고, 의역·교정·결합은
-금지합니다. insight는 한 줄의 관찰·시사점이며 화살표 기호를 넣지 마세요.
-insight는 보고서 개조식 문체로 명사형 종결만 씁니다("~함", "~강화", "~필요" 등) — "~다"로
-끝나는 서술형 문장은 쓰지 마세요.
-category.clause_count 합은 total_clause_count와 반드시 일치해야 합니다.`;
+// **2026-07-30 사용자 지시로 원본(리바랩스 45~49쪽) 대조에 맞춰 2단 구조로 재설계.**
+// 원본 "개선 아이디어 > 주요 의견 종합"은 [대분류] → <소분류> → 원문 인용 다수의 2단 계층이며
+// 인사이트가 없다. stage2.ts의 STAGE2_IMPROVEMENT_SYSTEM_PROMPT와 같은 방향이되, 이 고속 경로는
+// Stage1 절 분리 없이 원문 reason을 바로 받는다.
+const FAST_IMPROVEMENT_SYSTEM = `당신은 사용성테스트 결과보고서의 "개선 아이디어 > 주요 의견 종합" 섹션을 작성하는 애널리스트입니다.
+자유서술 개선 아이디어 응답을 실제 발행 보고서와 동일한 2단 계층으로 정리합니다.
+
+# 원본 형식 (반드시 이 2단 구조를 따를 것)
+[대분류]            ← major_categories[].label (대괄호는 렌더링에서 붙이므로 이름만)
+  <소분류>          ← subcategories[].label (홑화살괄호는 렌더링에서 붙이므로 이름만)
+    "원문 인용"      ← subcategories[].quotes (응답 원문 그대로, 소분류당 2~6개)
+    "원문 인용"
+
+# 작업 순서
+1. 전체 응답을 큰 주제(대분류) 5~8개로 나눕니다(예: 튜토리얼/가이드 고도화, 산책 기능/GPS,
+   버그/오류 개선, 콘텐츠 부족/개선 필요, 재화·보상 체계 개선, 펫 관련 기능 개선, UI/UX 등 —
+   실제 입력에 맞게 정합니다).
+2. 각 대분류를 구체적 맥락의 소분류 2~4개로 나눕니다(예: "산책 기능/GPS" 아래 "위치 정확도",
+   "지도 UI/편의성", "추가 기능 제안").
+3. 각 소분류에 대표 원문 인용을 **가능한 많이(2~6개)** 담습니다(3개로 제한하지 말 것).
+
+# 절대 규칙
+- **인사이트(요약 한 줄)를 쓰지 않습니다.** 이 섹션은 원문 인용 모음입니다.
+- quotes는 입력 reason에 문자 그대로 연속해 등장하는 문장만 선택하고, 의역·교정·결합은 금지합니다.
+- 한 응답이 여러 주제를 담으면 각 해당 소분류에 나눠 넣습니다(그래서 소분류 clause_count 합이
+  응답 수보다 클 수 있음). total_clause_count는 모든 소분류 clause_count의 합으로 채웁니다.
+- 대분류·소분류 이름에 대괄호/홑화살괄호를 직접 붙이지 않습니다(이름만).`;
 
 function filterVerifiedQuotes<T extends { categories: Array<{ quotes: string[] }> }>(
   output: T,
@@ -78,6 +98,31 @@ function assertCounts(output: { total_clause_count: number; categories: Array<{ 
   const count = output.categories.reduce((sum, category) => sum + category.clause_count, 0);
   if (count !== output.total_clause_count) {
     throw new Error(`${label} 절 집계 불일치: total ${output.total_clause_count}, 카테고리 합 ${count}`);
+  }
+}
+
+/** 개선아이디어 2단 출력에서 각 소분류의 quotes 중 원문에 verbatim으로 있는 것만 남긴다. */
+function filterImprovementQuotes(output: Stage2ImprovementOutput, reasons: string[]): Stage2ImprovementOutput {
+  return {
+    ...output,
+    major_categories: output.major_categories.map((major) => ({
+      ...major,
+      subcategories: major.subcategories.map((sub) => ({
+        ...sub,
+        quotes: sub.quotes.filter((quote) => reasons.some((reason) => isVerbatimClause(reason, quote))),
+      })),
+    })),
+  };
+}
+
+// 2단 구조에서는 한 응답이 여러 소분류에 걸쳐 나뉠 수 있어(원본도 동일 — 예: 튜토리얼+GPS를
+// 함께 언급한 응답), 소분류 clause_count 합이 응답 수를 초과하는 것이 정상이다. 따라서 표준
+// 문항의 assertCounts(엄격 일치)와 달리 여기서는 던지지 않고, 소분류·인용이 하나도 없는
+// 비정상 출력만 오류로 막는다.
+function assertImprovementCounts(output: Stage2ImprovementOutput, label: string) {
+  const subs = output.major_categories.flatMap((major) => major.subcategories);
+  if (subs.length === 0) {
+    throw new Error(`${label} 개선 아이디어 소분류가 비어 있습니다.`);
   }
 }
 
@@ -129,15 +174,16 @@ export async function runFastReportAnalysis(
       // 서버리스 함수 제한(maxDuration=300초, app/api/qualitative-jobs/[jobId]/run-next/route.ts)
       // 안에 60초 여유를 두고 들어와야 하기 때문이다.
       hardTimeoutMs: 120_000,
-      maxOutputTokens: 6000,
+      // 2단 구조 + 소분류당 인용 다수라 예전 평면 구조(6000)보다 출력이 크다 — 넉넉히 상향.
+      maxOutputTokens: 12000,
       reasoning: "none",
     }, traceLabel), { onUsage: options.onUsage });
-    assertCounts(output, traceLabel);
+    assertImprovementCounts(output, traceLabel);
     return {
       id: spec.id,
       label: spec.label,
       kind: "improvement",
-      stage2: filterVerifiedQuotes(output, spec.inputs.map((input) => input.reason)),
+      stage2: filterImprovementQuotes(output, spec.inputs.map((input) => input.reason)),
     };
   }
 

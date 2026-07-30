@@ -255,36 +255,97 @@ export async function runStage2AllPolarities({
   return result;
 }
 
-/** PRD 6.6절 — 개선아이디어는 극성 구분 없이 카테고리화만 수행한다. */
+// PRD 6.6절 — 개선아이디어는 극성 구분 없이 카테고리화만 수행한다.
+// **2026-07-30 사용자 지시로 원본 보고서(리바랩스 45~49쪽) 대조에 맞춰 2단 구조로 재설계.**
+// 원본 "개선 아이디어 > 주요 의견 종합"은 [대분류] → <소분류> → 원문 인용 다수의 2단 계층이며,
+// 인사이트(요약 한 줄)가 없다(순수 인용 taxonomy). 예전 1단 평면 구조(카테고리+인용3~4+인사이트)는
+// 원본과 형식·분량이 크게 달라 이 구조로 바꿨다. flat categories 테이블 저장을 위해
+// 저장 시 label을 "대분류소분류"로 인코딩한다(reports.ts) — decodeImprovementLabel 참고.
+export const Stage2ImprovementSubcategorySchema = z.object({
+  label: z.string().describe("소분류명 — 홑화살괄호 없이 이름만 (예: 설명 부족)"),
+  clause_count: z.number().describe("이 소분류에 속하는 전체 clause 개수"),
+  quotes: z.array(z.string()).describe("이 소분류에 속하는 verbatim 인용 2~6개(가능한 많이, 원문 그대로)"),
+});
+export const Stage2ImprovementMajorSchema = z.object({
+  label: z.string().describe("대분류명 — 대괄호 없이 이름만 (예: 튜토리얼/가이드 고도화)"),
+  subcategories: z.array(Stage2ImprovementSubcategorySchema),
+});
 export const Stage2ImprovementOutputSchema = z.object({
   total_clause_count: z.number(),
-  categories: z.array(CategorySchema),
+  major_categories: z.array(Stage2ImprovementMajorSchema),
 });
 
 export type Stage2ImprovementOutput = z.infer<typeof Stage2ImprovementOutputSchema>;
 
-const STAGE2_IMPROVEMENT_SYSTEM_PROMPT = `당신은 사용성테스트 결과보고서를 작성하는 애널리스트입니다.
-Stage1에서 문장 분리된 개선 아이디어 응답 절 목록을 받아, 실제
-발행되는 보고서와 동일한 형식으로 카테고리화합니다. 이 문항은 점수·극성
-구분이 없는 자유서술 개선 아이디어이므로, 극성과 무관하게 유사한
-주제·맥락을 가진 clause들을 그룹핑하세요.
+/** 저장 시 flat categories.label에 두 계층을 인코딩하는 구분자(유닛 세퍼레이터 — 본문에 안 나옴). */
+export const IMPROVEMENT_LABEL_SEP = "";
+export function encodeImprovementLabel(major: string, sub: string): string {
+  return `${major}${IMPROVEMENT_LABEL_SEP}${sub}`;
+}
+export function decodeImprovementLabel(label: string): { major: string; sub: string } {
+  const idx = label.indexOf(IMPROVEMENT_LABEL_SEP);
+  return idx >= 0 ? { major: label.slice(0, idx), sub: label.slice(idx + 1) } : { major: "", sub: label };
+}
+
+const STAGE2_IMPROVEMENT_SYSTEM_PROMPT = `당신은 사용성테스트 결과보고서의 "개선 아이디어 > 주요 의견 종합" 섹션을 작성하는 애널리스트입니다.
+Stage1에서 문장 분리된 개선 아이디어 응답 절 목록을 받아, 실제 발행 보고서와 동일한 2단 계층으로
+정리합니다. 이 문항은 점수·극성 구분이 없는 자유서술이므로, 극성과 무관하게 주제로 묶습니다.
+
+# 원본 형식 (반드시 이 2단 구조를 따를 것)
+[대분류]            ← major_categories[].label (대괄호는 렌더링에서 붙이므로 이름만)
+  <소분류>          ← subcategories[].label (홑화살괄호는 렌더링에서 붙이므로 이름만)
+    "원문 인용"      ← subcategories[].quotes (사용자 응답 원문 그대로, 소분류당 2~6개)
+    "원문 인용"
+  <소분류>
+    ...
+[대분류]
+  ...
 
 # 작업 순서
-1. 유사한 주제·맥락을 가진 clause들을 그룹핑합니다.
-2. 각 그룹에 대괄호 카테고리명을 붙입니다.
-3. 각 카테고리에서 가장 대표성 있고 구체적인 인용문을 2~4개 선택합니다.
-4. 각 카테고리 마지막에 인사이트 한 줄을 씁니다. 인사이트는 관찰·시사점
-   톤으로 쓰고, 화살표 기호는 붙이지 마세요.
-
-# 카테고리 세분화 지침
-큰 대분류로 뭉뚱그리지 말고, 실제 언급된 구체적 대상·맥락 단위로
-세분화하세요. clause 개수가 너무 적은 경우 유사 카테고리에 합치거나
-"기타" 성격 카테고리로 묶어도 됩니다.
+1. 전체 clause를 큰 주제(대분류) 5~8개로 나눕니다. 원본 예시 대분류: 튜토리얼/가이드 고도화,
+   산책 기능/GPS, 버그/오류 개선, 콘텐츠 부족/개선 필요, 재화·보상 체계 개선, 펫 관련 기능 개선,
+   UI/UX 등 — 실제 입력 내용에 맞게 정합니다.
+2. 각 대분류를 구체적 맥락의 소분류 2~4개로 나눕니다(예: 대분류 "산책 기능/GPS" 아래 소분류
+   "위치 정확도", "지도 UI/편의성", "추가 기능 제안").
+3. 각 소분류에 그 주제를 대표하는 원문 인용을 **가능한 많이(2~6개)** 담습니다. 원본은 소분류마다
+   실제 응답을 여러 개 나열하므로, 인용을 3개로 제한하지 말고 대표성 있는 것을 넉넉히 싣습니다.
 
 # 절대 규칙
-- quotes는 quote_verified=true인 입력에서만 verbatim으로 선택하세요. raw_clause가 있으면
-  그 값을, 없으면 analysis_clause 값을 인용하세요.
-- clause_count의 합은 total_clause_count와 일치해야 합니다.`;
+- **인사이트(요약 한 줄)를 쓰지 않습니다.** 이 섹션은 원문 인용 모음이지 해석이 아닙니다.
+- quotes는 quote_verified=true인 입력에서만 verbatim으로 선택합니다. raw_clause가 있으면 그 값을,
+  없으면 analysis_clause 값을 인용합니다. 새 문장을 만들거나 여러 절을 합치지 않습니다.
+- 한 응답이 여러 주제를 담으면 각 해당 소분류에 나눠 넣습니다(그래서 소분류 clause_count 합이
+  응답 수보다 클 수 있음). total_clause_count는 모든 소분류 clause_count의 합으로 채웁니다.
+- 대분류·소분류 이름에 대괄호/홑화살괄호를 직접 붙이지 않습니다(이름만).`;
+
+/** 개선아이디어 2단 출력에서 verify 안 된 인용만 제거한다(각 소분류의 quotes 대상). */
+function retainVerifiedImprovementQuotes(
+  output: Stage2ImprovementOutput,
+  clauses: Stage2ClauseInput[],
+): Stage2ImprovementOutput {
+  const approvedQuotes = new Set(
+    clauses.flatMap((clause) => {
+      const candidate = quoteCandidate(clause);
+      return candidate ? [candidate] : [];
+    }),
+  );
+  let removedCount = 0;
+  const major_categories = output.major_categories.map((major) => ({
+    ...major,
+    subcategories: major.subcategories.map((sub) => {
+      const quotes = sub.quotes.filter((quote) => {
+        const allowed = approvedQuotes.has(quote);
+        if (!allowed) removedCount += 1;
+        return allowed;
+      });
+      return { ...sub, quotes };
+    }),
+  }));
+  if (removedCount > 0) {
+    console.warn(`[qualitative] Stage2 improvement removed ${removedCount} quote(s) that did not exactly match verified raw text`);
+  }
+  return { ...output, major_categories };
+}
 
 export async function runStage2ImprovementIdea({
   questionLabel,
@@ -308,5 +369,5 @@ export async function runStage2ImprovementIdea({
     // 요청 전체·청크 타임아웃은 streamStructured가 일괄 적용한다.
   }, traceLabel));
 
-  return retainOnlyVerifiedQuotes(output, clauses);
+  return retainVerifiedImprovementQuotes(output, clauses);
 }

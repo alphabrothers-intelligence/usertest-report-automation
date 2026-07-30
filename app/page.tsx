@@ -23,6 +23,60 @@ import type { PipelineResult } from "@/lib/pipeline/orchestrate";
 import { QualitativeResultsAccordion } from "@/components/QualitativeResults";
 import { type HedgeViolation } from "@/components/RecommendationReview";
 
+interface RecentReportItem {
+  id: string;
+  fileName: string | null;
+  fileUrl: string;
+  updatedAt: string;
+  companyName: string | null;
+}
+
+/**
+ * 채팅 좌측 "저장된 보고서" 목록(2026-07-30 신규) — 웹뷰어에서 편집·저장한 보고서를 나중에
+ * 채팅으로 돌아왔을 때 다시 찾아 이어서 열 수 있게 한다. 클릭하면 report-workspace가 저장된
+ * 정량/정성 결과를 그대로 읽는 /viewer?source=<raw data URL>로 이동한다(재분석 없음).
+ */
+function RecentReportsSidebar() {
+  const [reports, setReports] = useState<RecentReportItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/reports", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data: { ok: boolean; reports?: RecentReportItem[] }) => {
+        if (!cancelled) setReports(data.reports ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setError("보고서 목록을 불러오지 못했습니다.");
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <aside className="hidden w-64 shrink-0 border-r border-[#e5e0d7] bg-[#faf9f6] px-3 py-7 lg:block">
+      <p className="mb-3 px-2 text-xs font-semibold uppercase tracking-wide text-[#9a9186]">저장된 보고서</p>
+      {error && <p className="px-2 text-sm text-[#a64d32]">{error}</p>}
+      {!error && reports === null && <p className="px-2 text-sm text-[#9a9186]">불러오는 중...</p>}
+      {!error && reports?.length === 0 && <p className="px-2 text-sm text-[#9a9186]">아직 저장된 보고서가 없습니다.</p>}
+      <ul className="space-y-0.5">
+        {reports?.map((r) => (
+          <li key={r.id}>
+            <Link
+              href={`/viewer?source=${encodeURIComponent(r.fileUrl)}`}
+              className="block rounded-lg px-2 py-2 text-sm text-[#3a342f] hover:bg-[#ece8df]"
+              title={r.fileName ?? undefined}
+            >
+              <span className="block truncate font-medium">{r.companyName || r.fileName || "이름 없는 보고서"}</span>
+              <span className="block text-xs text-[#9a9186]">{new Date(r.updatedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  );
+}
+
 interface ValidateInputOutput {
   fileName: string | null;
   valid: boolean;
@@ -60,10 +114,9 @@ function ValidateInputCard({
   if (!output.valid) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-4 text-base text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-        <p className="font-medium">
-          WALLA 표준 59컬럼 스키마와 일치하지 않습니다 (컬럼 {output.actualColumnCount}
-          /{output.expectedColumnCount}).
-        </p>
+        <p className="font-medium">이 파일은 현재 자동 분석에 바로 사용할 수 있는 응답 양식과 다릅니다.</p>
+        <p className="mt-1 text-sm">확인된 열 수: {output.actualColumnCount ?? "알 수 없음"}개 · 필요한 응답 구조: {output.expectedColumnCount ?? "알 수 없음"}개 항목</p>
+        <p className="mt-1 text-sm">파일을 다시 확인하거나, 질문 열 이름을 알려주시면 맞추는 방법을 안내해드릴게요.</p>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           {output.errors?.map((e) => (
             <li key={e.index}>
@@ -80,10 +133,10 @@ function ValidateInputCard({
   return (
     <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4 text-base text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
       <p className="font-medium">
-        {output.fileName ?? "raw data"} 파일을 정상적으로 받았습니다.
+        {output.fileName ?? "raw data"} 파일을 읽고 보고서에 필요한 응답 구조를 확인했습니다.
       </p>
       <p className="mt-1">
-        응답자 {output.respondentCount}명 · 59컬럼 스키마 일치
+        응답자 {output.respondentCount}명 · 그래프와 분석에 필요한 질문·응답 항목을 인식했습니다.
       </p>
       {output.featureNames && output.featureNames.length > 0 && (
         <p className="mt-1">기능: {output.featureNames.join(", ")}</p>
@@ -153,16 +206,18 @@ interface RunQualitativeAnalysisOutput extends Partial<PipelineResult> {
  * 경과 시간을 직접 보여주고, 예상 시간을 넘기면 안내 문구 자체를 바꿔서 "지금 상태가 정상
  * 범위인지"를 사용자가 스스로 판단할 수 있게 한다.
  */
-function useElapsedSeconds(): number {
-  const startRef = useRef<number | null>(null);
+function useElapsedSeconds(startedAt?: string | null): number {
+  const fallbackStartRef = useRef<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    if (startRef.current === null) startRef.current = Date.now();
-    const id = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - (startRef.current ?? Date.now())) / 1000));
-    }, 1000);
+    if (fallbackStartRef.current === null) fallbackStartRef.current = Date.now();
+    const parsedStart = startedAt ? Date.parse(startedAt) : Number.NaN;
+    const base = Number.isFinite(parsedStart) ? parsedStart : fallbackStartRef.current;
+    const update = () => setElapsed(Math.max(0, Math.floor((Date.now() - (base ?? Date.now())) / 1000)));
+    update();
+    const id = window.setInterval(update, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [startedAt]);
   return elapsed;
 }
 
@@ -175,7 +230,6 @@ function QualitativeAnalysisCard({
   output?: RunQualitativeAnalysisOutput;
   onGenerateReport: () => void;
 }) {
-  const elapsed = useElapsedSeconds();
   const [jobProgress, setJobProgress] = useState<{
     completed: number;
     failed: number;
@@ -185,6 +239,7 @@ function QualitativeAnalysisCard({
     completedAt: string | null;
   } | null>(null);
   const [jobError, setJobError] = useState<string | null>(null);
+  const elapsed = useElapsedSeconds(jobProgress?.startedAt);
 
   useEffect(() => {
     if (!output?.queued || !output.jobId) return;
@@ -275,14 +330,21 @@ function QualitativeAnalysisCard({
     };
     const done = progress.completed + progress.failed;
     const isFinished = ["completed", "completed_with_failures"].includes(progress.status);
+    const isTerminalFailure = ["failed", "cancelled"].includes(progress.status);
     const startedAt = progress.startedAt ? new Date(progress.startedAt).getTime() : null;
     const finishedAt = progress.completedAt ? new Date(progress.completedAt).getTime() : null;
-    // 완료된 작업은 DB에 기록된 시작·종료 시각으로 정확히 보여주고, 진행 중인 작업은
-    // 카드가 표시된 뒤의 실시간 경과 타이머를 보여준다(렌더 중 Date.now 호출 금지).
     const jobElapsedSeconds = startedAt && finishedAt
       ? Math.max(0, Math.floor((finishedAt - startedAt) / 1000))
       : elapsed;
     const elapsedLabel = `${Math.floor(jobElapsedSeconds / 60)}분 ${jobElapsedSeconds % 60}초`;
+    const statusLabel: Record<string, string> = {
+      queued: "분석 시작 준비 중",
+      running: "응답 내용 분석 중",
+      completed: "분석 완료",
+      completed_with_failures: "분석 완료 · 일부 문항 제외",
+      failed: "분석을 완료하지 못했습니다",
+      cancelled: "분석이 중단되었습니다",
+    };
     if (isFinished) {
       return (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4 text-base text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
@@ -295,14 +357,34 @@ function QualitativeAnalysisCard({
         </div>
       );
     }
-    return (
-      <div className="rounded-lg border border-sky-200 bg-sky-50 px-5 py-4 text-base text-sky-950 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
-        <p className="font-semibold">응답 내용 분석 진행 중 · {done}/{progress.total} 문항 완료</p>
-        <p className="mt-1 text-sm">서술형 답변을 바탕으로 긍정·부정·중립 반응과 고객 경험을 정리하고 있습니다. 경과 {elapsedLabel} · 보통 약 7~10분 걸리며, 완료된 문항부터 바로 저장합니다.</p>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-sky-100 dark:bg-sky-900">
-          <div className="h-full bg-sky-600 transition-all" style={{ width: `${Math.round((done / Math.max(progress.total, 1)) * 100)}%` }} />
+    if (isTerminalFailure) {
+      return (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-4 text-base text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-100">
+          <p className="font-semibold">{statusLabel[progress.status]} · {done}/{progress.total} 문항 처리</p>
+          <p className="mt-1 text-sm">경과 {elapsedLabel}. 원본 데이터와 그래프용 수치는 유지되어 있습니다. 다시 시도하면 완료된 문항부터 이어서 처리합니다.</p>
+          {jobError && <p className="mt-2 text-sm">{jobError}</p>}
         </div>
-        <p className="mt-2 text-xs text-sky-700 dark:text-sky-300">진행 상태: {progress.status}{progress.failed > 0 ? ` · 실패 ${progress.failed}문항` : ""}</p>
+      );
+    }
+    // 대기열 상태에서는 아직 어떤 문항도 처리되지 않았으므로 0%를 그대로 보여준다.
+    // 임의의 최소 폭을 주면 0/14인데도 진행된 것처럼 보여 사용자에게 혼란을 준다.
+    const progressPercent = progress.status === "queued"
+      ? 0
+      : Math.round((done / Math.max(progress.total, 1)) * 100);
+    return (
+      <div aria-live="polite" className="rounded-xl border border-sky-200 bg-sky-50 px-5 py-4 text-base text-sky-950 shadow-sm dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-semibold">{statusLabel[progress.status] ?? "응답 내용 분석 중"} · {done}/{progress.total} 문항 완료</p>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-sky-800 shadow-sm dark:bg-sky-950 dark:text-sky-100">경과 {elapsedLabel}</span>
+            <span className="rounded-full border border-sky-200 bg-white px-3 py-1 text-sm font-medium text-sky-700 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">예상 약 7~10분</span>
+          </div>
+        </div>
+        <p className="mt-1 text-sm">서술형 답변을 바탕으로 반응과 고객 경험을 정리하고 있습니다. 완료된 문항부터 바로 저장합니다.</p>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-sky-100 dark:bg-sky-900">
+          <div className={`h-full transition-all ${progress.status === "queued" ? "bg-amber-500" : "bg-sky-600"}`} style={{ width: `${progressPercent}%` }} />
+        </div>
+        <p className="mt-2 text-xs text-sky-700 dark:text-sky-300">진행률 {progressPercent}% · 상태: {statusLabel[progress.status] ?? "확인 중"}{progress.failed > 0 ? ` · 제외 ${progress.failed}문항` : ""}</p>
         {jobError && <p className="mt-2 text-sm text-red-700 dark:text-red-300">{jobError}</p>}
       </div>
     );
@@ -448,6 +530,7 @@ interface AssembleReportOutput {
 
 function AssembleReportCard({ state, output }: { state: string; output?: AssembleReportOutput }) {
   const router = useRouter();
+  const elapsed = useElapsedSeconds();
   const viewerHref = output?.pdfUrl
     ? `/viewer?pdf=${encodeURIComponent(output.pdfUrl)}${output.sourceFileUrl ? `&source=${encodeURIComponent(output.sourceFileUrl)}` : ""}`
     : "/viewer";
@@ -459,9 +542,23 @@ function AssembleReportCard({ state, output }: { state: string; output?: Assembl
   }, [output?.ok, output?.pdfUrl, router, state, viewerHref]);
 
   if (state !== "output-available") {
+    const stage = elapsed < 10
+      ? "보고서 구조를 정리하고 있습니다"
+      : elapsed < 30
+        ? "그래프와 표를 배치하고 있습니다"
+        : "PDF·DOCX·HWPX 파일을 만들고 있습니다";
+    const progress = elapsed < 10 ? 25 : elapsed < 30 ? 60 : 85;
     return (
-      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-5 py-4 text-base text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
-        최종 보고서 PDF 조립 중...
+      <div aria-live="polite" className="rounded-xl border border-[#b9d8f1] bg-[#f2f9ff] px-5 py-4 text-base text-[#173f5e] shadow-sm dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-semibold">최종 보고서를 만들고 있습니다</p>
+          <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-[#24577f] shadow-sm dark:bg-sky-950 dark:text-sky-100">경과 {Math.floor(elapsed / 60)}분 {elapsed % 60}초</span>
+        </div>
+        <p className="mt-1 text-sm">{stage}. 보통 수십 초에서 2분 정도 걸립니다.</p>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#dceefa] dark:bg-sky-900">
+          <div className="h-full bg-[#3b82b8] transition-all" style={{ width: `${progress}%` }} />
+        </div>
+        <p className="mt-2 text-xs text-[#457196] dark:text-sky-300">현재 단계 안내 · 생성이 끝나면 편집 화면으로 바로 이동합니다.</p>
       </div>
     );
   }
@@ -569,6 +666,30 @@ export default function Chat() {
         .join("\n");
       return !/^(다음 기업\/제품 정보를 저장해주세요\.|확인했어요, 이 기업 정보로 저장해주세요\.|이 목차\/섹션 구성에 동의합니다\.)/.test(text);
     });
+
+  // 단계 버튼을 눌러 새 카드나 응답이 추가되면, 사용자가 새 내용을 놓치지 않도록
+  // 가장 최근 대화의 시작 위치로 자연스럽게 이동한다. 텍스트 스트리밍의 매 글자마다
+  // 화면이 흔들리지 않도록 텍스트 본문 대신 메시지/도구 상태 변화만 감지한다.
+  const latestMessage = messages.at(-1);
+  const latestMessageStateSignature = latestMessage
+    ? latestMessage.parts
+        .map((part) => {
+          const toolPart = part as { type: string; state?: string };
+          return `${toolPart.type}:${toolPart.state ?? ""}`;
+        })
+        .join("|")
+    : "";
+  const latestMessageRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!latestMessage?.id) return;
+
+    const timer = window.setTimeout(() => {
+      latestMessageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [latestMessage?.id, latestMessageStateSignature]);
 
   function handleUploaded(file: UploadedFile) {
     setShowAttachHint(false);
@@ -691,7 +812,9 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-[#f7f6f2]">
+    <div className="flex min-h-screen bg-[#f7f6f2]">
+      <RecentReportsSidebar />
+      <div className="flex min-w-0 flex-1 flex-col items-center">
       <div className="flex w-full min-w-0 max-w-5xl flex-1 flex-col px-4 py-7">
         <div className="mb-8 flex items-center justify-between border-b border-[#e5e0d7] pb-4">
           <h1 className="text-lg font-semibold tracking-[-0.02em] text-[#2f2a26]">사용성테스트 결과보고서</h1>
@@ -699,23 +822,33 @@ export default function Chat() {
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-4 pb-32">
-          {messages.map((message) => (
+          {messages.map((message, messageIndex) => (
             <div
               key={message.id}
+              ref={messageIndex === messages.length - 1 ? latestMessageRef : undefined}
               className={`min-w-0 whitespace-pre-wrap break-words text-base ${
                 message.role === "user"
                   ? "self-end max-w-[82%] rounded-2xl rounded-br-md bg-[#e4a17e] px-4 py-3 text-white shadow-sm"
                   : "self-start w-full max-w-4xl text-[#302b27]"
               }`}
             >
-              {message.parts.map((part, i) => {
+              {(() => {
+                // 분석 등록 직후에는 모델이 일반 텍스트로 "완료"라고 잘못 설명해도 카드의 실제
+                // DB 상태와 충돌하면 안 된다. 이 턴은 상태 카드만 보여주고, 다음 행동은 카드가
+                // 완료 상태일 때만 노출한다.
+                const hasQualitativeJobCard = message.parts.some(
+                  (part) =>
+                    part.type === "tool-runQualitativeAnalysis" &&
+                    "output" in part &&
+                    Boolean((part.output as RunQualitativeAnalysisOutput | undefined)?.queued),
+                );
+
+                return message.parts.map((part, i) => {
                 if (part.type === "text") {
                   if (message.role !== "user") {
+                    if (hasQualitativeJobCard) return null;
                     return (
-                      <div key={i} className="flex max-w-3xl gap-3 py-1">
-                        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#315c9c] text-xs font-bold text-white" aria-hidden>
-                          AI
-                        </span>
+                      <div key={i} className="max-w-3xl py-2 text-[15px] leading-7 text-[#3a342f]">
                         <ChatMarkdown text={part.text} />
                       </div>
                     );
@@ -889,14 +1022,16 @@ export default function Chat() {
                   );
                 }
                 return null;
-              })}
+                });
+              })()}
             </div>
           ))}
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 flex w-full justify-center bg-gradient-to-t from-zinc-50 from-60% to-transparent pb-6 pt-10 dark:from-black">
+      <div className="fixed bottom-0 left-0 flex w-full justify-center bg-gradient-to-t from-zinc-50 from-60% to-transparent pb-6 pt-10 dark:from-black lg:left-64 lg:w-[calc(100%-16rem)]">
         {composerForm}
+      </div>
       </div>
     </div>
   );

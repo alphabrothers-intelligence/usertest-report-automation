@@ -81,11 +81,12 @@ async function main() {
 
   for (const q of result.questions) {
     if (q.kind === "improvement") {
-      const catSum = q.stage2.categories.reduce((a, c) => a + c.clause_count, 0);
+      const subs = q.stage2.major_categories.flatMap((m) => m.subcategories);
+      const catSum = subs.reduce((a, c) => a + c.clause_count, 0);
       const countOk = catSum === q.stage2.total_clause_count;
       if (!countOk) clauseCountMismatch += 1;
       console.log(
-        `- [${q.id}] 카테고리 ${q.stage2.categories.length}개, clause_count 합계 일치: ${countOk ? "PASS" : `FAIL(${catSum}≠${q.stage2.total_clause_count})`}`,
+        `- [${q.id}] 대분류 ${q.stage2.major_categories.length}개·소분류 ${subs.length}개, clause_count 합계 일치: ${countOk ? "PASS" : `FAIL(${catSum}≠${q.stage2.total_clause_count})`}`,
       );
       continue;
     }

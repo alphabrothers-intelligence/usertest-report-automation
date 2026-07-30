@@ -39,7 +39,7 @@ export async function assembleReport(fileUrl: string): Promise<AssembleResult> {
 
   // 재렌더링은 Claude 분석이 아니라 순수 PDF 레이아웃 작업이다. 이미 생성·확정된 요약이
   // 있으면 그대로 사용하고, 없을 때만 한 번 생성해 reports에 캐시한다.
-  const resultSummary = report.result_summary ?? (await runResultSummary({ quantStats: report.quant_stats, qualitative: questions }));
+  const resultSummary = report.result_summary ?? (await runResultSummary({ quantStats: report.quant_stats, qualitative: questions, sectionAnalyses: report.section_analyses }));
   if (!report.result_summary) await saveReportResultSummary(report.id, resultSummary);
 
   registerFonts();

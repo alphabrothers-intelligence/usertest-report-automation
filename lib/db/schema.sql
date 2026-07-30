@@ -176,7 +176,7 @@ create table if not exists qualitative_section_analysis_runs (
   id uuid primary key default gen_random_uuid(),
   job_id uuid not null references qualitative_jobs(id) on delete cascade,
   report_id uuid not null references reports(id) on delete cascade,
-  section_key text not null check (section_key in ('featureExperience', 'corePurchaseFactor', 'fourValues', 'uxQuality')),
+  section_key text not null check (section_key in ('featureExperience', 'corePurchaseFactor', 'fourValues', 'uxQuality', 'crossAnalysis')),
   attempt int not null default 1,
   status text not null check (status in ('running', 'completed', 'failed')) default 'running',
   started_at timestamptz not null default now(),
@@ -191,3 +191,20 @@ create index if not exists qualitative_section_analysis_runs_job_id_idx
   on qualitative_section_analysis_runs(job_id, created_at);
 create index if not exists qualitative_section_analysis_runs_report_id_idx
   on qualitative_section_analysis_runs(report_id, created_at);
+
+-- 2026-07-30: Ⅶ 교차분석 텍스트 해석(crossAnalysis)이 섹션 분석 5번째 종류로 추가되어
+-- section_key 체크 제약을 넓힌다. create table if not exists는 기존 테이블에 재적용되지
+-- 않으므로, 이미 배포된 환경에서도 idempotent하게 갱신되도록 별도 alter로 둔다.
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+    where conname = 'qualitative_section_analysis_runs_section_key_check'
+  ) then
+    alter table qualitative_section_analysis_runs
+      drop constraint qualitative_section_analysis_runs_section_key_check;
+  end if;
+  alter table qualitative_section_analysis_runs
+    add constraint qualitative_section_analysis_runs_section_key_check
+    check (section_key in ('featureExperience', 'corePurchaseFactor', 'fourValues', 'uxQuality', 'crossAnalysis'));
+end $$;

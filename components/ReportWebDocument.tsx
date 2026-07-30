@@ -328,7 +328,12 @@ function FormatButton({ label, title, onApply, className }: { label: string; tit
  * 예전엔 같은 동작이 섹션 카드 하단에 인라인 버튼으로 있었다). */
 function ActionPanel({ onCopy, onDownload, selectedBlock, onBlockChange }: { onCopy: () => void; onDownload: () => void; selectedBlock: ReportBlock | null; onBlockChange: (next: ReportBlock) => void }) {
   return (
-    <aside className="h-fit rounded-xl border border-[#d7dce8] bg-white shadow-sm lg:sticky lg:top-24">
+    // "선택 요소 편집"(예: 비교 집단이 많은 그룹 막대그래프)이 길어지면 sticky 패널 자체 높이가
+    // 뷰포트를 넘어서는데, sticky는 top 위치에 고정된 뒤로는 페이지 스크롤을 따라가지 않으므로
+    // 아래쪽 항목이 화면 밖으로 잘려서 영영 안 보였다(2026-07-30 사용자 실측 신고). 패널
+    // 자체에 최대 높이 + 내부 세로 스크롤을 줘서, 페이지와 별개로 패널 안에서 스크롤해
+    // 잘린 항목까지 내려갈 수 있게 한다.
+    <aside className="h-fit rounded-xl border border-[#d7dce8] bg-white shadow-sm lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
       {/* 헤더를 옅은 배경 밴드로 구분해 목차/본문 밴드와 톤을 맞췄다(2026-07-26, 기능 변경
           없음 — 참고 이미지의 카드형 우측 패널에서 헤더 구획감을 참고했다). */}
       <p className="rounded-t-xl border-b border-[#d7dce8] bg-[#f7f9fc] px-4 py-2.5 text-sm font-bold text-[#315c9c]">

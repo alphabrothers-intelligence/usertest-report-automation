@@ -16,7 +16,7 @@ import { buildQuestionSpecs } from "@/lib/pipeline/questions";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
 import { estimateQualitativeCallPlan, QUALITATIVE_MAX_CLAUDE_CALLS, QUALITATIVE_MAX_ESTIMATED_USD } from "@/lib/pipeline/orchestrate";
 import { runPolaritySummariesForReport } from "@/lib/pipeline/generatePolaritySummaries";
-import { runRecommendation } from "@/lib/pipeline/recommendation";
+import { runRecommendation, buildDevPriorityDataSummary } from "@/lib/pipeline/recommendation";
 import { runResultSummary } from "@/lib/pipeline/summary";
 import { checkHedgeWording } from "@/lib/pipeline/hedgeCheck";
 import { assembleReport } from "@/lib/pdf/assemble";
@@ -41,7 +41,7 @@ import {
   saveReportResultSummary,
   getQuestionsWithAllCategories,
 } from "@/lib/db/reports";
-import { createQualitativeJob } from "@/lib/db/qualitativeJobs";
+import { createQualitativeJob, getLatestQualitativeJobForReport } from "@/lib/db/qualitativeJobs";
 import { detectProductType } from "@/lib/report/productType";
 
 export const maxDuration = 300; // Vercel Fluid Compute 기본 실행시간 (PRD 10장)
@@ -53,7 +53,7 @@ const SYSTEM_PROMPT = `당신은 "사용성테스트 결과보고서 자동생�
 채팅으로 직접 알려주는 기업 정보도 받을 수 있습니다.
 
 # 현재 지원 범위
-- raw data 업로드 접수, WALLA 표준 59컬럼 스키마 검증, 그래프용 응답 수치·비율 계산, 서술형 응답 분석(14개 문항),
+- raw data 업로드 접수, 보고서용 응답 구조 검증, 그래프용 응답 수치·비율 계산, 서술형 응답 분석(14개 문항),
   결과요약·제언 생성, 기업/제품 정보 입력(직접 입력 또는 파일 추출), 최종 보고서 조립까지 지원합니다.
 - 정량 계산은 규칙 기반 도구가 수행하며, 당신은 그 결과를 임의로 재계산하거나 반올림을
   바꾸지 않습니다. raw data 없이 수치를 추정하거나 지어내지 마세요.
@@ -65,7 +65,7 @@ const SYSTEM_PROMPT = `당신은 "사용성테스트 결과보고서 자동생�
 카드가 표시된 도구는 사용자가 무슨 말을 하든 다시 호출하지 마세요 — "건너뛸게요" 같은 응답은
 그 카드의 다음 단계로 넘어가라는 신호일 뿐, 처음부터 다시 시작하라는 뜻이 아닙니다.
 
-1. 파일 URL이 첨부되면 validateInput으로 WALLA 59컬럼 스키마를 확인하세요. 실패하면 이유를
+1. 파일 URL이 첨부되면 validateInput으로 보고서용 응답 구조를 확인하세요. 실패하면 이유를
    설명하고 멈추세요.
 2. **validateInput이 성공하면 곧바로 presentProductInfoPrompt를 호출해 기업/제품 정보
    입력 카드를 보여주세요.** 이 카드는 사용자가 "건너뛰기" 버튼을 누르거나("건너뛸게요"),
@@ -94,14 +94,14 @@ const SYSTEM_PROMPT = `당신은 "사용성테스트 결과보고서 자동생�
    하기 위함입니다.
 5. **그래프용 수치 카드 다음에는 estimateQualitativeAnalysis를 내부적으로 호출하세요.** 사용자에게 비용·호출 수·검수 큐를 보이지 마세요. 점검을 통과하면 "서술형 답변을 바탕으로 긍정·부정·중립 반응, 고객 경험, 개선 의견을 정리할까요?"라고 물으세요. 사용자가 승인한 경우에만 runQualitativeAnalysis를 호출하세요.
    분석 진행 중에는 완료 문항 수와 진행 막대가 카드에서 표시됩니다. **분석 완료 후에는 getPolarityReviewQueue, getInsightReviewQueue, getRecommendationReviewQueue를 호출하지 마세요.** 검수는 이후 보고서 화면에서 사용자가 직접 수정할 수 있습니다.
-   완료 뒤에는 "분석이 완료되었습니다. 아래 ‘분석 결과를 바탕으로 보고서 만들기’ 버튼을 누르세요."라고 안내하세요. 긍정/부정/중립 요약은 사용자가 해당 보고서 칸에서 요청할 때만 생성합니다.
+   **runQualitativeAnalysis는 분석 작업을 등록할 뿐, 완료를 뜻하지 않습니다.** 등록 직후에는 절대 분석이 완료됐다고 말하거나 보고서를 만들라고 안내하지 마세요. 이때는 "응답 내용을 정리하고 있습니다. 카드에서 진행률과 경과 시간을 확인해주세요."라고만 안내하세요. 실제 완료 상태는 카드와 서버가 판단하며, 완료되기 전에는 보고서 생성 버튼이 표시되지 않습니다. 긍정/부정/중립 요약은 사용자가 해당 보고서 칸에서 요청할 때만 생성합니다.
 6. 사용자가 제언(핵심구매요소 해석, 개발우선순위, 기능개선제안)을 요청하면 generateRecommendation 또는 generateFeatureRecommendation을 호출하세요.
 7. **종합 전략 제언(7.3절)은 AI가 생성하지 않습니다.** 고객사 요청사항과 우선 고려 지표는
    사용자가 채팅으로 전달한 내용을 saveStrategicInput으로 그대로 저장하세요. 제언 초안도 원칙적으로
    담당자가 직접 씁니다 — 사용자가 명시적으로 "초안 도와줘"라고 요청했을 때만
    generateRecommendation(section="strategic_draft")으로 초안을 만들고, 반드시 "이건 초안이니
    전면 수정하셔도 됩니다"라고 안내하세요.
-8. 사용자가 "최종 보고서 만들어줘"처럼 명시적으로 요청하거나 완료 카드의 버튼을 누르면 assembleReportTool을 호출하세요.
+8. **응답 내용 분석 카드가 완료 상태일 때에만**, 사용자가 "최종 보고서 만들어줘"처럼 명시적으로 요청하거나 완료 카드의 버튼을 누르면 assembleReportTool을 호출하세요. 진행 중·대기 중에는 보고서 생성 안내나 버튼을 절대 제시하지 말고 진행 카드를 보도록 안내하세요.
    승인되지 않은 초안이 있어도 보고서 조립을 막지 마세요. 성공하면 pdfUrl·docxUrl·hwpxUrl을
    그대로 전달하고, 세 형식의 다운로드 링크임을 알려주세요(PDF는 최종 열람·인쇄용, DOCX와 HWPX는
    담당자가 직접 수정하고 싶을 때용 — 사용자가 먼저 물어보지 않아도 세 형식이 준비됐다고 안내하세요).
@@ -130,8 +130,18 @@ function hasCompletedTool(messages: UIMessage[], toolName: string): boolean {
   );
 }
 
+function getLatestUserText(messages: UIMessage[]): string {
+  const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
+  if (!latestUserMessage) return "";
+  return latestUserMessage.parts
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("\n")
+    .trim();
+}
+
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json();
+  const latestUserText = getLatestUserText(messages);
 
   const onceOnlyTools = ["validateInput", "presentProductInfoPrompt", "presentReportPlan"];
   const alreadyDoneNotes = onceOnlyTools
@@ -225,8 +235,8 @@ export async function POST(req: Request) {
     }),
     validateInput: tool({
       description:
-        "채팅에 첨부된 xlsx/csv raw data 파일이 WALLA 표준 59컬럼 스키마(SW/App형)와 일치하는지 검증한다. " +
-        "URL로 파일을 내려받아 헤더 행을 컬럼별로 대조한다.",
+        "채팅에 첨부된 xlsx/csv raw data 파일에서 보고서 생성에 필요한 질문·응답 구조를 확인한다. " +
+        "URL로 파일을 내려받아 헤더 행을 검증한다.",
       inputSchema: z.object({
         fileUrl: z.string().url().describe("Vercel Blob에 업로드된 raw data 파일의 URL"),
         fileName: z.string().optional().describe("원본 파일명"),
@@ -254,7 +264,7 @@ export async function POST(req: Request) {
     }),
     computeQuantStats: tool({
       description:
-        "검증된 WALLA raw data 파일의 정량 섹션(인적사항 분포, 기능별 만족도, 핵심구매요소 " +
+        "검증된 raw data 파일의 보고서 섹션(인적사항 분포, 기능별 만족도, 핵심구매요소 " +
         "상대중요도, 4대가치, UX품질, NPS·종합만족도)을 규칙 기반으로 계산하고 DB에 저장한다. " +
         "validateInput이 valid=true를 반환한 fileUrl에 대해서만 호출하며, presentReportPlan에 " +
         "사용자가 동의한 뒤에만 호출한다 — 목차 계획을 먼저 보여줘서 이 통계가 왜 지금 나오는지 " +
@@ -271,7 +281,7 @@ export async function POST(req: Request) {
         if (!loaded.validation.valid) {
           return {
             ok: false,
-            error: "WALLA 59컬럼 스키마와 일치하지 않는 파일입니다. validateInput 결과를 먼저 확인하세요.",
+            error: "보고서에 필요한 응답 구조를 찾지 못했습니다. 원본 파일의 질문과 응답 열을 다시 확인해주세요.",
           };
         }
 
@@ -307,7 +317,7 @@ export async function POST(req: Request) {
         return {
           ok: true,
           ready,
-          message: ready ? "정성 분석 준비가 완료되었습니다." : "현재 정성 분석을 시작할 수 없습니다. 관리자 확인이 필요합니다.",
+          message: ready ? "응답 내용 분석을 시작할 준비가 되었습니다." : "현재 응답 내용 분석을 시작할 수 없습니다. 관리자 확인이 필요합니다.",
         };
       },
     }),
@@ -360,7 +370,7 @@ export async function POST(req: Request) {
         if (!loaded.validation.valid) {
           return {
             ok: false,
-            error: "WALLA 59컬럼 스키마와 일치하지 않는 파일입니다. validateInput 결과를 먼저 확인하세요.",
+            error: "보고서에 필요한 응답 구조를 찾지 못했습니다. 원본 파일의 질문과 응답 열을 다시 확인해주세요.",
           };
         }
 
@@ -376,7 +386,7 @@ export async function POST(req: Request) {
           jobId: job.id,
           totalQuestions: specs.length,
           callPlan,
-          message: "정성 분석 작업을 등록했습니다. 문항별 진행 상태를 확인하면서 결과가 저장됩니다.",
+          message: "응답 내용 분석 작업을 등록했습니다. 진행 카드에서 문항별 상태를 확인할 수 있으며, 완료된 결과부터 저장됩니다.",
         };
       },
     }),
@@ -481,7 +491,7 @@ export async function POST(req: Request) {
         // 이미 생성한 결과 요약은 재사용한다. 사용자가 보고서 서식만 반복해서 확인할 때
         // Claude 토큰이 다시 나가지 않도록 하되, 정량 통계를 새로 계산하면 캐시는 자동 초기화된다.
         const qualitative = report.result_summary ? [] : await getQuestionsWithAllCategories(report.id);
-        const summary = report.result_summary ?? (await runResultSummary({ quantStats: report.quant_stats, qualitative }));
+        const summary = report.result_summary ?? (await runResultSummary({ quantStats: report.quant_stats, qualitative, sectionAnalyses: report.section_analyses }));
         if (!report.result_summary) await saveReportResultSummary(report.id, summary);
         return { ok: true, summary };
       },
@@ -512,6 +522,10 @@ export async function POST(req: Request) {
           relativeImportance: report.quant_stats.relativeImportance,
           featureSatisfaction: report.quant_stats.featureSatisfaction,
         };
+        if (section === "dev_priority") {
+          const qualitative = await getQuestionsWithAllCategories(report.id);
+          dataSummary = buildDevPriorityDataSummary(report.quant_stats, qualitative);
+        }
         if (section === "strategic_draft") {
           const strategicInput = await getStrategicInput(report.id);
           dataSummary = {
@@ -624,6 +638,21 @@ export async function POST(req: Request) {
         fileUrl: z.string().url().describe("validateInput에 사용했던 것과 동일한 raw data URL"),
       }),
       execute: async ({ fileUrl }) => {
+        const report = await getReportByFileUrl(fileUrl);
+        if (!report) {
+          return { ok: false, error: "원본 데이터를 찾지 못했습니다. 파일을 다시 첨부한 뒤 진행해주세요." };
+        }
+        const qualitativeJob = await getLatestQualitativeJobForReport(report.id);
+        const isQualitativeComplete = qualitativeJob?.status === "completed" || qualitativeJob?.status === "completed_with_failures";
+        if (!isQualitativeComplete) {
+          const progress = qualitativeJob
+            ? `${qualitativeJob.completed_items + qualitativeJob.failed_items}/${qualitativeJob.total_items} 문항`
+            : "분석 시작 전";
+          return {
+            ok: false,
+            error: `응답 내용 분석이 아직 완료되지 않았습니다 (${progress}). 진행 카드가 완료된 뒤 보고서를 만들 수 있습니다.`,
+          };
+        }
         // PDF를 먼저 조립해 Tier 1 결과 요약을 한 번만 생성하고, 같은 문장을 DOCX에 넘긴다.
         // 두 파일을 병렬 조립하면 render 자체는 안전하지만, 각 조립기가 runResultSummary를
         // 호출해 Claude 토큰이 두 번 소모됐다. 여기서는 출력물의 내용은 유지하면서 중복 API
@@ -678,6 +707,28 @@ export async function POST(req: Request) {
       // 단계로 넘어가버려서 "대기" 자체가 무의미해진다.
       const doneBefore = (name: string) => hasCompletedTool(messages, name);
       const doneEver = (name: string) => calledThisTurn.has(name) || doneBefore(name);
+
+      // 기업 정보 카드에서 "저장하고 계속"을 눌러 전송되는 내부 문구는, 목차를 보여주기 전에
+      // 반드시 저장 도구로 처리한다. 이전에는 이 전이가 모델 판단에 맡겨져 목차가 저장 안내보다
+      // 먼저 보이는 순서 오류가 발생했다.
+      const requestedProductInfoSave = /^(다음 기업\/제품 정보를 저장해주세요\.|확인했어요, 이 기업 정보로 저장해주세요\.)/m.test(latestUserText);
+      if (requestedProductInfoSave && !doneEver("saveProductInfoTool")) {
+        return { toolChoice: { type: "tool", toolName: "saveProductInfoTool" } };
+      }
+
+      // **2026-07-30 실측 버그**: 정성 분석이 실제로는 14/14 완료(진행 카드도 완료로 표시)됐는데,
+      // 사용자가 "분석 결과를 바탕으로 보고서를 만들어주세요"(카드 버튼이 보내는 고정 문구)를
+      // 보내면 모델이 assembleReportTool을 실제로 호출해 DB 상태를 확인하는 대신, 대화 맥락만
+      // 보고 "아직 진행 중일 것"이라고 지레짐작해 텍스트로만 대기 안내를 하고 턴을 끝내는 게
+      // 반복 재현됐다(사용자가 버튼을 여러 번 눌러도 매번 같은 헤지 응답, 몇 분 뒤에야 우연히
+      // 통과). assembleReportTool 자체는 이미 getLatestQualitativeJobForReport로 정확한 완료
+      // 여부를 확인해 안전하게 "아직 아님" 오류를 돌려주므로, 모델의 판단에 맡기지 않고
+      // 이 의도가 감지되면 도구 호출 자체를 강제한다 — 실제로 안 끝났으면 도구가 정확한 진행
+      // 상황을 담은 오류를 반환할 뿐이니 강제해도 안전하다.
+      const requestedReportGeneration = /보고서.{0,6}(만들|생성|조립)|최종\s*보고서/.test(latestUserText);
+      if (requestedReportGeneration && !doneEver("assembleReportTool")) {
+        return { toolChoice: { type: "tool", toolName: "assembleReportTool" } };
+      }
 
       // 시스템 프롬프트로 "A 다음엔 반드시 B를 호출하라"고 지시해도, 모델이 A 호출 직후 도구
       // 호출 없이 텍스트만 쓰고 턴을 끝내버리는 경우가 실측으로 확인됐다(2026-07-20 — 라이브

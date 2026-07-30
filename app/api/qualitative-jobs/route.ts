@@ -22,7 +22,10 @@ export async function POST(request: Request) {
 
   const loaded = await loadWallaFromUrl(body.data.fileUrl);
   if (!loaded.ok || !loaded.parsed || !loaded.validation?.valid) {
-    return NextResponse.json({ error: loaded.fetchError ?? "WALLA raw data 형식을 확인하세요." }, { status: 400 });
+    return NextResponse.json(
+      { error: loaded.fetchError ?? "원본 파일의 질문·응답 구조를 확인한 뒤 다시 시도해주세요." },
+      { status: 400 },
+    );
   }
   const records = normalizeWallaRows(loaded.parsed.headerRow, loaded.parsed.dataRows);
   const specs = buildQuestionSpecs(records);
