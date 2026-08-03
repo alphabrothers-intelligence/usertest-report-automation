@@ -14,9 +14,52 @@ import {
 import type { NpsResult } from "@/lib/quant/basic";
 import type { QuantStats } from "@/lib/quant/compute";
 import type { CategoryRow, QuestionWithApprovedCategories, RecommendationRow } from "@/lib/db/reports";
+import { decodeImprovementLabel } from "@/lib/pipeline/stage2";
+import { parseFourValueItemTexts } from "@/lib/pipeline/sectionAnalysis";
 import { SectionHeader, SubsectionHeader } from "./sectionsQuant";
+import { RichText } from "./richText";
 
 const NPS_SCALE_PATH = path.join(process.cwd(), "public", "images", "nps-scale.png");
+
+/** resultSummary(summary.ts가 만든 "## 제목" 구획 텍스트)에서 항목 하나만 뽑아낸다.
+ * lib/report/workspace.ts의 resultSummaryPart와 같은 파싱 규칙(HTML 대신 순수 텍스트로 반환). */
+function extractSummarySection(resultSummary: string | null | undefined, aliases: string[]): string | null {
+  if (!resultSummary?.trim()) return null;
+  const headings = [...resultSummary.matchAll(/^##\s+(.+?)\s*$/gm)];
+  const normalized = (value: string) => value.replace(/\s+/g, "").toLowerCase();
+  const index = headings.findIndex((heading) => aliases.some((alias) => normalized(heading[1]).includes(normalized(alias))));
+  if (index < 0) return null;
+  const start = (headings[index].index ?? 0) + headings[index][0].length;
+  const end = headings[index + 1]?.index ?? resultSummary.length;
+  const part = resultSummary.slice(start, end).trim();
+  return part || null;
+}
+
+/** dev_priority 제언 텍스트(recommendation.ts) 맨 앞의 "[전반적 방향성]" 블록만 분리한다 —
+ * 원본 53쪽은 이 블록을 별도 행("전반적 방향성")으로, 나머지(핵심/차우선 기능 블록)는
+ * "개발 우선순위 제언" 행으로 나눠 보여준다(lib/report/workspace.ts의 conclusionStrategyTableHtml과
+ * 같은 원본 구조 — PDF는 여태 이 둘을 나누지 않고 한 덩어리로만 보여주고 있었다). */
+export function splitOverallDirection(text: string | null): { overall: string | null; rest: string | null } {
+  if (!text) return { overall: null, rest: null };
+  const match = text.match(/\[전반적 방향성\]([\s\S]*?)(?=\n\s*\[|$)/);
+  if (!match) return { overall: null, rest: text };
+  const overall = match[1].trim();
+  const rest = (text.slice(0, match.index) + text.slice((match.index ?? 0) + match[0].length)).trim();
+  return { overall: overall || null, rest: rest || null };
+}
+
+/** Ⅸ.3 "기능별 고객 제언 종합" — customerRecommendations.ts가 만든 JSON(section=
+ * "feature_customer_recommendations")을 파싱한다. lib/report/workspace.ts의
+ * featureCustomerRecommendationsHtml과 같은 데이터 계약. */
+export function parseCustomerRecommendations(row: RecommendationRow | null | undefined): { featureName: string; actions: string[] }[] | null {
+  if (!row) return null;
+  try {
+    const parsed = JSON.parse(row.final ?? row.draft) as { features: { featureName: string; actions: string[] }[] };
+    return parsed.features;
+  } catch {
+    return null;
+  }
+}
 
 
 export function polarityPct(categories: CategoryRow[]) {
@@ -32,11 +75,11 @@ export function polarityPct(categories: CategoryRow[]) {
 }
 
 function CategoryBlock({ category }: { category: CategoryRow }) {
+  // 2026-08-03 실제 hwpx 원본 대조: 카테고리 라벨 옆에 "(N건)" 건수를 붙인 적이 원본엔
+  // 한 번도 없다("[운동 동기 부여 및 건강 증진]"처럼 라벨만) — 제거.
   return (
     <View style={styles.categoryBlock} wrap={false}>
-      <Text style={styles.categoryLabel}>
-        [{category.label}] ({category.clause_count}건)
-      </Text>
+      <Text style={styles.categoryLabel}>[{category.label}]</Text>
       {category.quotes.slice(0, 3).map((q) => (
         <Text key={q} style={styles.quote}>
           &ldquo;{q}&rdquo;
@@ -44,6 +87,43 @@ function CategoryBlock({ category }: { category: CategoryRow }) {
       ))}
       <Text style={styles.insight}>→ {category.insight_final ?? category.insight_draft}</Text>
     </View>
+  );
+}
+
+/** 개선아이디어 문항(kind="improvement") 전용 렌더러 — 원본 45~49쪽은 인사이트 없이
+ * [대분류] + <소분류> + 원문 인용만 나열하는 2단 계층이다. Stage2가 label을
+ * "대분류"+IMPROVEMENT_LABEL_SEP+"소분류"로 인코딩해 저장하므로(stage2.ts), 일반
+ * CategoryBlock(단일 대괄호 라벨 + insight)을 그대로 쓰면 인코딩된 원문 그대로("대분류␟소분류")가
+ * 노출되고 insight 자리엔 존재하지 않는 값이 찍힌다 — lib/report/workspace.ts의
+ * improvementCategoryHtml과 같은 방식으로 대분류별로 묶어 디코딩해서 그린다. */
+function ImprovementCategoryBlocks({ categories }: { categories: CategoryRow[] }) {
+  const byMajor = new Map<string, CategoryRow[]>();
+  for (const cat of categories) {
+    const { major } = decodeImprovementLabel(cat.label);
+    const key = major || "기타";
+    (byMajor.get(key) ?? byMajor.set(key, []).get(key)!).push(cat);
+  }
+  return (
+    <>
+      {[...byMajor.entries()].map(([major, subs]) => (
+        <View key={major} style={{ marginBottom: 6 }}>
+          <Text style={{ fontSize: 8.5, fontWeight: "bold", marginTop: 6, marginBottom: 2 }}>[{major}]</Text>
+          {subs.map((sub) => {
+            const { sub: subLabel } = decodeImprovementLabel(sub.label);
+            return (
+              <View key={sub.id} style={{ marginBottom: 4 }} wrap={false}>
+                <Text style={{ fontSize: 8.5, fontWeight: "bold", marginBottom: 2 }}>&lt;{subLabel}&gt;</Text>
+                {sub.quotes.map((q) => (
+                  <Text key={q} style={styles.quote}>
+                    &ldquo;{q}&rdquo;
+                  </Text>
+                ))}
+              </View>
+            );
+          })}
+        </View>
+      ))}
+    </>
   );
 }
 
@@ -87,6 +167,9 @@ function QuestionQualitativeBlock({ question }: { question: QuestionWithApproved
   return (
     <View style={{ marginBottom: 10 }}>
       <Text style={styles.subheading}>{question.label}</Text>
+      {/* 2026-08-03 실제 hwpx 원본 대조로 확정: 이 배너+퍼센트 형식(긍정/부정/중립 막대)은
+          Ⅲ장(기능)·Ⅷ장(NPS/종합만족도)엔 그대로 있지만, Ⅴ장(4대가치)엔 전혀 없다 — Ⅴ장은
+          이 컴포넌트를 아예 쓰지 않고 별도의 2열(긍정/부정) 레이아웃(FourValueSection)을 쓴다. */}
       {question.kind === "standard" && <PolarityStackedBar {...pct} />}
       {polarityOrder.map((p) => {
         const inPolarity = question.categories.filter((c) => c.polarity === p);
@@ -96,7 +179,7 @@ function QuestionQualitativeBlock({ question }: { question: QuestionWithApproved
           <View key={p} style={{ marginTop: 6 }}>
             <PolarityBanner index={bannerIndex} polarity={p} label={polarityLabel[p]} pct={pctByPolarity[p]} />
             {question.polarity_summaries?.[p] && (
-              <Text style={[styles.body, { marginBottom: 4 }]}>{question.polarity_summaries[p]}</Text>
+              <RichText value={question.polarity_summaries[p]} style={{ marginBottom: 4 }} />
             )}
             {inPolarity.map((c) => (
               <CategoryBlock key={c.id} category={c} />
@@ -104,8 +187,7 @@ function QuestionQualitativeBlock({ question }: { question: QuestionWithApproved
           </View>
         );
       })}
-      {question.kind === "improvement" &&
-        question.categories.map((c) => <CategoryBlock key={c.id} category={c} />)}
+      {question.kind === "improvement" && <ImprovementCategoryBlocks categories={question.categories} />}
     </View>
   );
 }
@@ -116,9 +198,14 @@ function QuestionQualitativeBlock({ question }: { question: QuestionWithApproved
 export function SectionFeatureExperience({
   stats,
   featureQuestions,
+  featureExperienceAnalysis,
 }: {
   stats: QuantStats;
   featureQuestions: QuestionWithApprovedCategories[];
+  /** sectionAnalyses.featureExperience — Ⅲ.2 "기능별 고객 경험 분석"(원본 29~30쪽). 2026-08-03
+   * 신규 연결: 이미 runSectionAnalysesForReport가 생성해 저장하고 있었는데 PDF는 이 데이터를
+   * 아예 읽지 않아 렌더링에서 통째로 빠져 있었다(웹뷰어는 이미 표시하고 있었음). */
+  featureExperienceAnalysis?: string | null;
 }) {
   const ranked = [...stats.featureSatisfaction].sort((a, b) => b.mean - a.mean);
   const overallAverage =
@@ -154,22 +241,88 @@ export function SectionFeatureExperience({
       {featureQuestions.map((q) => (
         <QuestionQualitativeBlock key={q.id} question={q} />
       ))}
+      {featureExperienceAnalysis && (
+        <View break>
+          <SubsectionHeader number={2} title="기능별 고객 경험 분석" />
+          <Text style={[styles.subheading, { marginTop: 0 }]}>기능별 중요 순위 및 만족도 종합 해석</Text>
+          <RichText value={featureExperienceAnalysis} />
+        </View>
+      )}
     </View>
   );
 }
 
 /** Ⅴ 정성 보강 — 4대가치 문항별 카테고리(quant 표는 sectionsQuant.tsx의 SectionFourValuesTable). */
+const FOUR_VALUE_LABEL_BY_KEY: Record<string, "기능적 가치" | "심미적 가치" | "경제적 가치" | "사회·공공적 가치"> = {
+  "values:functional": "기능적 가치",
+  "values:aesthetic": "심미적 가치",
+  "values:economic": "경제적 가치",
+  "values:social": "사회·공공적 가치",
+};
+
+/** Ⅴ장(4대가치) 정성 — 2026-08-03 실제 hwpx 원본(33~37쪽) 대조로 전면 재작성.
+ * Ⅲ장·Ⅷ장이 쓰는 QuestionQualitativeBlock(번호 배너+퍼센트+긍정/부정/중립 3열)과 완전히
+ * 다른 원본 구조를 그대로 따른다: 배너·퍼센트·중립 전혀 없이 "긍정 주요 의견 | 부정 주요 의견"
+ * 두 열을 나란히 배치하고, 그 아래 "[○○ 가치 조사 결과]" 한 문단 소결론을 붙인다. */
 export function SectionFourValuesQualitative({
   valueQuestions,
+  fourValueItemsText,
+  fourValuesAnalysis,
 }: {
   valueQuestions: QuestionWithApprovedCategories[];
+  fourValueItemsText?: string | null;
+  /** sectionAnalyses.fourValues — Ⅴ.2 "4대 가치 조사 결과 분석"(원본 37쪽, 4개 가치를 합친
+   * 3단락 종합해석). 2026-08-03 신규 연결(Ⅲ.2와 같은 이유로 빠져 있었다). */
+  fourValuesAnalysis?: string | null;
 }) {
   if (valueQuestions.every((q) => q.categories.length === 0)) return null;
+  const itemTexts = parseFourValueItemTexts(fourValueItemsText ?? "");
   return (
     <View>
-      {valueQuestions.map((q) => (
-        <QuestionQualitativeBlock key={q.id} question={q} />
-      ))}
+      {valueQuestions.map((q) => {
+        if (q.categories.length === 0) return null;
+        const positives = q.categories.filter((c) => c.polarity === "positive");
+        const negatives = q.categories.filter((c) => c.polarity === "negative");
+        const valueLabel = FOUR_VALUE_LABEL_BY_KEY[q.question_key];
+        const itemText = valueLabel ? itemTexts[valueLabel] : "";
+        // 긍정/부정을 통짜 2열(각 열 전체를 하나의 flex 컨테이너)로 쌓으면, 두 열의 총
+        // 높이가 페이지 하나를 넘어갈 때 react-pdf가 페이지 넘김에서 두 열을 서로 다른
+        // 지점에서 잘못 이어붙여 내용이 겹쳐버린다(실측 확인, 2026-08-03 — 카테고리
+        // 4~5개만 있어도 재현됨. Ⅲ/Ⅷ장은 좌우 2열 없이 세로로만 나열해서 이 버그가 없다).
+        // 대신 긍정[i]/부정[i]를 한 쌍씩 짧은 행으로 묶어 렌더링한다 — 각 행은 카테고리
+        // 1개씩만 담아 페이지 하나보다 항상 훨씬 짧으므로, 행과 행 사이에서만 페이지가
+        // 안전하게 끊긴다(TransposedRankTable의 "행 단위로 쪼개면 겹침이 불가능해진다"
+        // 패턴과 동일).
+        const pairCount = Math.max(positives.length, negatives.length);
+        return (
+          <View key={q.id} style={{ marginBottom: 12 }}>
+            <Text style={styles.subheading}>{q.label}</Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Text style={{ flex: 1, fontSize: 9, fontWeight: "bold", marginBottom: 4 }}>긍정 주요 의견</Text>
+              <Text style={{ flex: 1, fontSize: 9, fontWeight: "bold", marginBottom: 4 }}>부정 주요 의견</Text>
+            </View>
+            {Array.from({ length: pairCount }, (_, i) => (
+              <View key={i} style={{ flexDirection: "row", gap: 10 }} wrap={false}>
+                <View style={{ flex: 1 }}>{positives[i] && <CategoryBlock category={positives[i]} />}</View>
+                <View style={{ flex: 1 }}>{negatives[i] && <CategoryBlock category={negatives[i]} />}</View>
+              </View>
+            ))}
+            {itemText && (
+              <View style={{ marginTop: 4 }}>
+                <Text style={{ fontSize: 9, fontWeight: "bold", marginBottom: 2 }}>[ {valueLabel} 조사 결과 ]</Text>
+                <RichText value={itemText} />
+              </View>
+            )}
+          </View>
+        );
+      })}
+      {fourValuesAnalysis && (
+        <View break>
+          <SubsectionHeader number={2} title="4대 가치 조사 결과 분석" />
+          <Text style={[styles.subheading, { marginTop: 0 }]}>4대 가치 만족도 종합 해석</Text>
+          <RichText value={fourValuesAnalysis} />
+        </View>
+      )}
     </View>
   );
 }
@@ -500,12 +653,12 @@ function FeatureExperienceSummaryTable({
  * 6열 표를 채우고, 나머지 항목(핵심구매요소·4대 가치 만족도·사용자 경험 품질 평가·교차 분석·
  * 종합 만족도 및 NPS 지수)은 담당자가 나중에 요약을 직접 채워 넣도록 빈 칸으로 둔다(2026-07-23
  * "원본 표 양식을 가져오고 싶다, 나중에 채울 것들" 요청). */
-const RESULT_SUMMARY_ITEMS = [
-  "핵심구매요소",
-  "4대 가치 만족도",
-  "사용자 경험 품질 평가",
-  "교차 분석",
-  "종합 만족도 및 NPS 지수",
+const RESULT_SUMMARY_ITEMS: { label: string; aliases: string[] }[] = [
+  { label: "핵심구매요소", aliases: ["핵심구매요소"] },
+  { label: "4대 가치 만족도", aliases: ["4대 가치", "4대가치"] },
+  { label: "사용자 경험 품질 평가", aliases: ["사용자 경험 품질", "UX"] },
+  { label: "교차 분석", aliases: ["교차 분석"] },
+  { label: "종합 만족도 및 NPS 지수", aliases: ["종합 만족도", "NPS"] },
 ];
 
 function ResultItemLabel({ label }: { label: string }) {
@@ -529,9 +682,11 @@ function ResultItemLabel({ label }: { label: string }) {
 function ResultSummaryTable({
   stats,
   featureQuestions,
+  resultSummary,
 }: {
   stats: QuantStats;
   featureQuestions: QuestionWithApprovedCategories[];
+  resultSummary?: string | null;
 }) {
   return (
     <View style={styles.table}>
@@ -557,21 +712,28 @@ function ResultSummaryTable({
           테두리만 있는 빈칸이 남았다(2026-07-23 지적). 이 칸들은 나중에 채울 빈 공간이라
           페이지 경계에서 쪼개져도 무해하므로, 흐르게 둬서 페이지를 꽉 채운다(CLAUDE.md
           페이지 넘김 원칙). */}
-      {RESULT_SUMMARY_ITEMS.map((item, i) => (
-        <View
-          key={item}
-          style={
-            i < RESULT_SUMMARY_ITEMS.length - 1
-              ? { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: colors.border }
-              : { flexDirection: "row" }
-          }
-        >
-          <ResultItemLabel label={item} />
-          <View style={{ flex: 1, minHeight: 80, padding: 6 }}>
-            <Text style={{ fontSize: 8.5, color: colors.subtext }}>입력 필요</Text>
+      {RESULT_SUMMARY_ITEMS.map((item, i) => {
+        const part = extractSummarySection(resultSummary, item.aliases);
+        return (
+          <View
+            key={item.label}
+            style={
+              i < RESULT_SUMMARY_ITEMS.length - 1
+                ? { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: colors.border }
+                : { flexDirection: "row" }
+            }
+          >
+            <ResultItemLabel label={item.label} />
+            <View style={{ flex: 1, minHeight: 80, padding: 6 }}>
+              {part ? (
+                <RichText value={part} style={{ fontSize: 8.5, lineHeight: 1.5, marginBottom: 0 }} />
+              ) : (
+                <Text style={{ fontSize: 8.5, color: colors.subtext, lineHeight: 1.5 }}>입력 필요</Text>
+              )}
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -580,48 +742,76 @@ function ResultSummaryTable({
 export function SectionConclusion({
   stats,
   featureQuestions,
+  resultSummary,
   devPriorityRecommendation,
   featureRecommendations,
+  customerRecommendations,
   strategicInput,
 }: {
   stats: QuantStats;
   featureQuestions: QuestionWithApprovedCategories[];
-  // resultSummary는 더 이상 Ⅸ장 결과 요약을 텍스트로 렌더하지 않는다(원본처럼 항목|주요 의견
-  // 표 양식으로 바뀌고, 요약 칸은 담당자가 나중에 채운다, 2026-07-23). ReportDocument가
-  // 여전히 넘겨주므로 타입에는 남겨 둔다.
-  resultSummary?: string;
+  resultSummary?: string | null;
   devPriorityRecommendation: string | null;
   featureRecommendations: RecommendationRow[];
+  /** Ⅸ.3용 section="feature_customer_recommendations" 행(customerRecommendations.ts 생성). */
+  customerRecommendations: RecommendationRow | null;
   strategicInput: { customerRequest: string | null; priorityMetric: string | null; draft: string | null } | null;
 }) {
+  // 원본 53쪽 "2. 개선 전략 제언"은 전반적 방향성 / 개발 우선순위 제언 / 기능 개선 제안 3블록이다
+  // (reportPlan.ts의 목차와 동일한 제목을 써야 함 — lib/report/workspace.ts의
+  // conclusionStrategyTableHtml과 같은 구조로 맞췄다, 예전엔 이 헤딩 자체가 "개발 우선순위 제언"
+  // 하나뿐이라 ToC의 "개선 전략 제언"과도 어긋나 있었다).
+  const { overall, rest: devPriorityRest } = splitOverallDirection(devPriorityRecommendation);
+  const customerFeatures = parseCustomerRecommendations(customerRecommendations);
   return (
     <View break>
       <SectionHeader numeral="IX" title="종합 결과 및 제언" />
       <SubsectionHeader number={1} title="사용성테스트 결과 요약" />
-      <ResultSummaryTable stats={stats} featureQuestions={featureQuestions} />
+      <ResultSummaryTable stats={stats} featureQuestions={featureQuestions} resultSummary={resultSummary} />
 
-      <Text style={styles.subheading}>2. 개발 우선순위 제언</Text>
-      <Text style={styles.body}>
-        {devPriorityRecommendation ?? "제언이 아직 생성·승인되지 않았습니다."}
-      </Text>
+      <Text style={styles.subheading}>2. 개선 전략 제언</Text>
 
-      <Text style={styles.subheading}>3. 기능별 고객 제언 종합</Text>
+      <Text style={{ fontSize: 8.5, fontWeight: "bold", marginBottom: 2 }}>전반적 방향성</Text>
+      <RichText value={overall ?? "핵심구매요소, 만족도·상대 중요도, NPS 지수를 함께 참조하여 우선 개선 항목을 검토할 필요가 있습니다."} />
+
+      <Text style={{ fontSize: 8.5, fontWeight: "bold", marginTop: 6, marginBottom: 2 }}>개발 우선순위 제언</Text>
+      <RichText value={devPriorityRest ?? "제언이 아직 생성·승인되지 않았습니다."} />
+
+      <Text style={{ fontSize: 8.5, fontWeight: "bold", marginTop: 6, marginBottom: 2 }}>기능 개선 제안</Text>
       {featureRecommendations.length === 0 ? (
         <Text style={styles.placeholder}>승인된 기능개선제안이 아직 없습니다.</Text>
       ) : (
         featureRecommendations.map((r) => (
           <View key={r.id} style={{ marginBottom: 6 }} wrap={false}>
             <Text style={{ fontSize: 8.5, fontWeight: "bold", marginBottom: 2 }}>
-              {r.section.replace("feature_improvement:", "")}
+              [{r.section.replace("feature_improvement:", "")}]
             </Text>
-            <Text style={styles.body}>{r.final ?? r.draft}</Text>
+            <RichText value={r.final ?? r.draft} />
+          </View>
+        ))
+      )}
+
+      <Text style={styles.subheading}>3. 기능별 고객 제언 종합</Text>
+      {!customerFeatures || customerFeatures.length === 0 ? (
+        <Text style={styles.placeholder}>기능별 고객 제언은 정성 분석 승인 후 표시됩니다.</Text>
+      ) : (
+        customerFeatures.map((f, i) => (
+          <View key={f.featureName} style={{ marginBottom: 8 }} wrap={false}>
+            <Text style={{ fontSize: 8.5, fontWeight: "bold", backgroundColor: colors.chartBannerBg, padding: 4, marginBottom: 2 }}>
+              [기능 {i + 1}] {f.featureName}
+            </Text>
+            {f.actions.map((action, j) => (
+              <Text key={j} style={styles.body}>
+                고객 제언 {j + 1}. {action}
+              </Text>
+            ))}
           </View>
         ))
       )}
 
       <Text style={styles.subheading}>4. 종합 전략 제언</Text>
       {strategicInput?.draft ? (
-        <Text style={styles.body}>{strategicInput.draft}</Text>
+        <RichText value={strategicInput.draft} />
       ) : (
         <View>
           <Text style={styles.placeholder}>담당자 입력 대기 중 (7.3절 — AI가 임의로 작성하지 않음)</Text>

@@ -21,65 +21,9 @@ import { streamStructured, withClaudeGuard } from "./claudeGuard";
 import type { QuestionResult } from "./orchestrate";
 import { computeNps } from "@/lib/quant/basic";
 import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
+import { FAST_STANDARD_SYSTEM, FAST_IMPROVEMENT_SYSTEM } from "./prompts";
 
 const FAST_MODEL = process.env.ANTHROPIC_QUALITATIVE_FAST_MODEL ?? process.env.ANTHROPIC_STAGE2_MODEL ?? "claude-sonnet-5";
-
-const FAST_STANDARD_SYSTEM = `당신은 사용성테스트 결과보고서 작성 애널리스트입니다.
-한 설문 문항의 (응답자 번호, 점수, 원문 이유) 전체를 분석하여 보고서에 바로 넣을 수 있는
-긍정·부정·중립 의견 카테고리와 대표 인용, 인사이트를 만드세요.
-
-중요: 내부적으로는 각 응답을 의미 단위로 나누어 극성을 판정하고 카테고리화하되, 출력에는
-개별 절 목록을 절대 반복하지 마세요. 이는 긴 절 목록을 반환하지 않고도 보고서 품질을 유지하기
-위한 규칙입니다.
-
-출력 규칙:
-- 실제 언급된 구체적 대상·맥락별로 각 극성 3~6개 카테고리를 만듭니다.
-- category.clause_count는 내부적으로 분리한 의미 단위 수이며, 각 극성의 categories 합과
-  total_clause_count는 일치해야 합니다.
-- quotes는 입력의 reason에서 문자 그대로 연속해 등장하는 문장만 1~2개 선택합니다.
-  오탈자 교정, 여러 문장 결합, 의역은 금지합니다.
-- insight는 한 줄의 관찰·시사점 문장으로 작성하고 화살표 기호는 넣지 마세요.
-- insight는 보고서 개조식 문체로 명사형 종결만 씁니다("~함", "~강화", "~부합", "~필요" 등).
-  "~다"로 끝나는 서술형 문장(예: "~부합한다", "~높인다", "~유발한다")은 절대 쓰지 마세요.
-- 단순 개선 제안·선호·정보 요청은 구체적 손해가 없으면 neutral로 분류합니다.
-- 입력에 해당 극성의 의미 단위가 없으면 그 극성 group은 만들지 마세요.
-
-# NPS 문항에서만 추가 출력
-- 입력에 nps_quantitative_context가 있을 때에만 nps_judgment.lines를 정확히 3개 작성합니다.
-- 각 줄은 화면에서 자동으로 붙는 화살표를 제외한 한 문장으로 쓰며, 번호·글머리표·화살표를 넣지 마세요.
-- 제공된 NPS 수치(평균, NPS, 구매·중립·비구매 고객 비율)는 그대로 사용하고, 계산하거나 다른 수치를 만들지 마세요.
-- 판단은 수치와 reason 원문에서 확인되는 사실에만 근거합니다. 외부 벤치마크, 원문에 없는 기능·원인, 단정적 시장 전망은 쓰지 마세요.
-- 1번은 NPS 점수와 고객군 비율의 사실 기반 판단, 2번은 중립/비구매 고객 비율과 전환·개선 필요성, 3번은 reason에 반복된 불편·개선 요구 반영 필요성을 다룹니다.
-- 보고서 개조식 문체로 "~필요함", "~확인됨", "~사료됨"처럼 종결하고, 각 줄은 110자 이내로 간결하게 씁니다.
-- NPS가 아닌 문항에서는 nps_judgment를 절대 만들지 마세요.`;
-
-// **2026-07-30 사용자 지시로 원본(리바랩스 45~49쪽) 대조에 맞춰 2단 구조로 재설계.**
-// 원본 "개선 아이디어 > 주요 의견 종합"은 [대분류] → <소분류> → 원문 인용 다수의 2단 계층이며
-// 인사이트가 없다. stage2.ts의 STAGE2_IMPROVEMENT_SYSTEM_PROMPT와 같은 방향이되, 이 고속 경로는
-// Stage1 절 분리 없이 원문 reason을 바로 받는다.
-const FAST_IMPROVEMENT_SYSTEM = `당신은 사용성테스트 결과보고서의 "개선 아이디어 > 주요 의견 종합" 섹션을 작성하는 애널리스트입니다.
-자유서술 개선 아이디어 응답을 실제 발행 보고서와 동일한 2단 계층으로 정리합니다.
-
-# 원본 형식 (반드시 이 2단 구조를 따를 것)
-[대분류]            ← major_categories[].label (대괄호는 렌더링에서 붙이므로 이름만)
-  <소분류>          ← subcategories[].label (홑화살괄호는 렌더링에서 붙이므로 이름만)
-    "원문 인용"      ← subcategories[].quotes (응답 원문 그대로, 소분류당 2~6개)
-    "원문 인용"
-
-# 작업 순서
-1. 전체 응답을 큰 주제(대분류) 5~8개로 나눕니다(예: 튜토리얼/가이드 고도화, 산책 기능/GPS,
-   버그/오류 개선, 콘텐츠 부족/개선 필요, 재화·보상 체계 개선, 펫 관련 기능 개선, UI/UX 등 —
-   실제 입력에 맞게 정합니다).
-2. 각 대분류를 구체적 맥락의 소분류 2~4개로 나눕니다(예: "산책 기능/GPS" 아래 "위치 정확도",
-   "지도 UI/편의성", "추가 기능 제안").
-3. 각 소분류에 대표 원문 인용을 **가능한 많이(2~6개)** 담습니다(3개로 제한하지 말 것).
-
-# 절대 규칙
-- **인사이트(요약 한 줄)를 쓰지 않습니다.** 이 섹션은 원문 인용 모음입니다.
-- quotes는 입력 reason에 문자 그대로 연속해 등장하는 문장만 선택하고, 의역·교정·결합은 금지합니다.
-- 한 응답이 여러 주제를 담으면 각 해당 소분류에 나눠 넣습니다(그래서 소분류 clause_count 합이
-  응답 수보다 클 수 있음). total_clause_count는 모든 소분류 clause_count의 합으로 채웁니다.
-- 대분류·소분류 이름에 대괄호/홑화살괄호를 직접 붙이지 않습니다(이름만).`;
 
 function filterVerifiedQuotes<T extends { categories: Array<{ quotes: string[] }> }>(
   output: T,

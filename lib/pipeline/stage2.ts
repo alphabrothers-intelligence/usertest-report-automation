@@ -5,6 +5,7 @@ import { Output } from "ai";
 import { z } from "zod";
 import type { Polarity } from "./stage1";
 import { streamStructured, withClaudeGuard } from "./claudeGuard";
+import { STAGE2_SYSTEM_PROMPT, STAGE2_COMBINED_SYSTEM_PROMPT, STAGE2_IMPROVEMENT_SYSTEM_PROMPT } from "./prompts";
 
 const STAGE2_MODEL = process.env.ANTHROPIC_STAGE2_MODEL ?? "claude-sonnet-5";
 
@@ -44,76 +45,11 @@ export const Stage2CombinedOutputSchema = z.object({
 });
 type Stage2CombinedOutput = z.infer<typeof Stage2CombinedOutputSchema>;
 
-const STAGE2_SYSTEM_PROMPT = `당신은 사용성테스트 결과보고서를 작성하는 애널리스트입니다.
-Stage1에서 극성별로 분류된 응답 절 목록을 받아, 실제 발행되는
-보고서와 동일한 형식으로 카테고리화합니다.
-
-# 작업 순서
-1. 같은 극성 내에서, analysis_clause의 유사한 주제·맥락을 가진 절들을 그룹핑합니다.
-2. 각 그룹에 대괄호 카테고리명을 붙입니다. (예: "GPS 및 걸음 수 측정
-   부정확성 문제")
-3. 각 카테고리에서 가장 대표성 있고 구체적인 인용문을 2~4개 선택합니다.
-   (해당 극성의 clause를 전부 인용하지 않습니다. 대표성 있는 것만 고릅니다.)
-4. 각 카테고리 마지막에 인사이트 한 줄을 씁니다. 인사이트는 관찰·시사점
-   톤으로 쓰고("~개선 필요", "~니즈 확인", "~정합성 개선 필요"),
-   화살표 기호는 붙이지 마세요(조립 단계에서 자동으로 붙습니다).
-
-# 카테고리 세분화 지침 (중요)
-큰 대분류(2~3개)로 뭉뚱그리지 마세요. 실제 언급된 구체적 대상·맥락
-단위로 세분화합니다. 예를 들어 "지도 조작 문제"와 "GPS 정확도 문제"는
-원인이 다르므로 별도 카테고리로 분리해야 합니다. 실제 보고서는 한
-극성 안에 보통 4~9개의 세부 카테고리를 사용합니다. clause 개수가
-너무 적어(1~2개) 별도 카테고리로 보기 어려운 경우는 유사 카테고리에
-합치거나 "기타" 성격 카테고리로 묶어도 됩니다.
-
-# Few-shot 예시
-입력(negative clause 목록 일부):
-[
-  {"respondent_id": 11, "clause": "gps가 부정확해서 걸은 길이나
-   걸음수가 제대로 체크 되지 않아요"},
-  {"respondent_id": 16, "clause": "경로가 지도상 도로를 따라 찍히지
-   않고 건물을 뚫고 찍히거나 가끔 아예 다른 길로 표시되어 아쉬웠다"},
-  {"respondent_id": 40, "clause": "실제 걸음 수와 게임에서 측정하는
-   걸음 수에 많은 차이가 있었다"}
-]
-출력:
-{
-  "label": "GPS 및 걸음 수 측정 부정확성 문제",
-  "quotes": [
-    "gps가 부정확해서 걸은 길이나 걸음수가 제대로 체크 되지 않아요",
-    "경로가 지도상 도로를 따라 찍히지 않고 건물을 뚫고 찍히거나
-     가끔 아예 다른 길로 표시되어 아쉬웠다"
-  ],
-  "insight": "GPS 정확도 및 걸음 수 측정 정확도 개선 필요"
-}
-
-# 절대 규칙
-- quotes는 quote_verified=true인 입력에서만 verbatim으로 선택하세요. raw_clause가 있으면
-  그 값을, 없으면 analysis_clause 값을 인용하세요. analysis_clause는 군집화·카테고리명·
-  인사이트 작성에 사용합니다.
-  새로 문장을 만들거나 여러 절을 합쳐 재구성하지 마세요.
-- clause_count의 합은 total_clause_count와 일치해야 합니다
-  (모든 clause가 어딘가의 카테고리에 속해야 합니다).`;
-
 const POLARITY_KR: Record<Polarity, string> = {
   positive: "긍정",
   negative: "부정",
   neutral: "중립",
 };
-
-const STAGE2_COMBINED_SYSTEM_PROMPT = `당신은 사용성테스트 결과보고서를 작성하는 애널리스트입니다.
-하나의 설문 문항에 대해 긍정·부정·중립 절 목록이 함께 주어집니다.
-각 극성은 서로 섞지 말고 독립적으로 카테고리화하세요.
-
-# 출력 규칙
-- 입력에 존재하는 극성마다 groups에 정확히 하나의 결과를 만드세요.
-- 각 결과의 polarity, total_clause_count, categories를 채우세요.
-- 같은 극성 안에서 유사 주제·맥락의 analysis_clause를 묶되, 3~6개 세부 카테고리로 정리하세요.
-- 각 카테고리는 대표 인용 1~2개와 한 줄 인사이트를 포함하세요.
-- quotes는 quote_verified=true인 입력에서만 원문 그대로 선택하세요. raw_clause가 있으면 raw_clause를,
-  없으면 analysis_clause를 쓰세요. 새 문장을 만들거나 여러 절을 합치지 마세요.
-- clause_count 합계와 total_clause_count는 해당 극성의 입력 절 수와 반드시 일치해야 합니다.
-- 인사이트는 "~개선 필요", "~니즈 확인" 같은 관찰·시사점 한 줄로 쓰며 화살표는 붙이지 마세요.`;
 
 export interface Stage2ClauseInput {
   respondent_id: number;
@@ -286,38 +222,6 @@ export function decodeImprovementLabel(label: string): { major: string; sub: str
   const idx = label.indexOf(IMPROVEMENT_LABEL_SEP);
   return idx >= 0 ? { major: label.slice(0, idx), sub: label.slice(idx + 1) } : { major: "", sub: label };
 }
-
-const STAGE2_IMPROVEMENT_SYSTEM_PROMPT = `당신은 사용성테스트 결과보고서의 "개선 아이디어 > 주요 의견 종합" 섹션을 작성하는 애널리스트입니다.
-Stage1에서 문장 분리된 개선 아이디어 응답 절 목록을 받아, 실제 발행 보고서와 동일한 2단 계층으로
-정리합니다. 이 문항은 점수·극성 구분이 없는 자유서술이므로, 극성과 무관하게 주제로 묶습니다.
-
-# 원본 형식 (반드시 이 2단 구조를 따를 것)
-[대분류]            ← major_categories[].label (대괄호는 렌더링에서 붙이므로 이름만)
-  <소분류>          ← subcategories[].label (홑화살괄호는 렌더링에서 붙이므로 이름만)
-    "원문 인용"      ← subcategories[].quotes (사용자 응답 원문 그대로, 소분류당 2~6개)
-    "원문 인용"
-  <소분류>
-    ...
-[대분류]
-  ...
-
-# 작업 순서
-1. 전체 clause를 큰 주제(대분류) 5~8개로 나눕니다. 원본 예시 대분류: 튜토리얼/가이드 고도화,
-   산책 기능/GPS, 버그/오류 개선, 콘텐츠 부족/개선 필요, 재화·보상 체계 개선, 펫 관련 기능 개선,
-   UI/UX 등 — 실제 입력 내용에 맞게 정합니다.
-2. 각 대분류를 구체적 맥락의 소분류 2~4개로 나눕니다(예: 대분류 "산책 기능/GPS" 아래 소분류
-   "위치 정확도", "지도 UI/편의성", "추가 기능 제안").
-3. 각 소분류에 그 주제를 대표하는 원문 인용을 **가능한 많이(2~6개)** 담습니다. 원본은 소분류마다
-   실제 응답을 여러 개 나열하므로, 인용을 3개로 제한하지 말고 대표성 있는 것을 넉넉히 싣습니다.
-
-# 절대 규칙
-- **인사이트(요약 한 줄)를 쓰지 않습니다.** 이 섹션은 원문 인용 모음이지 해석이 아닙니다.
-- quotes는 quote_verified=true인 입력에서만 verbatim으로 선택합니다. raw_clause가 있으면 그 값을,
-  없으면 analysis_clause 값을 인용합니다. 새 문장을 만들거나 여러 절을 합치지 않습니다.
-- 한 응답이 여러 주제를 담으면 각 해당 소분류에 나눠 넣습니다(그래서 소분류 clause_count 합이
-  응답 수보다 클 수 있음). total_clause_count는 모든 소분류 clause_count의 합으로 채웁니다.
-- 대분류·소분류 이름에 대괄호/홑화살괄호를 직접 붙이지 않습니다(이름만).`;
-
 /** 개선아이디어 2단 출력에서 verify 안 된 인용만 제거한다(각 소분류의 quotes 대상). */
 function retainVerifiedImprovementQuotes(
   output: Stage2ImprovementOutput,

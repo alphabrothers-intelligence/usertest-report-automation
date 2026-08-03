@@ -120,10 +120,12 @@ export const styles = StyleSheet.create({
     marginLeft: 8,
     marginBottom: 1,
   },
+  // 2026-08-03: 강조 텍스트에 색을 쓰지 않는다(사용자 지적 — 원본 발행 보고서는 강조를
+  // 전부 검정 굵게/밑줄로만 표시하고 색은 전혀 쓰지 않는다). 예전엔 colors.tealDark(녹색)를
+  // 썼는데 제거했다.
   insight: {
     fontSize: 9,
     fontWeight: "bold",
-    color: colors.tealDark,
     marginTop: 2,
   },
   footerRow: {

@@ -31,7 +31,8 @@ import type { QuantStats } from "@/lib/quant/compute";
 import type { QuestionWithApprovedCategories, RecommendationRow } from "@/lib/db/reports";
 import type { ProductInfo } from "@/lib/productInfo/types";
 import { shortenLabel, zoomedRange } from "@/lib/pdf/sectionsQuant";
-import { polarityPct, npsJudgmentLines } from "@/lib/pdf/sectionsQualitative";
+import { polarityPct, npsJudgmentLines, splitOverallDirection, parseCustomerRecommendations } from "@/lib/pdf/sectionsQualitative";
+import { decodeImprovementLabel } from "@/lib/pipeline/stage2";
 import { computeNiceRadarRange, computeBarWithAverageRange } from "@/lib/pdf/charts";
 import { colors, FONT } from "./theme";
 import { h1, h2, h3, body, markdownLite, placeholder, fieldRow, dataTable, spacer } from "./helpers";
@@ -115,25 +116,33 @@ function questionQualitativeBlock(question: QuestionWithApprovedCategories): Blo
       }
     }
   } else {
+    // 개선아이디어(kind="improvement")는 인사이트 없이 [대분류]+<소분류>+원문 인용만 나열하는
+    // 원본 45~49쪽 2단 계층이다(PDF의 ImprovementCategoryBlocks와 동일 로직 — 라벨이
+    // "대분류"+IMPROVEMENT_LABEL_SEP+"소분류"로 인코딩돼 있어 디코딩 없이 그대로 쓰면
+    // 제어문자가 섞인 원문이 노출되고, insight 자리엔 존재하지 않는 값이 찍힌다).
+    const byMajor = new Map<string, typeof question.categories>();
     for (const c of question.categories) {
-      blocks.push(
-        new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text: `[${c.label}] (${c.clause_count}건)`, bold: true })] }),
-      );
-      for (const q of c.quotes.slice(0, 3)) {
+      const { major } = decodeImprovementLabel(c.label);
+      const key = major || "기타";
+      (byMajor.get(key) ?? byMajor.set(key, []).get(key)!).push(c);
+    }
+    for (const [major, subs] of byMajor) {
+      blocks.push(new Paragraph({ spacing: { before: 120, after: 40 }, children: [new TextRun({ text: `[${major}]`, bold: true })] }));
+      for (const c of subs) {
+        const { sub } = decodeImprovementLabel(c.label);
         blocks.push(
-          new Paragraph({
-            indent: { left: 200 },
-            spacing: { after: 20 },
-            children: [new TextRun({ text: `"${q}"`, color: colors.subtext })],
-          }),
+          new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text: `<${sub}>`, bold: true })] }),
         );
+        for (const q of c.quotes) {
+          blocks.push(
+            new Paragraph({
+              indent: { left: 200 },
+              spacing: { after: 20 },
+              children: [new TextRun({ text: `"${q}"`, color: colors.subtext })],
+            }),
+          );
+        }
       }
-      blocks.push(
-        new Paragraph({
-          spacing: { after: 100 },
-          children: [new TextRun({ text: `→ ${c.insight_final ?? c.insight_draft}`, bold: true, color: colors.insight })],
-        }),
-      );
     }
   }
   return blocks;
@@ -477,6 +486,7 @@ async function sectionConclusion(
   resultSummary: string,
   devPriorityRecommendation: string | null,
   featureRecommendations: RecommendationRow[],
+  customerRecommendations: RecommendationRow | null,
   strategicInput: { customerRequest: string | null; priorityMetric: string | null; draft: string | null } | null,
 ): Promise<Block[]> {
   const ranked = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
@@ -509,20 +519,41 @@ async function sectionConclusion(
       ),
     );
   }
+  // 원본 53쪽 "2. 개선 전략 제언"은 전반적 방향성/개발 우선순위 제언/기능 개선 제안 3블록이다
+  // (PDF의 SectionConclusion과 동일 구조로 맞췄다 — 예전엔 "2. 개발 우선순위 제언" 헤딩 하나에
+  // 전반적 방향성까지 뭉쳐 있었고 3번 자리엔 As-is/To-be가 잘못 들어가 있었다).
+  const { overall, rest: devPriorityRest } = splitOverallDirection(devPriorityRecommendation);
   blocks.push(
-    h2("2. 개발 우선순위 제언"),
-    devPriorityRecommendation ? body(devPriorityRecommendation) : placeholder("제언이 아직 생성·승인되지 않았습니다."),
-    h2("3. 기능별 고객 제언 종합"),
+    h2("2. 개선 전략 제언"),
+    body("전반적 방향성", { bold: true }),
+    overall ? body(overall) : body("핵심구매요소, 만족도·상대 중요도, NPS 지수를 함께 참조하여 우선 개선 항목을 검토할 필요가 있습니다."),
+    body("개발 우선순위 제언", { bold: true }),
+    devPriorityRest ? body(devPriorityRest) : placeholder("제언이 아직 생성·승인되지 않았습니다."),
+    body("기능 개선 제안", { bold: true }),
   );
   if (featureRecommendations.length === 0) {
     blocks.push(placeholder("승인된 기능개선제안이 아직 없습니다."));
   } else {
     for (const r of featureRecommendations) {
       blocks.push(
-        new Paragraph({ spacing: { before: 100, after: 20 }, children: [new TextRun({ text: r.section.replace("feature_improvement:", ""), bold: true })] }),
+        new Paragraph({ spacing: { before: 100, after: 20 }, children: [new TextRun({ text: `[${r.section.replace("feature_improvement:", "")}]`, bold: true })] }),
         body(r.final ?? r.draft),
       );
     }
+  }
+  blocks.push(h2("3. 기능별 고객 제언 종합"));
+  const customerFeatures = parseCustomerRecommendations(customerRecommendations);
+  if (!customerFeatures || customerFeatures.length === 0) {
+    blocks.push(placeholder("기능별 고객 제언은 정성 분석 승인 후 표시됩니다."));
+  } else {
+    customerFeatures.forEach((f, i) => {
+      blocks.push(
+        new Paragraph({ spacing: { before: 100, after: 20 }, children: [new TextRun({ text: `[기능 ${i + 1}] ${f.featureName}`, bold: true })] }),
+      );
+      f.actions.forEach((action, j) => {
+        blocks.push(body(`고객 제언 ${j + 1}. ${action}`));
+      });
+    });
   }
   blocks.push(h2("4. 종합 전략 제언"));
   if (strategicInput?.draft) {
@@ -617,6 +648,7 @@ export async function buildReportDocx(props: ReportDocxProps): Promise<Document>
       resultSummary,
       findRecommendation(recommendations, "dev_priority"),
       featureRecommendations,
+      recommendations.find((r) => r.section === "feature_customer_recommendations") ?? null,
       strategicInput
         ? {
             customerRequest: strategicInput.customer_request,

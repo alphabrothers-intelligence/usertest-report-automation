@@ -44,7 +44,7 @@ export interface QualitativeUsageSummary {
   elapsed_ms: number;
 }
 
-export type QualitativeSectionAnalysisKey = "featureExperience" | "corePurchaseFactor" | "fourValues" | "uxQuality" | "crossAnalysis";
+export type QualitativeSectionAnalysisKey = "featureExperience" | "corePurchaseFactor" | "fourValues" | "fourValueItems" | "uxQuality" | "crossAnalysis";
 export type QualitativeSectionAnalysisRunStatus = "running" | "completed" | "failed";
 
 export interface QualitativeSectionAnalysisRunRow {

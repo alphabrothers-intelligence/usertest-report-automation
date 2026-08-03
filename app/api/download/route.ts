@@ -49,7 +49,7 @@ export async function GET(request: Request): Promise<NextResponse | Response> {
   return new Response(result.stream, {
     headers: {
       "Content-Type": contentType,
-      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(fileName)}"`,
+      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(fileName)}`,
     },
   });
 }

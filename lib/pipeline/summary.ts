@@ -16,82 +16,26 @@ import type { QuantStats } from "@/lib/quant/compute";
 import type { QuestionWithApprovedCategories, SectionAnalyses } from "@/lib/db/reports";
 import { detectProductType, type ProductType } from "@/lib/report/productType";
 import { splitCrossAnalysisText, shortenFactorLabel } from "./sectionAnalysis";
+import { SUMMARY_SYSTEM_PROMPT, FALLBACK_SUMMARY_SYSTEM_PROMPT as FALLBACK_SYSTEM_PROMPT } from "./prompts";
 
 const SUMMARY_MODEL = process.env.ANTHROPIC_SUMMARY_MODEL ?? "claude-sonnet-5";
-
-// 각 행의 목표 형식을 원본 50~52쪽 문구 패턴 그대로 예시로 박아둔다 — "요약해라"는 지시만으로는
-// 모델이 재분석(사실상 Ⅲ~Ⅵ을 다시 쓰는 것)으로 흐르기 쉬워서, 실제 원본 문장 리듬을 예시로
-// 주는 편이 훨씬 안정적이었다(2026-07-30 실측).
-const SUMMARY_SYSTEM_PROMPT = `당신은 사용성테스트 결과보고서 Ⅸ장 "1. 사용성테스트 결과 요약" 표의 4개 항목을 작성합니다.
-이 표는 앞 장의 결과를 원본 51~52쪽 형식으로 **짧게 압축**한 것입니다 — 상세 논증을 반복하지 마세요.
-입력에 제공된 재료(표현어·수치·요지)만 사용하고, 새로운 해석·원인·수치를 지어내지 마세요.
-
-# 당신이 작성하는 항목 (이 4개만, 아래 제목을 정확히)
-## 기능별 고객 경험 평가
-## 핵심구매요소
-## 4대 가치 만족도
-## 종합 만족도 및 NPS 지수
-(사용자 경험 품질·교차 분석 행은 다른 단계에서 원문 그대로 채우므로 절대 작성하지 마라.)
-
-## 기능별 고객 경험 평가
-"입력.기능별_행_재료"의 각 항목을 원본 51쪽 형식 그대로:
-• [{기능명}] {중요도표현} 상대 중요도와 {만족도표현} 만족도를 가지므로 {판정}.
-→ '{개선동작1}', '{개선동작2}'{, '{개선동작3}'}을 통해 {~하는 전략/방향성} 제안
-- {중요도표현}·{만족도표현}은 입력 재료의 값을 **그대로** 쓴다(임의로 바꾸지 말 것).
-- {판정}은 입력 "판정후보" 중 하나를 tier·성격에 맞게 고른다.
-- "→" 줄의 '개선동작'은 "개선항목_후보"(부정 카테고리 라벨)를 **개선 동작 명사구**로 바꿔 2~3개를
-  작은따옴표로 나열한다(예: "GPS 부정확"→'GPS 및 걸음 수 측정 정확도 개선"). 문제 서술이 아니라 동작으로.
-- tier가 "우선"인 기능의 "→" 줄은 "'중립·부정' 응답층을 '긍정'으로 전환하는 전략 제안"으로 끝맺는다.
-  tier가 "차우선"인 기능의 "→" 줄은 "…를 통해 …하는 방향성 제안" 또는 "차별화 요소로 발전시키는 전략 제안"으로 끝맺는다.
-
-## 핵심구매요소
-정확히 2개 불릿(원본 51쪽, "•"):
-• 전체 응답자 {응답자수}명 중 {상위3합계비율}%가 '{1위}({비율}%)', '{2위}({비율}%)', '{3위}({비율}%)'을 가장 중요한 핵심구매요소로 선택함. 이는 {상위 3개를 각각 한 단어로 규정한 3축(예: 보상(동기), 비주얼(첫인상), 안정성(기본 신뢰))}이 서비스 설치 및 지속 사용 결정에 가장 중요하게 작용함을 시사함.
-• {상위 요인에 근거한 우선 확보→고도화 순서의 개선 우선순위}가 고객의 구매 전환을 이끌어낼 수 있을 것으로 사료됨.
-
-## 4대 가치 만족도
-"입력.4대가치_재료"의 순서(기능적→심미적→경제적→사회·공공적)대로, 가치마다 [가치명] 소제목 한 줄 + 그 다음 줄에 요지 한 문장(원본 51쪽):
-• [{가치명}]
-{긍정요지를 한 구절로}, 다만/그러나 {개선요지를 한 구절로}에 대한 개선 필요.
-- 반드시 4개 가치를 이 순서로 모두 쓴다.
-
-## 종합 만족도 및 NPS 지수
-정확히 2개 소제목, 각 1문장(원본 52쪽):
-• [종합 만족도 개선 필요]
-중립 고객({종합만족도중립구간비율}%) 비율이 높은 편으로 이는 사용자들의 구매 전환을 일으키는 요소가 적은 것으로 판단됨. {이들을 타깃으로 불편 요소를 최소화하면 전체 만족도를 끌어올릴 수 있다는 취지 한 문장}.
-• [NPS 조사]
-구매의향, 추천의향을 NPS 지수로 환산했을 때, {NPS점수}로 '{NPS<0이면 낮은, 아니면 높은} 시장성' 수준으로 판단되어 개선 전략의 수립이 시급하다고 사료됨.
-
-# 공통 규칙
-- 제공 재료에 없는 사실·원인·수치를 추가하지 않는다. 제언은 객관적 뉘앙스("~제언함/~필요가 있음/~사료됨")로만 끝낸다.
-- 불릿은 "•", 소제목은 "[대괄호]", 화살표는 "→"만 쓴다. 핵심 수치·표현에만 **굵게**(한 줄 최대 1개).
-- 내부 집계 수치·필드명("clauseCount" 등)을 절대 출력하지 않는다.
-- 장 제목·인사말·데이터 없음 안내를 출력하지 않는다. 위 4개 "## 제목"과 그 본문만 출력한다.`;
-
-// sectionAnalyses가 전혀 없을 때(구버전 캐시 등)만 쓰는 축약 fallback 프롬프트 — 압축 대상이
-// 없으므로 정량+카테고리에서 최소한의 개조식 요약만 만든다(원본 형식 재현은 보장하지 않는다).
-const FALLBACK_SYSTEM_PROMPT = `당신은 사용성테스트 결과보고서 Ⅸ장 "결과 요약" 표를 작성합니다. 아직 장별 상세
-분석이 없어, 정량 수치와 정성 카테고리 인사이트만으로 항목별 개조식 요약을 만듭니다.
-각 항목 2~3개 불릿, 제공된 수치·인사이트만 사용, 제언은 객관적 뉘앙스로만("~제언함/추천함/필요가
-있음/요구됨/시급하다고 사료됨"). 아래 제목을 정확히 쓰고 입력에 있는 항목만 작성하세요:
-## 기능별 고객 경험 평가
-## 핵심구매요소
-## 4대 가치 만족도
-## 사용자 경험 품질 평가
-## 교차 분석
-## 종합 만족도 및 NPS 지수`;
 
 // Ⅸ.1은 Ⅲ.2보다 거친 3단계 표현어를 쓴다(원본 51쪽: 산책 imp 2.96="높은"·sat 6.35="낮은",
 // 성장 imp 1.37="높은"·sat 6.81="보통 수준의", 거점 imp 0.26="보통의"·sat 6.35="낮은",
 // 꾸미기 imp 0.23="낮은"·sat 7.20="높은"). 표현어를 모델이 즉흥으로 고르지 않게 코드에서 확정한다.
+// importanceLabel3의 절대 임계값(1.0/0.25)은 relativeImportance 자체가 FGI 공식으로 항상
+// ±5 범위로 정규화되므로(CLAUDE.md 참고) raw data가 달라도 안전하다. **satisfactionLabel3는
+// 원래 만족도 원점수(0~10, 정규화 안 됨)에 리바랩스 점수 구간(7.0/6.5)을 절대 임계값으로 썼는데,
+// 다른 raw data는 전체 만족도 수준 자체가 다를 수 있어(예: 전 항목 8점대) 그대로 두면 라벨이
+// 다 쏠린다 — sectionAnalysis.ts의 satisfactionLabel5와 같은 이유로 순위 기반으로 교체했다.**
 function importanceLabel3(score: number): string {
   if (score >= 1.0) return "높은";
   if (score >= 0.25) return "보통의";
   return "낮은";
 }
-function satisfactionLabel3(mean: number): string {
-  if (mean >= 7.0) return "높은";
-  if (mean >= 6.5) return "보통 수준의";
+function satisfactionLabel3(rank: number): string {
+  if (rank === 1) return "높은";
+  if (rank === 2) return "보통 수준의";
   return "낮은";
 }
 
@@ -102,7 +46,16 @@ function buildFeatureRowMaterial(stats: QuantStats, qualitative: QuestionWithApp
   const total = ranked.length;
   const firstGroupSize = Math.ceil(total / 3);
   const secondGroupSize = Math.ceil((total - firstGroupSize) / 2);
-  return ranked.slice(0, firstGroupSize + secondGroupSize).map((item, index) => {
+  const shown = ranked.slice(0, firstGroupSize + secondGroupSize);
+  // 만족도 표현어는 이 표에 실제로 나열되는 기능들 사이의 순위로만 정한다(원본 51쪽도 우선·
+  // 차우선 tier 안에서만 상대 비교) — 순위 계산 근거를 sectionAnalysis.ts의 satisfactionLabel5와
+  // 같은 이유로 절대 점수에서 순위로 바꿨다.
+  const satisfactionRank = new Map(
+    [...shown]
+      .sort((a, b) => (stats.featureSatisfaction.find((f) => f.name === b.name)?.mean ?? 0) - (stats.featureSatisfaction.find((f) => f.name === a.name)?.mean ?? 0))
+      .map((item, i) => [item.name, i + 1]),
+  );
+  return shown.map((item, index) => {
     const mean = stats.featureSatisfaction.find((f) => f.name === item.name)?.mean ?? 0;
     const tier = index < firstGroupSize ? "우선" : "차우선";
     const negatives = qualitative
@@ -113,7 +66,7 @@ function buildFeatureRowMaterial(stats: QuantStats, qualitative: QuestionWithApp
     return {
       기능명: item.name,
       중요도표현: importanceLabel3(item.score),
-      만족도표현: satisfactionLabel3(mean),
+      만족도표현: satisfactionLabel3(satisfactionRank.get(item.name) ?? index + 1),
       tier,
       // 우선 tier의 판정 후보 2종, 차우선 tier의 판정 후보 2종(원본 51쪽 문구)
       판정후보: tier === "우선"

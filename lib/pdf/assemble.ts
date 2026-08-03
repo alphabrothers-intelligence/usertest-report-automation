@@ -53,6 +53,7 @@ export async function assembleReport(fileUrl: string): Promise<AssembleResult> {
       strategicInput,
       resultSummary,
       productInfo: report.product_info ?? undefined,
+      sectionAnalyses: report.section_analyses,
     }),
   );
 

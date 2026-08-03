@@ -88,7 +88,7 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
         const report = await getReportById(job.report_id);
         const requested = report?.quant_stats && detectProductType(report.quant_stats) === "physical"
           ? ["corePurchaseFactor"] as const
-          : ["featureExperience", "corePurchaseFactor", "fourValues", "uxQuality", "crossAnalysis"] as const;
+          : ["featureExperience", "corePurchaseFactor", "fourValues", "fourValueItems", "uxQuality", "crossAnalysis"] as const;
         const sectionUsages: ClaudeUsageRecord[] = [];
         const sectionRunIds = new Map<string, string>();
         const generated = await runSectionAnalysesForReport(job.report_id, {

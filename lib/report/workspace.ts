@@ -6,7 +6,7 @@ import type { CategoryCount } from "@/lib/quant/basic";
 // 컴파일 시 제거되므로 클라이언트 번들에 DB 클라이언트가 딸려오지 않는다.
 import type { QuestionWithApprovedCategories, CategoryRow, RecommendationRow, SectionAnalyses } from "@/lib/db/reports";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
-import { splitCrossAnalysisText } from "@/lib/pipeline/sectionAnalysis";
+import { splitCrossAnalysisText, parseFourValueItemTexts } from "@/lib/pipeline/sectionAnalysis";
 import { decodeImprovementLabel } from "@/lib/pipeline/stage2";
 import { donutSvg, satisfactionHistogramSvg } from "@/lib/report/chartSvg";
 import {
@@ -367,14 +367,18 @@ function valueMeanSdTableHtml(mean: number, sd: number): string {
  * Ⅴ장에는 Ⅲ장의 긍정·부정·중립 총평을 그대로 나열하지 않는다. `combined`에는 가치 문항 전용
  * 프롬프트가 만든 3~4문장 존댓말 요약이 저장된다. 이전에 생성해 둔 보고서는 combined 키가
  * 없을 수 있으므로, 그 경우에만 기존 극성 요약을 읽는 호환 경로를 둔다. */
-export function valueSummaryBoxHtml(label: string, summaries: PolaritySummaryText | null | undefined, questionKey?: string): string {
-  const text = summaries?.combined
+export function valueSummaryBoxHtml(label: string, summaries: PolaritySummaryText | null | undefined, questionKey?: string, overrideText?: string): string {
+  const text = overrideText
+    ?? summaries?.combined
     ?? (summaries
       ? (["positive", "negative", "neutral"] as const)
           .map((polarity) => summaries[polarity])
           .filter((value): value is string => Boolean(value))
           .join(" ")
       : "");
+  // overrideText(sectionAnalysis.ts 자동 생성분)가 있으면 이미 채워진 값이니 "AI 요약 생성"
+  // 버튼을 보여줄 필요가 없다 — questionKey를 비워 버튼을 감춘다.
+  questionKey = overrideText ? undefined : questionKey;
   // 가치 전용 프롬프트는 3~4문장을 줄바꿈으로 분리한다. 단순 <br>보다 실제 <p>가 한글의
   // 붙여넣기에서 문단/문단 간격으로 더 안정적으로 변환되므로 줄마다 문단을 만든다.
   // richTextToInlineHtml은 **__강조__**를 <strong><u>로 바꿔 HWP에도 강조 의미가 남는다.
@@ -392,7 +396,12 @@ export function valueSummaryBoxHtml(label: string, summaries: PolaritySummaryTex
   );
 }
 
-function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questions: QuestionWithApprovedCategories[]): ReportBlock[] {
+function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questions: QuestionWithApprovedCategories[], itemsText?: string): ReportBlock[] {
+  // 2026-08-03: sectionAnalysis.ts의 runFourValueItemAnalysis(항상 파이프라인의 일부로 자동
+  // 생성)가 있으면 그 텍스트를 쓴다 — opt-in "AI 요약 생성" 버튼(polaritySummary.ts)은 이
+  // 자동 생성이 아직 없는(구버전 report 등) 경우의 폴백으로만 남긴다. 원본은 이 문단이
+  // 선택적("나중에 채울 것")이 아니라 항상 있는 필수 구성요소이기 때문이다.
+  const itemTexts = parseFourValueItemTexts(itemsText ?? "");
   const valueRows: { key: "functional" | "aesthetic" | "economic" | "social"; label: string; mean: number; sd: number }[] = [
     { key: "functional", label: "기능적 가치", mean: stats.fourValues.functional.mean, sd: stats.fourValues.functional.sd },
     { key: "aesthetic", label: "심미적 가치", mean: stats.fourValues.aesthetic.mean, sd: stats.fourValues.aesthetic.sd },
@@ -418,7 +427,7 @@ function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questio
       }));
       blocks.push(richStaticBlock({
         id: `${idPrefix}-summary-${index + 1}`,
-        html: valueSummaryBoxHtml(value.label, question.polarity_summaries, question.question_key),
+        html: valueSummaryBoxHtml(value.label, question.polarity_summaries, question.question_key, itemTexts[value.label]),
         summaryQuestionKey: question.question_key,
         summaryKind: "value",
       }));
@@ -971,7 +980,7 @@ function buildFourValuesAnalysisText(
 }
 
 /** 섹션 Ⅴ: 4대 가치 만족도. */
-function buildFourValuesSection(stats: QuantStats, qual: QuestionWithApprovedCategories[], analysis?: string): ReportBlock[] {
+function buildFourValuesSection(stats: QuantStats, qual: QuestionWithApprovedCategories[], analysis?: string, itemsText?: string): ReportBlock[] {
   const rows: { label: string; mean: number; sd: number }[] = [
     { label: "기능적 가치", mean: stats.fourValues.functional.mean, sd: stats.fourValues.functional.sd },
     { label: "심미적 가치", mean: stats.fourValues.aesthetic.mean, sd: stats.fourValues.aesthetic.sd },
@@ -980,7 +989,7 @@ function buildFourValuesSection(stats: QuantStats, qual: QuestionWithApprovedCat
   ];
   return [
     headingBlock({ id: "values-result-heading", variant: "numbered", number: "1", text: "4대 가치 조사 결과" }),
-    ...fourValueQualitativeBlocks(stats, "four-values-qualitative", questionsByKeyPrefix(qual, "values:")),
+    ...fourValueQualitativeBlocks(stats, "four-values-qualitative", questionsByKeyPrefix(qual, "values:"), itemsText),
     // 원본 36쪽: "4대 가치 만족도 종합 결과" 막대+표는 "1"이 아니라 "2 4대 가치 조사 결과
     // 분석"의 맨 앞에 있다(2026-07-28 원본 재대조로 위치 수정 — 예전엔 "1"에 있었다).
     headingBlock({ id: "values-analysis-heading", variant: "numbered", number: "2", text: "4대 가치 조사 결과 분석" }),
@@ -1524,7 +1533,7 @@ export function buildReportWorkspaceSeed(input: {
     II: buildDemographicsSection(stats),
     III: buildFeatureSection(stats, qual, sa.featureExperience),
     IV: buildCorePurchaseFactorSection(stats, sa.corePurchaseFactor),
-    V: buildFourValuesSection(stats, qual, sa.fourValues),
+    V: buildFourValuesSection(stats, qual, sa.fourValues, sa.fourValueItems),
     VI: buildUxQualitySection(stats, sa.uxQuality),
     VII: buildCrossAnalysisSection(stats, sa.crossAnalysis),
     VIII: buildNpsSection(stats, qual),

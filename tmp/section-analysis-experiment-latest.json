@@ -1,23 +1,21 @@
 {
-  "updatedAt": "2026-07-30T00:56:09.823Z",
+  "updatedAt": "2026-07-31T09:24:45.947Z",
   "status": "completed",
-  "reportId": "dfc8de69-4430-41a2-a4bd-a4b426f0a426",
+  "reportId": "777788c3-7552-47cc-8d97-57c74a815db9",
   "productType": "sw",
   "requestedSections": [
-    "featureExperience",
     "corePurchaseFactor",
     "fourValues",
     "uxQuality"
   ],
   "completedSections": [
-    "featureExperience",
     "corePurchaseFactor",
     "fourValues",
     "uxQuality"
   ],
   "failedSections": [],
-  "apiCallsPlanned": 4,
+  "apiCallsPlanned": 3,
   "concurrency": 2,
   "baselinePipelineReexecuted": false,
-  "elapsedMs": 32256
+  "elapsedMs": 25459
 }

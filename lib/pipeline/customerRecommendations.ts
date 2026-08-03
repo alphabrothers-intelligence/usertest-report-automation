@@ -12,6 +12,7 @@ import type { QuantStats } from "@/lib/quant/compute";
 import type { QuestionWithApprovedCategories } from "@/lib/db/reports";
 import { streamStructured, withClaudeGuard } from "./claudeGuard";
 import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
+import { CUSTOMER_RECOMMENDATIONS_SYSTEM as SYSTEM } from "./prompts";
 
 const MODEL = process.env.ANTHROPIC_CUSTOMER_RECOMMENDATION_MODEL ?? "claude-sonnet-5";
 
@@ -28,27 +29,6 @@ const FeatureCustomerRecommendationSchema = z.object({
 });
 
 export type FeatureCustomerRecommendations = z.infer<typeof FeatureCustomerRecommendationSchema>;
-
-const SYSTEM = `당신은 사용성테스트 결과보고서 Ⅸ장 "3. 기능별 고객 제언 종합" 표를 작성합니다.
-입력은 기능마다 확인된 부정 카테고리 라벨(정성, Stage2 결과)입니다. 각 기능에 표에 넣을
-짧은 행동형 고객 제언을 작성하세요 — **원칙적으로 3~4개**를 목표로 하되, 입력 부정 카테고리가
-5개 이상이면 최대 6개까지 늘려도 된다(카테고리 수보다 항목을 많이 만들지 말 것).
-
-# 형식 (원본 55쪽 "고객 제언" 표 셀과 동일 — 반드시 이 스타일을 따를 것)
-각 항목은 **명사형으로 끝나는 짧은 행동 문구**입니다(문장 종결어미·설명·이유 없음). 예:
-- "GPS 오차 최소화를 위한 위치 정확도 개선"
-- "산책 시작 시 자동 실행 기능 제공"
-- "보상 아이템의 다양화 및 난이도별 차등 보상 체계 구축"
-- "교배 과정 소요 시간 단축 및 접근성 개선"
-- "'교배'라는 용어·세계관을 대체할 수 있는 새로운 콘셉트 기획"
-
-# 절대 규칙
-- 입력에 제공된 부정 카테고리에서 확인된 문제만 개선 동작으로 바꾼다. 입력에 없는 기능·문제·수치를 지어내지 않는다.
-- 문장은 "~개선", "~제공", "~구축", "~도입", "~강화", "~마련", "~기획", "~검토"처럼 명사형으로 끝낸다.
-  "~합니다", "~해야 함", "~하십시오" 같은 서술형·명령형을 쓰지 않는다.
-- 굵게·밑줄·화살표·번호 매김을 넣지 않는다 — 표 셀에 들어갈 순수 텍스트 문구만 출력한다.
-- 같은 기능 안에서 항목끼리 서로 다른 문제를 다뤄 중복되지 않게 한다.
-- 입력에 제공된 기능은 전부(featureName을 정확히 그대로) 포함한다. 순서는 입력 순서를 유지한다.`;
 
 /** 리포트 단위로 전 기능의 고객 제언 표를 한 번에 생성한다(신규 LLM 호출 1회, 저비용). */
 export async function runFeatureCustomerRecommendations(

@@ -4,6 +4,7 @@ import path from "node:path";
 import { Fragment } from "react";
 import { View, Text, Image } from "@react-pdf/renderer";
 import { styles, colors } from "./theme";
+import { RichText } from "./richText";
 import {
   VerticalBarChart,
   VerticalBarChartWithAverage,
@@ -28,6 +29,7 @@ import {
 } from "./charts";
 import type { QuantStats } from "@/lib/quant/compute";
 import type { ProductInfo } from "@/lib/productInfo/types";
+import { splitCrossAnalysisText } from "@/lib/pipeline/sectionAnalysis";
 
 export type { ProductInfo };
 
@@ -561,13 +563,12 @@ export function SectionCorePurchaseFactor({
         </View>
       </View>
 
-      {/* "해석" 제목만 이 페이지에 남고 본문 한 줄이 다음 페이지로 넘어가는(제목만 덩그러니
-          보이는) 어색한 분할이 실측 확인됐다(2026-07-22) — 제목+본문을 wrap={false}로 묶어서
-          안 들어가면 둘 다 통째로 다음 페이지로 넘어가게 했다(고아 제목 방지). */}
-      <View wrap={false}>
-        <Text style={[styles.subheading, { marginTop: 4, marginBottom: 3 }]}>해석</Text>
-        <Text style={styles.body}>{recommendation ?? "제언이 아직 생성·승인되지 않았습니다."}</Text>
-      </View>
+      {/* 2026-07-22엔 제목+본문을 wrap={false}로 묶어 고아 제목을 막았는데, 실제 정성 분석이
+          붙은 recommendation 텍스트는 여러 문단+불릿으로 꽤 길어서(2026-08-03 실측) 그 전체를
+          한 페이지에 억지로 욱여넣으려다 Ⅴ장에서 겪은 것과 같은 레이아웃 붕괴 위험이 있다 —
+          제목만 wrap={false}로 남기고 본문은 자연스럽게 흐르게 둔다. */}
+      <Text style={[styles.subheading, { marginTop: 4, marginBottom: 3 }]} wrap={false}>해석</Text>
+      <RichText value={recommendation ?? "제언이 아직 생성·승인되지 않았습니다."} />
     </View>
   );
 }
@@ -746,7 +747,7 @@ function UxSingleScoreTable({
  * 색을 꺼내 쓰므로, 다른 raw data에서 그룹 구성이 달라져도(이름이 다르거나 그룹이 3개 이상)
  * 같은 방식으로 동작한다.
  */
-export function SectionUxQuality({ stats }: { stats: QuantStats }) {
+export function SectionUxQuality({ stats, uxQualityAnalysis }: { stats: QuantStats; uxQualityAnalysis?: string | null }) {
   const uxGroups = [
     { name: "실용성", items: stats.uxQuality.usability },
     { name: "즐거움", items: stats.uxQuality.fun },
@@ -854,6 +855,14 @@ export function SectionUxQuality({ stats }: { stats: QuantStats }) {
           />
         ))}
       </View>
+      {/* 2026-08-03 신규 연결: sectionAnalyses.uxQuality(원본 40쪽 "사용자 경험 품질 평가
+          종합 해석" + "사용자 경험 품질 세부 해석") — 예전엔 이 텍스트를 아예 안 읽어서
+          레이더 차트만 있고 해석 문단이 없었다(웹뷰어는 이미 표시하고 있었음). */}
+      {uxQualityAnalysis && (
+        <View style={{ marginTop: 6 }}>
+          <RichText value={uxQualityAnalysis} />
+        </View>
+      )}
     </View>
   );
 }
@@ -899,7 +908,13 @@ function overallTrendBullets(groups: QuantStats["crossAnalysis"]["byAgeGroup"]):
  * 막대그래프로, 성별은 추가로 UX품질(실용성/즐거움) 레이더 오버레이까지 보여준다(실제 발행
  * 보고서 형식, 2026-07-21 실측 대조). 그룹별로 따로 그래프를 나열하던 기존 방식은 그룹 간
  * 비교가 한눈에 안 됐다 — 항목을 x축에, 그룹을 색상 시리즈로 겹쳐서 비교하기 쉽게 했다. */
-export function SectionCrossAnalysis({ stats }: { stats: QuantStats }) {
+export function SectionCrossAnalysis({ stats, crossAnalysisText }: { stats: QuantStats; crossAnalysisText?: string | null }) {
+  // sectionAnalyses.crossAnalysis — Ⅶ장 "[전반적 만족도 경향]"+"[종합 분석]"(원본 41~42쪽).
+  // 2026-08-03 신규 연결: 예전엔 규칙 기반 순위 비교("[전반적 만족도 경향]"만, "핵심 세그먼트"
+  // 같은 판단 문구 없이)로 대체돼 있었는데, 이미 CROSS_ANALYSIS_SYSTEM(sectionAnalysis.ts)이
+  // 이 두 블록을 다 만들어 저장하고 있었다(웹뷰어는 이미 이 텍스트를 쓰고 있었음) — LLM 텍스트가
+  // 있으면 그걸 쓰고, 없을 때만(구버전 report 등) 규칙 기반 문구로 폴백한다.
+  const { age: ageAnalysisText, gender: genderAnalysisText } = splitCrossAnalysisText(crossAnalysisText ?? undefined);
   // 실제 발행 보고서는 원본 컬럼 순서가 아니라 Ⅲ장 "기능별 만족도"와 같은 순서(전체 평균
   // 만족도 내림차순)로 항목을 배열한다(2026-07-21 실측 대조) — 여기서도 같은 순서를 쓴다.
   const featureNames = [...stats.featureSatisfaction].sort((a, b) => b.mean - a.mean).map((f) => f.name);
@@ -951,12 +966,18 @@ export function SectionCrossAnalysis({ stats }: { stats: QuantStats }) {
         unit="점"
         title="[ 4대 가치 만족도 차이 ]"
       />
-      <Text style={[styles.body, { fontWeight: "bold", marginTop: 4 }]}>[전반적 만족도 경향]</Text>
-      {overallTrendBullets(ageGroups).map((line) => (
-        <Text key={line} style={styles.body}>
-          • {line}
-        </Text>
-      ))}
+      {ageAnalysisText ? (
+        <RichText value={ageAnalysisText} />
+      ) : (
+        <>
+          <Text style={[styles.body, { fontWeight: "bold", marginTop: 4 }]}>[전반적 만족도 경향]</Text>
+          {overallTrendBullets(ageGroups).map((line) => (
+            <Text key={line} style={styles.body}>
+              • {line}
+            </Text>
+          ))}
+        </>
+      )}
 
       <Text style={styles.subheading} break>
         성별 차이
@@ -981,12 +1002,18 @@ export function SectionCrossAnalysis({ stats }: { stats: QuantStats }) {
         unit="점"
         title="[ 4대 가치 만족도 차이 ]"
       />
-      <Text style={[styles.body, { fontWeight: "bold", marginTop: 4 }]}>[전반적 만족도 경향]</Text>
-      {overallTrendBullets(genderGroups).map((line) => (
-        <Text key={line} style={styles.body}>
-          • {line}
-        </Text>
-      ))}
+      {genderAnalysisText ? (
+        <RichText value={genderAnalysisText} />
+      ) : (
+        <>
+          <Text style={[styles.body, { fontWeight: "bold", marginTop: 4 }]}>[전반적 만족도 경향]</Text>
+          {overallTrendBullets(genderGroups).map((line) => (
+            <Text key={line} style={styles.body}>
+              • {line}
+            </Text>
+          ))}
+        </>
+      )}
 
       {genderGroups.length >= 2 && (
         <View>

@@ -5,6 +5,7 @@ import { styles, colors } from "./theme";
 import type { QuantStats } from "@/lib/quant/compute";
 import type { QuestionWithApprovedCategories, RecommendationRow, StrategicInputRow } from "@/lib/db/reports";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
+import type { SectionAnalyses } from "@/lib/pipeline/sectionAnalysis";
 import {
   SectionOverview,
   SectionDemographics,
@@ -37,6 +38,7 @@ export interface ReportDocumentProps {
   strategicInput: StrategicInputRow | null;
   resultSummary: string;
   productInfo?: ProductInfo;
+  sectionAnalyses?: SectionAnalyses | null;
 }
 
 /**
@@ -109,6 +111,7 @@ export function ReportDocument({
   strategicInput,
   resultSummary,
   productInfo,
+  sectionAnalyses,
 }: ReportDocumentProps) {
   const featureQuestions = questions.filter((q) => q.question_key.startsWith("feature:"));
   const valueQuestions = questions.filter((q) => q.question_key.startsWith("values:"));
@@ -193,17 +196,25 @@ export function ReportDocument({
           <SectionOverview productInfo={productInfo} stats={quantStats} />
         </View>
         <SectionDemographics stats={quantStats} />
-        <SectionFeatureExperience stats={quantStats} featureQuestions={featureQuestions} />
+        <SectionFeatureExperience stats={quantStats} featureQuestions={featureQuestions} featureExperienceAnalysis={sectionAnalyses?.featureExperience} />
         <SectionCorePurchaseFactor
           stats={quantStats}
           recommendation={findRecommendation(recommendations, "core_purchase_factor")}
         />
-        <View break>
-          <SectionFourValuesTable stats={quantStats} />
-          <SectionFourValuesQualitative valueQuestions={valueQuestions} />
-        </View>
-        <SectionUxQuality stats={quantStats} />
-        <SectionCrossAnalysis stats={quantStats} />
+        {/* SectionFourValuesTable은 자체적으로 이미 <View break>를 갖고 있다(sectionsQuant.tsx) —
+            여기서 또 <View break>로 감싸면 break-View가 중첩되는데, 실제 정성 분석 데이터가
+            붙은 전체 문서(20+페이지)에서 렌더링해보니 이 중첩이 표 값 라벨이 정성 카테고리
+            블록 위에 겹쳐 찍히는 심각한 레이아웃 붕괴를 일으켰다(2026-08-03 실측, 정량 전용
+            미리보기에서는 재현 안 됨 — 문서가 충분히 길고 정성 콘텐츠가 실제로 있어야 나타남).
+            다른 모든 장(Ⅵ 이후)처럼 두 컴포넌트를 독립된 형제로 두니 해결됐다. */}
+        <SectionFourValuesTable stats={quantStats} />
+        <SectionFourValuesQualitative
+          valueQuestions={valueQuestions}
+          fourValueItemsText={sectionAnalyses?.fourValueItems}
+          fourValuesAnalysis={sectionAnalyses?.fourValues}
+        />
+        <SectionUxQuality stats={quantStats} uxQualityAnalysis={sectionAnalyses?.uxQuality} />
+        <SectionCrossAnalysis stats={quantStats} crossAnalysisText={sectionAnalyses?.crossAnalysis} />
         <SectionNpsAndImprovement
           stats={quantStats}
           overallQuestion={findQuestion(questions, "overallSatisfaction")}
@@ -216,6 +227,7 @@ export function ReportDocument({
           resultSummary={resultSummary}
           devPriorityRecommendation={findRecommendation(recommendations, "dev_priority")}
           featureRecommendations={featureRecommendations}
+          customerRecommendations={recommendations.find((r) => r.section === "feature_customer_recommendations") ?? null}
           strategicInput={
             strategicInput
               ? {
