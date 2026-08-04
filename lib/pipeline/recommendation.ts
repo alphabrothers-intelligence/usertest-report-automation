@@ -12,7 +12,7 @@ import { logClaudeUsage, toClaudeUsageRecord, type ClaudeUsageRecord } from "@/l
 import type { QuantStats } from "@/lib/quant/compute";
 import type { QuestionWithApprovedCategories } from "@/lib/db/reports";
 import type { ProductType } from "@/lib/report/productType";
-import { buildRecommendationSystemPrompt } from "./prompts";
+import { buildRecommendationSystemPrompt, FEATURE_IMPROVEMENT_SYSTEM } from "./prompts";
 
 const RECOMMENDATION_MODEL = process.env.ANTHROPIC_RECOMMENDATION_MODEL ?? "claude-sonnet-5";
 
@@ -101,4 +101,70 @@ export async function runDevPriorityRecommendation(
   logClaudeUsage(label, result.usage, { elapsedMs });
   if (result.usage) onUsage?.(toClaudeUsageRecord(label, result.usage, { elapsedMs, attempt: 1 }));
   return result.text;
+}
+
+/** Ⅸ.2 "기능 개선 제안"(section=`feature_improvement:{기능명}`)의 dataSummary 조립 — 한 기능분.
+ * dev_priority(buildDevPriorityDataSummary)와 달리 tier 계산 없이 그 기능 하나만 본다. */
+export function buildFeatureImprovementDataSummary(
+  stats: QuantStats,
+  qualitative: QuestionWithApprovedCategories[],
+  featureName: string,
+) {
+  const satisfaction = stats.featureSatisfaction.find((f) => f.name === featureName) ?? null;
+  const relativeImportance = stats.relativeImportance.find((r) => r.name === featureName) ?? null;
+  const negativeCategories = qualitative
+    .find((q) => q.question_key === `feature:${featureName}`)
+    ?.categories.filter((c) => c.polarity === "negative")
+    .map((c) => ({ label: c.label, insight: c.insight_final ?? c.insight_draft })) ?? [];
+  return { featureName, satisfaction, relativeImportance, negativeCategories };
+}
+
+/** Ⅸ.2 "기능 개선 제안" 한 기능분을 생성한다(As-is/To-be, FEATURE_IMPROVEMENT_SYSTEM 전용
+ * 프롬프트 — dev_priority의 buildRecommendationSystemPrompt와는 다른 프롬프트). 채팅 도구
+ * (generateFeatureRecommendation)와 기본 정성 분석 흐름의 자동 생성(runAllFeatureImprovement
+ * Recommendations) 양쪽에서 공유해 형식이 두 경로에서 어긋나지 않게 한다. */
+export async function runFeatureImprovementRecommendation(
+  stats: QuantStats,
+  qualitative: QuestionWithApprovedCategories[],
+  featureName: string,
+  onUsage?: (usage: ClaudeUsageRecord) => void,
+): Promise<string> {
+  const dataSummary = buildFeatureImprovementDataSummary(stats, qualitative, featureName);
+  const label = `recommendation:feature_improvement:${featureName}`;
+  const startedAt = Date.now();
+  const result = await generateText({
+    model: anthropic(RECOMMENDATION_MODEL),
+    system: FEATURE_IMPROVEMENT_SYSTEM,
+    prompt: `아래는 '${featureName}' 기능의 개선 제안 근거입니다. 입력에 있는 사실만 사용하여 원본 Ⅸ장 "기능 개선 제안" 형식의 항목 하나를 작성하세요.\n\n${JSON.stringify(dataSummary, null, 2)}`,
+    maxOutputTokens: 800,
+    reasoning: "none",
+  });
+  const elapsedMs = Date.now() - startedAt;
+  logClaudeUsage(label, result.usage, { elapsedMs });
+  if (result.usage) onUsage?.(toClaudeUsageRecord(label, result.usage, { elapsedMs, attempt: 1 }));
+  return result.text;
+}
+
+/** Ⅸ.2 "기능 개선 제안"을 raw data의 전 기능에 대해 자동 생성한다(2026-08-03 신규 — 기존엔
+ * 사용자가 채팅에서 기능마다 개별 요청해야만 채워졌는데, 원본 보고서는 이 항목이 항상 채워져
+ * 있어 담당자가 "무조건 자동 생성돼야 한다"고 요청했다). dev_priority·기능별 고객 제언 종합과
+ * 같은 시점(정성 분석 완료 직후)에 같이 자동 실행된다. 기능 하나가 실패해도 나머지가 유실되지
+ * 않도록 allSettled로 각각 독립 처리한다. */
+export async function runAllFeatureImprovementRecommendations(
+  stats: QuantStats,
+  qualitative: QuestionWithApprovedCategories[],
+  onUsage?: (usage: ClaudeUsageRecord) => void,
+): Promise<{ featureName: string; draft: string }[]> {
+  const results = await Promise.allSettled(
+    stats.featureSatisfaction.map(async (f) => ({
+      featureName: f.name,
+      draft: await runFeatureImprovementRecommendation(stats, qualitative, f.name, onUsage),
+    })),
+  );
+  const fulfilled: { featureName: string; draft: string }[] = [];
+  for (const result of results) {
+    if (result.status === "fulfilled") fulfilled.push(result.value);
+    else console.error("[recommendation] 기능 개선 제안 생성 실패", result.reason);
+  }
+  return fulfilled;
 }

@@ -3,8 +3,8 @@
 // 있다(외부 캔버스 라이브러리·PNG 래스터화 불필요 — Vercel 서버리스에 native 바이너리 의존성이
 // 없어 오히려 더 안전하다). CLAUDE.md 참고. Svg/Polygon/Line/Circle도 네이티브로 지원해서
 // 방사형(레이더) 차트도 같은 원칙으로 그릴 수 있다(2026-07-21, 실제 발행 보고서 양식 대조).
-import type { ReactNode } from "react";
-import { View, Text, Svg, Polygon, Line, Circle, Rect, Image } from "@react-pdf/renderer";
+import { Fragment, type ReactNode } from "react";
+import { View, Text, Svg, Polygon, Line, Circle, Rect, Path, Image } from "@react-pdf/renderer";
 import { colors, styles } from "./theme";
 import { renderQuadrantChart, renderPriorityReferenceDiagram } from "@/lib/charts/canvasCharts";
 
@@ -1777,4 +1777,147 @@ export function CanvasQuadrantChart({
 export function CanvasPriorityReference({ size = 300 }: { size?: number }) {
   const chart = renderPriorityReferenceDiagram(size, size);
   return <Image src={chart.buffer} style={{ width: chart.width, height: chart.height }} />;
+}
+
+// ── Ⅲ/Ⅷ 문항별 "주관식 응답 감정 분석" 반원 도넛 + "만족도 분포도" 히스토그램 ───────────
+// 2026-08-04: 원본 hwpx(문항마다 Q번호+평균/표준편차 배너+분포 히스토그램+감정분석 도넛+응답
+// 요약 박스 구조)를 실제로 읽어 대조한 결과, PDF 렌더러(QuestionQualitativeBlock)에는 이
+// 두 차트가 아예 없고 단순 가로 막대(PolarityStackedBar)만 있어서 원본과 형식이 크게 달랐다.
+// 웹 뷰어(lib/report/chartSvg.ts의 donutSvg/satisfactionHistogramSvg, HTML용)는 이미 원본과
+// 맞는 모양으로 구현돼 있었으므로, 같은 기하 계산을 react-pdf Svg 프리미티브로 그대로 옮긴다
+// (좌표계는 chartSvg.ts와 동일하게 유지 — viewBox로 축소 표시만 하고 계산식은 재검증 불필요).
+const POLARITY_ORDER_PDF = ["positive", "negative", "neutral"] as const;
+const POLARITY_LABEL_PDF: Record<string, string> = { positive: "긍정", negative: "부정", neutral: "중립" };
+const POLARITY_COLOR_PDF: Record<string, string> = { positive: "#5b73c4", negative: "#e07a3f", neutral: "#b8b8b8" };
+
+function polarXYPdf(cx: number, cy: number, r: number, deg: number): [number, number] {
+  const rad = (deg * Math.PI) / 180;
+  return [cx + r * Math.cos(rad), cy - r * Math.sin(rad)];
+}
+
+/** 원본 "주관식 응답 감정 분석" 반원 도넛(긍정/부정/중립 clause_count 비율). counts가 전부
+ * 0이면(정성 분석 전) null을 그려 호출부가 안내 문구로 대체하게 한다. */
+export function PdfPolarityDonut({
+  positive,
+  negative,
+  neutral,
+  width = 200,
+}: {
+  positive: number;
+  negative: number;
+  neutral: number;
+  width?: number;
+}) {
+  const values: Record<string, number> = { positive, negative, neutral };
+  const total = positive + negative + neutral;
+  if (total <= 0) return null;
+  const cx = 125, cy = 126, R = 100, Ri = 58;
+  const arcs: ReactNode[] = [];
+  const labels: ReactNode[] = [];
+  let a = 180;
+  for (const pol of POLARITY_ORDER_PDF) {
+    const frac = values[pol] / total;
+    if (frac <= 0) continue;
+    const a0 = a;
+    const a1 = a - frac * 180;
+    const [ox0, oy0] = polarXYPdf(cx, cy, R, a0);
+    const [ox1, oy1] = polarXYPdf(cx, cy, R, a1);
+    const [ix1, iy1] = polarXYPdf(cx, cy, Ri, a1);
+    const [ix0, iy0] = polarXYPdf(cx, cy, Ri, a0);
+    arcs.push(
+      <Path
+        key={pol}
+        d={`M ${ox0.toFixed(1)} ${oy0.toFixed(1)} A ${R} ${R} 0 0 1 ${ox1.toFixed(1)} ${oy1.toFixed(1)} L ${ix1.toFixed(1)} ${iy1.toFixed(1)} A ${Ri} ${Ri} 0 0 0 ${ix0.toFixed(1)} ${iy0.toFixed(1)} Z`}
+        fill={POLARITY_COLOR_PDF[pol]}
+      />,
+    );
+    const [lx, ly] = polarXYPdf(cx, cy, (R + Ri) / 2, (a0 + a1) / 2);
+    labels.push(
+      <Text key={pol} x={lx} y={ly} fill="#ffffff" style={{ fontSize: 11, fontWeight: "bold", fontFamily: "Noto Sans KR" }} textAnchor="middle">
+        {(frac * 100).toFixed(1)}%
+      </Text>,
+    );
+    a = a1;
+  }
+  const legend = POLARITY_ORDER_PDF.map((pol, index) => {
+    const y = 55 + index * 21;
+    return (
+      <View key={pol} style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+        <View style={{ width: 8, height: 8, backgroundColor: POLARITY_COLOR_PDF[pol], marginRight: 5 }} />
+        <Text style={{ fontSize: 8 }}>{POLARITY_LABEL_PDF[pol]}</Text>
+      </View>
+    );
+  });
+  const height = (width * 145) / 330;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <Svg viewBox="0 0 250 145" width={width * (250 / 330)} height={height}>
+        {arcs}
+        {labels}
+      </Svg>
+      <View style={{ marginLeft: 4 }}>{legend}</View>
+    </View>
+  );
+}
+
+/** 원본 "만족도 분포도" 0~10점 히스토그램. distribution이 전부 0이면(구버전 저장분 등) null. */
+export function PdfSatisfactionHistogram({
+  distribution,
+  width = 320,
+}: {
+  distribution: number[];
+  width?: number;
+}) {
+  const values = Array.from({ length: 11 }, (_, index) => Math.max(0, Number(distribution[index]) || 0));
+  const maxCount = Math.max(0, ...values);
+  if (maxCount <= 0) return null;
+  const vbWidth = 560, vbHeight = 220;
+  const margin = { top: 14, right: 14, bottom: 32, left: 34 };
+  const automaticMax = Math.max(5, Math.ceil(maxCount / 5) * 5);
+  const tickCount = 5;
+  const plotW = vbWidth - margin.left - margin.right;
+  const plotH = vbHeight - margin.top - margin.bottom;
+  const slot = plotW / values.length;
+  const barW = slot * 0.68;
+  const baseY = margin.top + plotH;
+  const grid: ReactNode[] = [];
+  for (let index = 0; index <= tickCount; index += 1) {
+    const tick = (automaticMax * index) / tickCount;
+    const y = baseY - (tick / automaticMax) * plotH;
+    grid.push(
+      <Fragment key={index}>
+        <Line x1={margin.left} y1={y} x2={vbWidth - margin.right} y2={y} stroke="#e5e7eb" strokeWidth={1} />
+        <Text x={margin.left - 6} y={y + 3} style={{ fontSize: 9, fontFamily: "Noto Sans KR" }} textAnchor="end" fill="#6b7280">
+          {Number.isInteger(tick) ? tick : tick.toFixed(1)}
+        </Text>
+      </Fragment>,
+    );
+  }
+  const bars = values.map((count, i) => {
+    const cx = margin.left + slot * i + slot / 2;
+    const h = (count / automaticMax) * plotH;
+    const y = baseY - h;
+    return (
+      <Fragment key={i}>
+        <Rect x={cx - barW / 2} y={y} width={barW} height={Math.max(0, h)} fill={count === maxCount ? "#078c44" : "#2ed6a4"} />
+        {count > 0 && (
+          <Text x={cx} y={y - 4} textAnchor="middle" fill="#4b5563" style={{ fontSize: 9, fontWeight: "bold", fontFamily: "Noto Sans KR" }}>
+            {count}
+          </Text>
+        )}
+        <Text x={cx} y={baseY + 14} style={{ fontSize: 9, fontFamily: "Noto Sans KR" }} textAnchor="middle" fill="#4b5563">
+          {i}
+        </Text>
+      </Fragment>
+    );
+  });
+  const height = (width * vbHeight) / vbWidth;
+  return (
+    <Svg viewBox={`0 0 ${vbWidth} ${vbHeight}`} width={width} height={height}>
+      {grid}
+      <Line x1={margin.left} y1={margin.top} x2={margin.left} y2={baseY} stroke="#9ca3af" />
+      <Line x1={margin.left} y1={baseY} x2={vbWidth - margin.right} y2={baseY} stroke="#9ca3af" />
+      {bars}
+    </Svg>
+  );
 }

@@ -16,7 +16,7 @@ import { buildQuestionSpecs } from "@/lib/pipeline/questions";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
 import { estimateQualitativeCallPlan, QUALITATIVE_MAX_CLAUDE_CALLS, QUALITATIVE_MAX_ESTIMATED_USD } from "@/lib/pipeline/orchestrate";
 import { runPolaritySummariesForReport } from "@/lib/pipeline/generatePolaritySummaries";
-import { runRecommendation, buildDevPriorityDataSummary } from "@/lib/pipeline/recommendation";
+import { runRecommendation, buildDevPriorityDataSummary, runFeatureImprovementRecommendation } from "@/lib/pipeline/recommendation";
 import { runResultSummary } from "@/lib/pipeline/summary";
 import { checkHedgeWording } from "@/lib/pipeline/hedgeCheck";
 import { assembleReport } from "@/lib/pdf/assemble";
@@ -34,7 +34,6 @@ import {
   saveRecommendation,
   getPendingRecommendationReviews,
   approveRecommendation,
-  getCategoriesForQuestion,
   saveStrategicInput,
   getStrategicInput,
   saveProductInfo,
@@ -561,24 +560,13 @@ export async function POST(req: Request) {
           return { ok: false, error: "정량 통계가 없습니다. computeQuantStats를 먼저 호출하세요." };
         }
 
-        const satisfaction = report.quant_stats.featureSatisfaction.find(
-          (f) => f.name === featureName,
-        );
-        const importance = report.quant_stats.relativeImportance.find(
-          (r) => r.name === featureName,
-        );
-        const categories = await getCategoriesForQuestion(report.id, `feature:${featureName}`);
-        const negativeCategories = categories
-          .filter((c) => c.polarity === "negative")
-          .map((c) => ({ label: c.label, insight: c.insight_final ?? c.insight_draft }));
-
+        const qualitative = await getQuestionsWithAllCategories(report.id);
         const section = `feature_improvement:${featureName}`;
-        const dataSummary = { featureName, satisfaction, relativeImportance: importance, negativeCategories };
-        const draft = await runRecommendation({
-          sectionLabel: `'${featureName}' 기능개선제안(As-is→To-be)`,
-          dataSummary,
-          productType: detectProductType(report.quant_stats),
-        });
+        // FEATURE_IMPROVEMENT_SYSTEM 전용 프롬프트(As-is/To-be 형식, 원본 54쪽) — dev_priority의
+        // buildRecommendationSystemPrompt와는 다른 프롬프트다. 자동 생성(run-next 파이프라인,
+        // runAllFeatureImprovementRecommendations)과 이 채팅 도구가 같은 함수를 공유해 형식이
+        // 어긋나지 않게 한다.
+        const draft = await runFeatureImprovementRecommendation(report.quant_stats, qualitative, featureName);
         const hedgeViolations = checkHedgeWording(draft);
         await saveRecommendation({ reportId: report.id, section, draft });
         return { ok: true, section, draft, hedgeViolations };

@@ -45,18 +45,30 @@ export function RichText({ value, style = {} }: { value: string; style?: Style }
         if (block.empty) return <View key={i} style={{ height: 4 }} />;
         const content = <Text>{block.runs.map((run, j) => <RunText key={j} run={run} />)}</Text>;
         if (block.kind === "heading") {
+          // parseRichText는 "[제목]" 한 줄을 heading으로 분류하며 대괄호를 판별용 마커로 보고
+          // 벗겨낸다(runs에는 안쪽 텍스트만 남음) — bullet의 "•"/arrow의 "→"는 이 렌더러가
+          // 이미 다시 붙이는데 heading만 빠져 있었다(2026-08-04 실측: hwpx 원본은 "[전반적
+          // 만족도 경향]"처럼 대괄호가 실제로 화면에 보이는 텍스트인데, PDF는 대괄호 없이
+          // 굵은 글자만 남아 있었다). level 2(원문 "[...]" 한 줄짜리)만 대괄호를 복원한다 —
+          // level 1(# 헤딩)은 원래 대괄호 문법이 아니었으므로 건드리지 않는다.
           return (
             <Text key={i} style={[styles.body, { fontWeight: "bold", marginTop: 4, marginBottom: 2 }, style]}>
-              {content}
+              {block.level === 2 ? <>[{content}]</> : content}
             </Text>
           );
         }
         if (block.kind === "arrow") {
           // 원본 관례는 굵게+기울임이지만, 이탤릭 폰트가 등록돼 있지 않아 fontStyle:"italic"을
           // 쓰면 즉시 렌더 에러가 난다(CLAUDE.md 기록) — 굵게만 쓴다.
+          // **"→"(U+2192)는 이 서브셋 폰트에서 "'"(작은 따옴표)로 보이는 mojibake가 난다**
+          // (2026-08-04 실측 — 최소 재현 스크립트로 직접 렌더링해 확인. pdftotext 추출에서도
+          // "’"로 나와 시각적 버그와 텍스트 추출 버그가 같은 원인임을 확인했다. CLAUDE.md에
+          // "→는 검증된 안전한 문자"라고 잘못 기록돼 있었다 — 실제로는 아니었다, 이 문서를
+          // 갱신할 것). 여러 대체 문자를 직접 렌더링 비교해 "›"(U+203A)만 정상 렌더됨을
+          // 확인했다(">", "->", "•", "·"도 안전하지만 "›"가 원본의 화살표 뉘앙스에 가장 가깝다).
           return (
             <Text key={i} style={[styles.body, { fontWeight: "bold", marginBottom: 2 }, style]}>
-              → {content}
+              › {content}
             </Text>
           );
         }

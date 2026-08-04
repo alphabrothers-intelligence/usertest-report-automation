@@ -44,6 +44,9 @@ function withInlinePdf(url?: string | null) {
   return `${url}${url.includes("?") ? "&" : "?"}inline=1`;
 }
 
+/** 데모(source 없이 진입)는 실제 DB report 행이 없어 서버에 저장할 대상이 없다 — 이 경우에만
+ * 예전처럼 localStorage를 계속 쓴다. 실제 보고서(sourceFileUrl 있음)는 아래
+ * loadServerDraft/saveServerDraft가 대신한다. */
 function loadSavedDraft(sourceFileUrl: string | null): SavedDraft | null {
   if (typeof window === "undefined") return null;
   const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -55,6 +58,10 @@ function loadSavedDraft(sourceFileUrl: string | null): SavedDraft | null {
     window.localStorage.removeItem(STORAGE_KEY);
     return null;
   }
+}
+
+function formatSavedAt(iso: string | null): string | null {
+  return iso ? new Date(iso).toLocaleString("ko-KR") : null;
 }
 
 export function ReportStudio({
@@ -86,6 +93,8 @@ export function ReportStudio({
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [workspaceSeed, setWorkspaceSeed] = useState<ReportWorkspaceSeed | null>(null);
+  const [reportName, setReportName] = useState("");
+  const [nameSaving, setNameSaving] = useState(false);
   const inlinePdfUrl = useMemo(() => withInlinePdf(pdfUrl), [pdfUrl]);
 
   useEffect(() => {
@@ -97,7 +106,13 @@ export function ReportStudio({
     const draftKey = sourceFileUrl ?? (demo ? "__rivalabs-demo__" : null);
     void fetch(workspaceUrl, { cache: "no-store" })
       .then(async (response) => {
-        const payload = await response.json() as { ok: boolean; error?: string; workspace?: ReportWorkspaceSeed };
+        const payload = await response.json() as {
+          ok: boolean;
+          error?: string;
+          workspace?: ReportWorkspaceSeed;
+          reportName?: string | null;
+          savedDraft?: { sections: ReportSectionContent[]; savedAt: string | null } | null;
+        };
         if (!response.ok || !payload.ok || !payload.workspace) {
           throw new Error(payload.error || "보고서 작업공간을 불러오지 못했습니다.");
         }
@@ -107,9 +122,14 @@ export function ReportStudio({
         if (cancelled || !payload.workspace) return;
         const seed = payload.workspace;
         setWorkspaceSeed(seed);
+        setReportName(payload.reportName ?? "");
         // 이 특정 보고서(source)를 이전에 편집·저장한 적이 있으면 서버가 방금 계산한 정량
         // 데이터 대신 저장된 편집본을 우선한다 — 없으면 서버 데이터 그대로 시작한다.
-        const draft = loadSavedDraft(draftKey);
+        // 실제 보고서(sourceFileUrl)는 서버 초안(payload.savedDraft)을, 데모는 예전처럼
+        // localStorage를 쓴다(데모는 DB report 행이 없어 서버에 저장할 대상이 없음).
+        const draft = sourceFileUrl
+          ? (payload.savedDraft ? { sourceFileUrl, sections: payload.savedDraft.sections, savedAt: formatSavedAt(payload.savedDraft.savedAt) ?? "" } : null)
+          : loadSavedDraft(draftKey);
         // 과거 빈 초안이 새 예시/생성본을 통째로 덮어 "내용이 하나도 안 보이는" 상황을
         // 막는다. 실제 블록이 하나라도 있는 초안만 복원하고, 빈 초안은 최신 서버 시드로
         // 안전하게 되돌린다.
@@ -168,20 +188,40 @@ export function ReportStudio({
     restore(next);
   }
 
-  function saveDraft() {
+  /** 실제 보고서(sourceFileUrl)는 서버 DB에 저장한다(2026-08-04 신규 — 다른 기기·브라우저에서도
+   * 이어서 편집할 수 있게). 데모는 저장할 DB report 행이 없어 그대로 localStorage를 쓴다. */
+  async function saveDraft() {
+    if (sourceFileUrl) {
+      const res = await fetch("/api/report-workspace/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileUrl: sourceFileUrl, sections }),
+      });
+      const payload = await res.json() as { ok: boolean; savedAt?: string | null };
+      setSavedAt(formatSavedAt(payload.savedAt ?? null) ?? new Date().toLocaleString("ko-KR"));
+      return;
+    }
     const savedAtValue = new Date().toLocaleString("ko-KR");
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ sourceFileUrl: sourceFileUrl ?? (demo ? "__rivalabs-demo__" : null), sections, savedAt: savedAtValue } satisfies SavedDraft),
+      JSON.stringify({ sourceFileUrl: demo ? "__rivalabs-demo__" : null, sections, savedAt: savedAtValue } satisfies SavedDraft),
     );
     setSavedAt(savedAtValue);
   }
 
-  function resetWorkspaceDraft() {
-    const draftKey = sourceFileUrl ?? (demo ? "__rivalabs-demo__" : null);
-    // 현재 저장 구조는 하나의 키 안에 sourceFileUrl을 함께 보관한다.
-    // 다른 보고서의 초안을 지우지 않도록 현재 초안일 때만 삭제한다.
-    if (draftKey && loadSavedDraft(draftKey)) window.localStorage.removeItem(STORAGE_KEY);
+  async function resetWorkspaceDraft() {
+    if (sourceFileUrl) {
+      await fetch("/api/report-workspace/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileUrl: sourceFileUrl, sections: null }),
+      });
+    } else {
+      const draftKey = demo ? "__rivalabs-demo__" : null;
+      // 현재 저장 구조는 하나의 키 안에 sourceFileUrl을 함께 보관한다.
+      // 다른 보고서의 초안을 지우지 않도록 현재 초안일 때만 삭제한다.
+      if (draftKey && loadSavedDraft(draftKey)) window.localStorage.removeItem(STORAGE_KEY);
+    }
     // **실측 버그(2026-07-28) 수정**: 예전엔 여기서 setSections(workspaceSeed.sections)로
     // 메모리에 있는 seed로 되돌렸는데, 이 seed는 페이지를 맨 처음 열 때 딱 한 번 fetch한
     // 스냅샷이다 — 탭을 계속 켜둔 채로 서버 데이터(정성 분석 결과 등)가 나중에 갱신되면,
@@ -189,6 +229,22 @@ export function ReportStudio({
     // 것처럼 보였다(사용자 실측 확인). 새로고침으로 완전히 새 요청을 보내야 최신 서버 상태를
     // 확실히 반영한다.
     window.location.reload();
+  }
+
+  /** 좌측 "저장된 보고서" 목록에 표시할 이름(2026-08-04 신규). blur 시점에만 저장해 타이핑마다
+   * 요청을 보내지 않는다. 데모는 저장할 DB report 행이 없어 이름 입력을 아예 숨긴다. */
+  async function saveReportName() {
+    if (!sourceFileUrl) return;
+    setNameSaving(true);
+    try {
+      await fetch("/api/report-workspace/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileUrl: sourceFileUrl, name: reportName }),
+      });
+    } finally {
+      setNameSaving(false);
+    }
   }
 
   /** 목차 클릭 → 활성 섹션 전환 + URL의 ?section=을 동기화(새로고침·공유 링크 유지). */
@@ -206,8 +262,22 @@ export function ReportStudio({
           <div>
             <p className="text-xs font-bold tracking-[0.16em] text-[#d97757]">ALPHABROTHERS REPORT STUDIO</p>
             <h1 className="text-base font-bold sm:text-lg">사용성 테스트 결과보고서 편집 뷰어</h1>
+            {sourceFileUrl && (
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <span aria-hidden className="text-sm text-[#9a9186]">✎</span>
+                <input
+                  type="text"
+                  value={reportName}
+                  onChange={(event) => setReportName(event.target.value)}
+                  onBlur={saveReportName}
+                  placeholder="보고서 제목을 입력하세요 (좌측 목록에 표시됩니다)"
+                  className="w-72 rounded-md border border-[#d8d1c6] bg-white px-2 py-1 text-sm font-medium text-[#302b27] outline-none focus:border-[#315c9c]"
+                />
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
+            {nameSaving && <span className="hidden text-xs text-[#9a9186] md:block">이름 저장 중...</span>}
             <div className="hidden rounded-lg border border-[#d8d1c6] bg-[#f5f1e9] p-0.5 md:flex">
               <button type="button" onClick={() => setWorkspaceMode("web")} className={`rounded-md px-2.5 py-1.5 text-xs font-semibold ${workspaceMode === "web" ? "bg-white text-[#315c9c] shadow-sm" : "text-[#81786e]"}`}>웹 문서·편집</button>
               {pdfUrl && <button type="button" onClick={() => setWorkspaceMode("pdf")} className={`rounded-md px-2.5 py-1.5 text-xs font-semibold ${workspaceMode === "pdf" ? "bg-white text-[#315c9c] shadow-sm" : "text-[#81786e]"}`}>발행 PDF</button>}

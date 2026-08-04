@@ -22,60 +22,7 @@ import { PRODUCT_INFO_FIELD_LABELS, type ProductInfo } from "@/lib/productInfo/t
 import type { PipelineResult } from "@/lib/pipeline/orchestrate";
 import { QualitativeResultsAccordion } from "@/components/QualitativeResults";
 import { type HedgeViolation } from "@/components/RecommendationReview";
-
-interface RecentReportItem {
-  id: string;
-  fileName: string | null;
-  fileUrl: string;
-  updatedAt: string;
-  companyName: string | null;
-}
-
-/**
- * 채팅 좌측 "저장된 보고서" 목록(2026-07-30 신규) — 웹뷰어에서 편집·저장한 보고서를 나중에
- * 채팅으로 돌아왔을 때 다시 찾아 이어서 열 수 있게 한다. 클릭하면 report-workspace가 저장된
- * 정량/정성 결과를 그대로 읽는 /viewer?source=<raw data URL>로 이동한다(재분석 없음).
- */
-function RecentReportsSidebar() {
-  const [reports, setReports] = useState<RecentReportItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/reports", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data: { ok: boolean; reports?: RecentReportItem[] }) => {
-        if (!cancelled) setReports(data.reports ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setError("보고서 목록을 불러오지 못했습니다.");
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  return (
-    <aside className="hidden w-64 shrink-0 border-r border-[#e5e0d7] bg-[#faf9f6] px-3 py-7 lg:block">
-      <p className="mb-3 px-2 text-xs font-semibold uppercase tracking-wide text-[#9a9186]">저장된 보고서</p>
-      {error && <p className="px-2 text-sm text-[#a64d32]">{error}</p>}
-      {!error && reports === null && <p className="px-2 text-sm text-[#9a9186]">불러오는 중...</p>}
-      {!error && reports?.length === 0 && <p className="px-2 text-sm text-[#9a9186]">아직 저장된 보고서가 없습니다.</p>}
-      <ul className="space-y-0.5">
-        {reports?.map((r) => (
-          <li key={r.id}>
-            <Link
-              href={`/viewer?source=${encodeURIComponent(r.fileUrl)}`}
-              className="block rounded-lg px-2 py-2 text-sm text-[#3a342f] hover:bg-[#ece8df]"
-              title={r.fileName ?? undefined}
-            >
-              <span className="block truncate font-medium">{r.companyName || r.fileName || "이름 없는 보고서"}</span>
-              <span className="block text-xs text-[#9a9186]">{new Date(r.updatedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </aside>
-  );
-}
+import { RecentReportsSidebar } from "@/components/RecentReportsSidebar";
 
 interface ValidateInputOutput {
   fileName: string | null;

@@ -8,11 +8,14 @@ const FIELD_KEYS = Object.keys(PRODUCT_INFO_FIELD_LABELS) as (keyof ProductInfo)
 export function ProductInfoPromptCard({
   onSkip,
   onSubmit,
+  initial,
 }: {
   onSkip: () => void;
   onSubmit: (fields: ProductInfo) => void;
+  /** 마법사에서 AI 추출 결과를 "직접 입력"으로 되돌릴 때 값을 이어받기 위한 초기값(선택). */
+  initial?: ProductInfo;
 }) {
-  const [fields, setFields] = useState<ProductInfo>({});
+  const [fields, setFields] = useState<ProductInfo>(initial ?? {});
   const hasAny = FIELD_KEYS.some((key) => (fields[key] ?? "").trim() !== "");
 
   return (

@@ -21,8 +21,9 @@ import {
   type QualitativeStage1Checkpoint,
 } from "@/lib/pipeline/orchestrate";
 import { runSectionAnalysesForReport } from "@/lib/pipeline/sectionAnalysis";
-import { runDevPriorityRecommendation } from "@/lib/pipeline/recommendation";
+import { runDevPriorityRecommendation, runAllFeatureImprovementRecommendations } from "@/lib/pipeline/recommendation";
 import { runFeatureCustomerRecommendations } from "@/lib/pipeline/customerRecommendations";
+import { runPolaritySummariesForReport } from "@/lib/pipeline/generatePolaritySummaries";
 import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 
 // 한 호출은 Stage1 또는 Stage2 하나만 처리한다. Vercel의 요청 제한보다 작은 작업 단위다.
@@ -86,7 +87,7 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
       // 따라서 별도로 격리해 응답 메타데이터에만 남기고, 필요 시 이 단계만 재실행할 수 있게 한다.
       try {
         const report = await getReportById(job.report_id);
-        const requested = report?.quant_stats && detectProductType(report.quant_stats) === "physical"
+        const requested = report?.quant_stats && (report.product_type ?? detectProductType(report.quant_stats)) === "physical"
           ? ["corePurchaseFactor"] as const
           : ["featureExperience", "corePurchaseFactor", "fourValues", "fourValueItems", "uxQuality", "crossAnalysis"] as const;
         const sectionUsages: ClaudeUsageRecord[] = [];
@@ -142,15 +143,26 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
         const report = await getReportById(job.report_id);
         if (report?.quant_stats) {
           const qualitative = await getQuestionsWithAllCategories(job.report_id);
-          const productType = detectProductType(report.quant_stats);
+          const productType = report.product_type ?? detectProductType(report.quant_stats);
           const recUsages: ClaudeUsageRecord[] = [];
 
           // Promise.all은 한쪽이 스키마 검증 실패 등으로 reject하면 이미 성공해 비용을 지불한
           // 다른 쪽 결과까지 버린다(2026-07-30 실측 — Ⅸ.3 스키마 실패로 Ⅸ.2가 저장 전에 유실됨).
           // allSettled로 서로 독립적으로 저장해, 한쪽이 실패해도 다른 쪽 결과는 지킨다.
-          const [devPriorityResult, featureCustomerResult] = await Promise.allSettled([
+          // 2026-08-03: "기능 개선 제안"(feature_improvement:*)도 여기서 같이 자동 생성한다 —
+          // 예전엔 사용자가 채팅에서 기능마다 개별 요청해야만 채워졌는데, 원본 보고서는 이
+          // 항목이 항상 채워져 있어야 한다(담당자 요청). runAllFeatureImprovementRecommendations는
+          // 내부적으로 기능별 allSettled를 이미 하므로 절대 reject하지 않는다.
+          // 2026-08-04: "응답 요약"(긍정/부정/중립 총평, 극성 요약)도 같은 배치에 추가했다 —
+          // 문항당 1회 호출로 줄어든 뒤(예전엔 최대 3회) 실측 시간·비용이 안전한 수준으로
+          // 확인돼(13문항·동시성2 기준 약 80초·$0.14) 자동화했다(lib/pipeline/
+          // generatePolaritySummaries.ts 상단 주석 참고). runPolaritySummariesForReport는
+          // 문항별 try/catch로 이미 격리돼 있어 이 배열 안에서도 절대 reject하지 않는다.
+          const [devPriorityResult, featureCustomerResult, featureImprovementResults, polaritySummaryResult] = await Promise.allSettled([
             runDevPriorityRecommendation(report.quant_stats, qualitative, productType, (u) => recUsages.push(u)),
             runFeatureCustomerRecommendations(report.quant_stats, qualitative, (u) => recUsages.push(u)),
+            runAllFeatureImprovementRecommendations(report.quant_stats, qualitative, (u) => recUsages.push(u)),
+            runPolaritySummariesForReport(job.report_id, (u) => recUsages.push(u)),
           ]);
 
           if (devPriorityResult.status === "fulfilled") {
@@ -166,6 +178,21 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
             });
           } else {
             console.error("[qualitative-job] Ⅸ.3 기능별 고객 제언 종합 생성 실패", featureCustomerResult.reason);
+          }
+          if (featureImprovementResults.status === "fulfilled") {
+            await Promise.all(featureImprovementResults.value.map(({ featureName, draft }) =>
+              saveRecommendation({ reportId: job.report_id, section: `feature_improvement:${featureName}`, draft }),
+            ));
+          } else {
+            console.error("[qualitative-job] Ⅸ.2 기능 개선 제안 자동 생성 실패", featureImprovementResults.reason);
+          }
+          // runPolaritySummariesForReport는 문항별로 saveQuestionPolaritySummaries를 내부에서
+          // 직접 호출하므로(위 세 항목과 달리 draft 저장을 여기서 또 할 필요 없음), 여기서는
+          // 결과 로그만 남긴다.
+          if (polaritySummaryResult.status === "fulfilled") {
+            console.info("[qualitative-job] 응답 요약 자동 생성 완료", polaritySummaryResult.value);
+          } else {
+            console.error("[qualitative-job] 응답 요약 자동 생성 실패", polaritySummaryResult.reason);
           }
 
           try {

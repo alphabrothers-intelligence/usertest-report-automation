@@ -90,5 +90,12 @@ export async function GET(request: Request) {
       recommendations,
       sectionAnalyses: report.section_analyses,
     }),
+    reportId: report.id,
+    reportName: report.report_name,
+    // 서버에 저장된 편집 초안(2026-08-04 신규, localStorage 대체) — 있으면 ReportStudio가
+    // 위 workspace.sections 대신 이걸 우선 보여준다(다른 기기·브라우저에서도 이어서 편집 가능).
+    savedDraft: report.workspace_draft
+      ? { sections: report.workspace_draft, savedAt: report.workspace_draft_saved_at }
+      : null,
   });
 }

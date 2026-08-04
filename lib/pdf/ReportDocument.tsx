@@ -10,7 +10,6 @@ import {
   SectionOverview,
   SectionDemographics,
   SectionCorePurchaseFactor,
-  SectionFourValuesTable,
   SectionUxQuality,
   SectionCrossAnalysis,
   type ProductInfo,
@@ -199,16 +198,18 @@ export function ReportDocument({
         <SectionFeatureExperience stats={quantStats} featureQuestions={featureQuestions} featureExperienceAnalysis={sectionAnalyses?.featureExperience} />
         <SectionCorePurchaseFactor
           stats={quantStats}
-          recommendation={findRecommendation(recommendations, "core_purchase_factor")}
+          analysis={sectionAnalyses?.corePurchaseFactor}
         />
-        {/* SectionFourValuesTable은 자체적으로 이미 <View break>를 갖고 있다(sectionsQuant.tsx) —
-            여기서 또 <View break>로 감싸면 break-View가 중첩되는데, 실제 정성 분석 데이터가
-            붙은 전체 문서(20+페이지)에서 렌더링해보니 이 중첩이 표 값 라벨이 정성 카테고리
-            블록 위에 겹쳐 찍히는 심각한 레이아웃 붕괴를 일으켰다(2026-08-03 실측, 정량 전용
-            미리보기에서는 재현 안 됨 — 문서가 충분히 길고 정성 콘텐츠가 실제로 있어야 나타남).
-            다른 모든 장(Ⅵ 이후)처럼 두 컴포넌트를 독립된 형제로 두니 해결됐다. */}
-        <SectionFourValuesTable stats={quantStats} />
+        {/* Ⅴ장은 "1 조사 결과"(문항별 정성 블록)와 "2 조사 결과 분석"(종합 차트+표+해석)이
+            원본에서 한 소절 트리에 속해 있어(2026-08-04 hwpx 재대조), 차트+표를
+            SectionFourValuesQualitative 내부로 옮겼다 — 예전엔 여기서 SectionFourValuesTable을
+            별도 컴포넌트로 호출했는데, 이는 2026-08-03에 겪은 중첩 break 버그(표 라벨이 정성
+            카테고리 위에 겹침)를 피하려던 임시 조치였다. 근본 원인은 "차트와 정성 콘텐츠가
+            한 함수에 있으면 안 된다"가 아니라 "같은 트리에서 break가 이상하게 중첩됐다"였음이
+            이번에 Ⅲ장 패턴(같은 함수 안에 차트+정성 블록)이 문제없이 동작하는 것으로 확인돼,
+            정상적인 위치(2 소절 안)로 되돌렸다. */}
         <SectionFourValuesQualitative
+          stats={quantStats}
           valueQuestions={valueQuestions}
           fourValueItemsText={sectionAnalyses?.fourValueItems}
           fourValuesAnalysis={sectionAnalyses?.fourValues}

@@ -18,6 +18,7 @@ import {
   VALUE_SUMMARY_SYSTEM_SW,
   VALUE_SUMMARY_SYSTEM_PHYSICAL,
 } from "./prompts";
+import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 
 const MODEL = process.env.ANTHROPIC_STAGE2_MODEL ?? "claude-sonnet-5";
 
@@ -37,8 +38,9 @@ export async function runPolaritySummary(params: {
   questionLabel: string;
   polarity: Polarity;
   categories: { label: string; insight: string; clause_count: number }[];
+  onUsage?: (usage: ClaudeUsageRecord) => void;
 }): Promise<string> {
-  const { questionLabel, polarity, categories } = params;
+  const { questionLabel, polarity, categories, onUsage } = params;
   const categoryList = categories
     .map((c) => `- [${c.label}] (${c.clause_count}건): ${c.insight}`)
     .join("\n");
@@ -59,7 +61,7 @@ export async function runPolaritySummary(params: {
     // 정성 분석이 15분 넘게 끝나지 않음) Promise.all이 영원히 안 끝나서 14문항 전체 파이프라인이
     // 통째로 멈춘다. 60초면 이 정도 크기의 요약 작업엔 충분히 넉넉하다.
     timeout: CLAUDE_TIMEOUT_MS,
-  }));
+  }), { onUsage });
 
   return text.trim();
 }
@@ -71,6 +73,7 @@ export async function runPolaritySummary(params: {
 export async function runPolaritySummaries(params: {
   questionLabel: string;
   byPolarity: Partial<Record<Polarity, { label: string; insight: string; clause_count: number }[]>>;
+  onUsage?: (usage: ClaudeUsageRecord) => void;
 }): Promise<Partial<Record<Polarity, string>>> {
   const sections = (Object.keys(params.byPolarity) as Polarity[])
     .flatMap((polarity) => {
@@ -88,7 +91,7 @@ export async function runPolaritySummaries(params: {
     maxOutputTokens: 1_200,
     reasoning: "none",
     timeout: CLAUDE_TIMEOUT_MS,
-  }));
+  }), { onUsage: params.onUsage });
 
   return Object.fromEntries(
     Object.entries(output).filter((entry): entry is [Polarity, string] => typeof entry[1] === "string" && entry[1].trim().length > 0),
@@ -102,6 +105,7 @@ export async function runValueSummary(params: {
   valueLabel: string;
   byPolarity: Partial<Record<Polarity, { label: string; insight: string; clause_count: number }[]>>;
   productType?: ProductType;
+  onUsage?: (usage: ClaudeUsageRecord) => void;
 }): Promise<string> {
   const productType = params.productType ?? "sw";
   const sections = (["positive", "negative"] as Polarity[])
@@ -124,7 +128,7 @@ export async function runValueSummary(params: {
     maxOutputTokens: 700,
     reasoning: "none",
     timeout: CLAUDE_TIMEOUT_MS,
-  }));
+  }), { onUsage: params.onUsage });
 
   return text.trim();
 }

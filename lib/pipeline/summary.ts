@@ -220,10 +220,13 @@ export async function runResultSummary(params: {
   quantStats: QuantStats;
   qualitative?: QuestionWithApprovedCategories[];
   sectionAnalyses?: SectionAnalyses | null;
+  /** 마법사 1단계에서 사용자가 명시적으로 고른 값(reports.product_type). null/미지정이면
+   * quantStats로 자동추정한다(레거시 report 호환). */
+  productType?: ProductType | null;
   /** 재생성 실험·비용 추적용. 원본 대비 재생성 시 토큰/비용 기록에 쓴다(2026-07-30). */
   onUsage?: (usage: ClaudeUsageLike) => void;
 }): Promise<string> {
-  const productType = detectProductType(params.quantStats);
+  const productType = params.productType ?? detectProductType(params.quantStats);
   const hasSectionAnalyses = Boolean(
     params.sectionAnalyses && Object.values(params.sectionAnalyses).some((value) => typeof value === "string" && value.trim()),
   );

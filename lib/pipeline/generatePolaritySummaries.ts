@@ -1,9 +1,19 @@
-// 극성별 총평("[긍정 의견 요약]" 박스) 생성 — 2026-07-21부터 기본 정성 파이프라인과 분리된
-// 별도 opt-in 기능이다. lib/pipeline/orchestrate.ts 상단 주석에 이유가 있다: Stage1+Stage2
-// 파이프라인 안에서 같이 돌렸더니 실사용 중 API 호출량 증가로 레이트리밋에 걸려 멈추거나
-// 대량 타임아웃이 나는 현상이 관측됐다(크레딧 소진 교란 가능성은 별도 검증 대상). 이 함수는 사용자가 명시적으로 요청했을 때만
-// (app/api/chat/route.ts의 generatePolaritySummaries 도구) 별도로, 이미 저장된 카테고리를
-// 재료로 호출한다 — Stage1/Stage2를 다시 돌리지 않고 세 극성을 문항당 한 번의 구조화된 호출로 묶는다.
+// 극성별 총평("[긍정 의견 요약]" 박스) 생성.
+//
+// 2026-07-21부터 2026-08-04까지는 기본 정성 파이프라인과 완전히 분리된 opt-in 전용
+// 기능이었다 — lib/pipeline/orchestrate.ts 상단 주석에 그 배경이 있다: 당시엔 문항×극성당
+// 최대 3회(14문항 기준 최대 42회) 호출하는 구식 구현을 Stage1+Stage2 파이프라인 안에
+// 같이 돌렸더니, 타임아웃 없는 호출 하나가 무한 대기해서 정성 분석 전체가 15분 넘게 멈추는
+// 사고가 났었다(크레딧 소진 교란 가능성은 끝내 확정 못함).
+//
+// 2026-08-04 재검토: 그 사이 두 가지가 바뀌었다 — ① 문항당 호출이 1회로 줄었다
+// (runPolaritySummaries가 극성 3개를 구조화 출력 하나로 합침), ② 모든 Claude 호출에
+// 60초 타임아웃(withClaudeGuard)이 기본 적용됐다. 이 리포트로 opt-in 경로를 실측한 결과
+// (13문항, 동시성 2) 약 80초·$0.14 수준이라 안전하다고 판단해, app/api/qualitative-jobs/
+// [jobId]/run-next/route.ts의 "정성 분석 마지막 문항 완료 직후" 자동 배치(Ⅸ.2/Ⅸ.3와 같은
+// Promise.allSettled)에도 추가했다 — opt-in 경로(app/api/chat/route.ts의
+// generatePolaritySummaries 도구)는 재생성용으로 그대로 남겨뒀다. 이미 저장된 Stage2
+// 카테고리만 재료로 쓰므로 Stage1/Stage2를 다시 돌리지 않는다.
 import pLimit from "p-limit";
 import { runPolaritySummaries, runValueSummary } from "./polaritySummary";
 import type { Polarity } from "./stage1";
@@ -14,12 +24,14 @@ import {
   type QuestionWithApprovedCategories,
 } from "@/lib/db/reports";
 import { detectProductType, type ProductType } from "@/lib/report/productType";
+import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 
 /** 4대 가치 조사 결과 요약 형식이 제품형별로 다르므로, report의 저장된 정량 통계로 판별한다.
  * 정량 통계가 없으면(비정상) SW형으로 폴백한다. */
 async function resolveProductType(reportId: string): Promise<ProductType> {
   const report = await getReportById(reportId);
-  return report?.quant_stats ? detectProductType(report.quant_stats) : "sw";
+  if (!report?.quant_stats) return "sw";
+  return report.product_type ?? detectProductType(report.quant_stats);
 }
 
 // 극성 총평은 부가 기능이며, 기본 분석과 경쟁하지 않도록 보수적으로 두 개만 동시에 실행한다.
@@ -83,6 +95,7 @@ export async function runPolaritySummariesForQuestion(
 
 export async function runPolaritySummariesForReport(
   reportId: string,
+  onUsage?: (usage: ClaudeUsageRecord) => void,
 ): Promise<GeneratePolaritySummariesResult> {
   const questions = await getQuestionsWithAllCategories(reportId);
   const productType = await resolveProductType(reportId);
@@ -115,10 +128,10 @@ export async function runPolaritySummariesForReport(
         let summaries: Partial<Record<Polarity | "combined", string>> = {};
         try {
           if (isValueQuestion) {
-            const combined = await runValueSummary({ valueLabel: q.label, byPolarity, productType });
+            const combined = await runValueSummary({ valueLabel: q.label, byPolarity, productType, onUsage });
             if (combined) summaries = { combined };
           } else {
-            summaries = await runPolaritySummaries({ questionLabel: q.label, byPolarity });
+            summaries = await runPolaritySummaries({ questionLabel: q.label, byPolarity, onUsage });
           }
           summariesGenerated += Object.keys(summaries).length;
         } catch (err) {

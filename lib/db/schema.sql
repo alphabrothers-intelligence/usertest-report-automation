@@ -28,6 +28,21 @@ alter table reports add column if not exists result_summary text;
 -- lib/pipeline/sectionAnalysis.ts가 저장된 카테고리를 재료로 생성한다. 정량 재계산 시 초기화된다.
 alter table reports add column if not exists section_analyses jsonb;
 
+-- 사용자가 직접 정하는 보고서 이름(2026-08-04 신규) — 좌측 "저장된 보고서" 목록에 회사명·
+-- 파일명보다 우선 표시한다. null이면 기존처럼 회사명→파일명 순으로 폴백한다(app/api/reports).
+alter table reports add column if not exists report_name text;
+
+-- 웹 작업공간(스튜디오)에서 편집한 초안을 서버에 영속화한다(2026-08-04 신규 — 예전엔 브라우저
+-- localStorage에만 저장돼 다른 기기·브라우저에서는 이어서 열 수 없었다). 편집된
+-- ReportSectionContent[] 전체를 그대로 저장한다(lib/report/sections.ts, components/ReportStudio.tsx).
+alter table reports add column if not exists workspace_draft jsonb;
+alter table reports add column if not exists workspace_draft_saved_at timestamptz;
+
+-- 마법사 1단계(제품유형 선택, 2026-08-03 신규)에서 사용자가 명시적으로 고른 값.
+-- null이면 lib/report/productType.ts의 detectProductType() 자동추정으로 폴백한다
+-- (레거시 report·마법사 이전에 만들어진 report 호환).
+alter table reports add column if not exists product_type text check (product_type in ('sw', 'physical'));
+
 -- 정성 처리 대상 14개 문항 (PRD 6.1절).
 create table if not exists questions (
   id uuid primary key default gen_random_uuid(),

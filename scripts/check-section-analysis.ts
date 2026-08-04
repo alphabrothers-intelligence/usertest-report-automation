@@ -41,7 +41,7 @@ async function main() {
   const report = await getReportById(reportId);
   if (!report?.quant_stats) throw new Error("정량 통계가 저장된 보고서를 찾지 못했습니다.");
 
-  const productType = detectProductType(report.quant_stats);
+  const productType = report.product_type ?? detectProductType(report.quant_stats);
   const defaultSections = productType === "sw"
     ? ["featureExperience", "corePurchaseFactor", "fourValues", "uxQuality", "crossAnalysis"]
     : ["corePurchaseFactor"];

@@ -18,6 +18,8 @@ export async function GET() {
       fileUrl: r.file_url,
       updatedAt: r.updated_at,
       companyName: r.company_name,
+      reportName: r.report_name,
+      workspaceDraftSavedAt: r.workspace_draft_saved_at,
     })),
   });
 }

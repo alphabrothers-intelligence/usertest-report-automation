@@ -39,6 +39,10 @@ export interface VerifiedClause {
   analysis_clause: string;
   polarity: Polarity;
   rationale: string;
+  /** true면 문장이 잘렸을 위험이 있어 사람 검토가 필요하다(대조 연결어미로 끝나
+   *  자동으로 이어붙이면 다른 극성 내용이 섞일 위험이 있는 경우, 또는 이어붙일
+   *  종결 지점을 원문에서 못 찾은 경우). */
+  needs_review: boolean;
 }
 
 export interface Stage1Output {
@@ -72,6 +76,58 @@ export function isVerbatimClause(source: string, clause: string): boolean {
   return normalizedClause.length > 0 && normalizeForVerbatimComparison(source).includes(normalizedClause);
 }
 
+// -지만/-는데류(대조 연결어미, "그런데"에 해당)는 뒤에 반대 뉘앙스·다른 극성의 내용이 이어질
+// 위험이 있다(실측 사례, 2026-08-03: "화면 구성도 직관적이라 사용하기 편리했지만" 뒤에 부정적
+// 서술이 이어짐 — 자동으로 이어붙이면 긍정 인용문에 부정 내용이 섞인다). 자동 확장하지 않고
+// needs_review로만 표시한다.
+const CONTRASTIVE_REVIEW_ENDING = /(지만|는데|은데|인데)$/;
+// 나열·인과 연결어미(-고/-며/-어서/-니까/-므로 등)는 대체로 같은 맥락·같은 극성이 이어지므로
+// 원문에서 다음 종결 지점까지 자동으로 이어붙여도 안전하다.
+const COORDINATING_EXTEND_ENDING =
+  /(면서|으면서|으며|어서|아서|여서|니까|으니까|므로|으므로|라서|다가|고)$/;
+// 관형형 어미·조사로 끝나면 뒤에 명사가 이어져야 완결된다 — 극성 반전 위험이 없어 이어붙여도 안전.
+// '가'/'과'처럼 흔한 단어 끝소리와 겹치는 조사는 오탐이 커서 제외한 좁은 집합만 쓴다.
+const INCOMPLETE_PHRASE_ENDING = /(을|를|이|은|는|의|에|와|도|만)$/;
+// 종결어미·문장부호·의성/의태 표현으로 끝나면 문장이 완결됐다고 본다(위 판정보다 우선 확인).
+const SENTENCE_TERMINAL_ENDING =
+  /(다|요|음|함|임|됨|짐|네|죠|까|랑|ㅎ+|ㅋ+|!|\?|\.|~|음\)|요\)|다\))$/;
+
+export type ClauseEndingKind = "complete" | "extend" | "review";
+
+/** clause 끝맺음을 분류한다. 규칙 기반, LLM 재호출 없음. */
+export function classifyClauseEnding(clause: string): ClauseEndingKind {
+  const trimmed = clause.trim();
+  if (trimmed.length === 0) return "complete";
+  if (SENTENCE_TERMINAL_ENDING.test(trimmed)) return "complete";
+  if (CONTRASTIVE_REVIEW_ENDING.test(trimmed)) return "review";
+  if (COORDINATING_EXTEND_ENDING.test(trimmed) || INCOMPLETE_PHRASE_ENDING.test(trimmed)) return "extend";
+  return "complete";
+}
+
+const HARD_SENTENCE_BOUNDARY = /[.!?\n]/;
+// 이 길이 안에서 종결 지점을 못 찾으면 이어붙이지 않는다(엉뚱하게 먼 지점까지 끌고 오는 것을 방지).
+const MAX_EXTEND_CHARS = 300;
+
+/**
+ * clause가 원문에서 끝나는 지점부터 다음 마침표/느낌표/물음표/줄바꿈까지 원문 그대로 이어붙인다.
+ * 원문에서 clause를 못 찾거나(정규화 차이 등) 상한 안에 종결 지점이 없으면 null을 반환한다
+ * (이 경우 호출부가 needs_review로 표시한다).
+ */
+export function extendClauseToSentenceBoundary(source: string, clause: string): string | null {
+  const startIdx = source.indexOf(clause);
+  if (startIdx === -1) return null;
+  const endIdx = startIdx + clause.length;
+  const rest = source.slice(endIdx, endIdx + MAX_EXTEND_CHARS);
+  if (rest.length === 0) return null; // clause가 이미 원문 끝 — 더 이어붙일 내용이 없다
+  const boundary = HARD_SENTENCE_BOUNDARY.exec(rest);
+  if (boundary) return (clause + rest.slice(0, boundary.index + 1)).trim();
+  // 마침표 없이 원문이 그냥 끝나는 경우가 한국어 설문 응답에 흔하다(문장부호 없이 종결어미로만
+  // 끝맺는 구어체). rest가 상한(MAX_EXTEND_CHARS)에 걸리지 않고 원문 끝까지 자연히 다 온
+  // 것이면(=더 먼 곳까지 끌고 올 위험이 없으면) 남은 전체를 안전하게 이어붙인다.
+  if (rest.length < MAX_EXTEND_CHARS) return (clause + rest).trim();
+  return null; // 상한 안에 경계도 없고 원문도 안 끝남 — 너무 멀리 끌고 올 위험, review로 넘긴다
+}
+
 /**
  * 모델 출력은 한 문장만 받아 비용을 최소화한다. 원문 대조에 통과하면 직접 인용에도 쓰고,
  * 대조에 실패해도 분석용 문장으로는 유지하되 보고서 직접 인용에는 쓰지 않는다.
@@ -82,22 +138,47 @@ function verifyRawClauses(
 ): Stage1Output {
   const sourceByRespondent = new Map(inputs.map((input) => [input.respondent_id, input.reason]));
   let unverifiedCount = 0;
+  let extendedCount = 0;
+  let flaggedForReviewCount = 0;
   const results = output.results.map((result) => {
     const source = sourceByRespondent.get(result.respondent_id) ?? "";
     const clauses = result.clauses.map((clause) => {
-      const raw_clause = isVerbatimClause(source, clause.clause) ? clause.clause : null;
+      let raw_clause = isVerbatimClause(source, clause.clause) ? clause.clause : null;
+      let needs_review = false;
+      if (raw_clause) {
+        const kind = classifyClauseEnding(raw_clause);
+        if (kind === "review") {
+          needs_review = true;
+        } else if (kind === "extend") {
+          const extended = extendClauseToSentenceBoundary(source, raw_clause);
+          if (extended) {
+            raw_clause = extended;
+            extendedCount += 1;
+          } else {
+            needs_review = true;
+          }
+        }
+      }
       if (!raw_clause) unverifiedCount += 1;
+      if (needs_review) flaggedForReviewCount += 1;
       return {
         raw_clause,
         analysis_clause: clause.clause,
         polarity: clause.polarity,
         rationale: clause.rationale,
+        needs_review,
       };
     });
     return { ...result, clauses };
   });
   if (unverifiedCount > 0) {
     console.warn(`[qualitative] Stage1 retained ${unverifiedCount} clause(s) for analysis but excluded them from direct quotes because raw text could not be verified`);
+  }
+  if (extendedCount > 0) {
+    console.info(`[qualitative] Stage1 extended ${extendedCount} clause(s) to the next sentence boundary in the source text`);
+  }
+  if (flaggedForReviewCount > 0) {
+    console.info(`[qualitative] Stage1 flagged ${flaggedForReviewCount} clause(s) as needs_review (contrastive ending or no safe extension point)`);
   }
   return { results };
 }
@@ -178,6 +259,7 @@ export interface Stage1ImprovementOutput {
     clauses: Array<{
       raw_clause: string | null;
       analysis_clause: string;
+      needs_review: boolean;
     }>;
   }>;
 }
@@ -192,9 +274,20 @@ function verifyImprovementRawClauses(
     ...result,
     clauses: result.clauses.map((clause) => {
       const source = sourceByRespondent.get(result.respondent_id) ?? "";
-      const raw_clause = isVerbatimClause(source, clause.clause) ? clause.clause : null;
+      let raw_clause = isVerbatimClause(source, clause.clause) ? clause.clause : null;
+      let needs_review = false;
+      if (raw_clause) {
+        const kind = classifyClauseEnding(raw_clause);
+        if (kind === "review") {
+          needs_review = true;
+        } else if (kind === "extend") {
+          const extended = extendClauseToSentenceBoundary(source, raw_clause);
+          if (extended) raw_clause = extended;
+          else needs_review = true;
+        }
+      }
       if (!raw_clause) unverifiedCount += 1;
-      return { raw_clause, analysis_clause: clause.clause };
+      return { raw_clause, analysis_clause: clause.clause, needs_review };
     }),
   }));
   if (unverifiedCount > 0) {

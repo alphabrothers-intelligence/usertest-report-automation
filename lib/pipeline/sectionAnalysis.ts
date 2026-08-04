@@ -432,7 +432,7 @@ export async function runSectionAnalysesForReport(
   if (!report?.quant_stats) throw new Error("정량 통계가 없어 섹션 분석을 생성할 수 없습니다.");
   const stats = report.quant_stats;
   const qual = await getQuestionsWithAllCategories(reportId);
-  const productType = detectProductType(stats);
+  const productType = report.product_type ?? detectProductType(stats);
 
   const analyses: SectionAnalyses = {};
   const tasks: { key: keyof SectionAnalyses; run: () => Promise<string> }[] = [

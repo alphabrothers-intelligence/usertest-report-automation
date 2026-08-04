@@ -5,6 +5,7 @@ import type { Polarity } from "@/lib/pipeline/stage1";
 import type { ProductInfo } from "@/lib/productInfo/types";
 import type { SectionAnalyses } from "@/lib/pipeline/sectionAnalysis";
 import { encodeImprovementLabel, type Stage2ImprovementOutput } from "@/lib/pipeline/stage2";
+import type { ReportSectionContent } from "@/lib/report/sections";
 
 /** 개선아이디어 2단 출력을 flat categories 행으로 펼친다(label에 대분류소분류 인코딩,
  * 인사이트는 없으므로 빈 문자열). 렌더링·복잡도 집계는 decodeImprovementLabel로 복원한다. */
@@ -33,6 +34,15 @@ export interface ReportRow {
   /** 섹션 단위 정성 분석(Ⅲ.2 기능 분석·Ⅳ 핵심구매요소·Ⅴ.2 4대가치 종합·Ⅵ.2 UX 품질).
    * lib/pipeline/sectionAnalysis.ts가 생성해 저장한다. 웹 뷰어가 인라인 편집한다. */
   section_analyses: SectionAnalyses | null;
+  /** 사용자가 좌측 "저장된 보고서" 목록에서 직접 붙이는 이름. null이면 회사명→파일명 폴백. */
+  report_name: string | null;
+  /** 마법사 1단계에서 사용자가 명시적으로 고른 제품유형. null이면 detectProductType() 자동추정
+   * (레거시 report 호환, lib/report/productType.ts). */
+  product_type: "sw" | "physical" | null;
+  /** 웹 작업공간(스튜디오) 편집 초안. null이면 아직 초안 저장을 한 적이 없다는 뜻이며,
+   * 이 경우 스튜디오는 정량/정성 결과로 새로 조립한 기본 섹션을 보여준다. */
+  workspace_draft: ReportSectionContent[] | null;
+  workspace_draft_saved_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -65,6 +75,22 @@ export async function getProductInfoByFileUrl(fileUrl: string): Promise<ProductI
     select product_info from reports where file_url = ${fileUrl}
   `;
   return row?.product_info ?? null;
+}
+
+/** 마법사 1단계(제품유형 선택)는 파일 첨부보다 먼저 일어나 fileUrl이 아직 없으므로,
+ * validateInput이 성공해 fileUrl이 확정된 뒤(2단계) 호출해 저장한다. saveProductInfo와
+ * 같은 upsert-by-fileUrl 패턴. */
+export async function saveProductType(
+  fileUrl: string,
+  productType: "sw" | "physical",
+): Promise<void> {
+  await sql`
+    insert into reports (file_url, product_type, updated_at)
+    values (${fileUrl}, ${productType}, now())
+    on conflict (file_url) do update set
+      product_type = excluded.product_type,
+      updated_at = now()
+  `;
 }
 
 /** raw data 파일 하나당 report 하나. 같은 fileUrl로 재검증하면 정량 통계를 덮어쓴다. */
@@ -106,6 +132,10 @@ export interface RecentReportSummary {
   file_url: string;
   updated_at: string;
   company_name: string | null;
+  report_name: string | null;
+  /** 웹 작업공간에서 편집 초안을 저장한 시각. null이면 생성된 그대로(미수정) 상태다
+   * (2026-08-04 추가 — 좌측 목록에서 "수정됨" 배지로 구분하기 위함). */
+  workspace_draft_saved_at: string | null;
 }
 
 /** 채팅 좌측 "저장된 보고서" 목록용(2026-07-30 신규) — 정량 통계가 있어(=웹뷰어로 열 수 있는)
@@ -113,12 +143,38 @@ export interface RecentReportSummary {
  * 사용자별로 거르지 않고 전체를 보여준다. */
 export async function getRecentReports(limit = 30): Promise<RecentReportSummary[]> {
   return sql<RecentReportSummary[]>`
-    select id, file_name, file_url, updated_at, product_info->>'companyName' as company_name
+    select id, file_name, file_url, updated_at, report_name, workspace_draft_saved_at,
+      product_info->>'companyName' as company_name
     from reports
     where quant_stats is not null
     order by updated_at desc
     limit ${limit}
   `;
+}
+
+/** 좌측 목록에서 사용자가 직접 붙이는 보고서 이름(2026-08-04 신규). 빈 문자열이면 null로
+ * 저장해 목록이 회사명·파일명 폴백으로 자연스럽게 돌아가게 한다. */
+export async function saveReportName(reportId: string, name: string | null): Promise<void> {
+  const trimmed = name?.trim() || null;
+  await sql`update reports set report_name = ${trimmed}, updated_at = now() where id = ${reportId}`;
+}
+
+/** 웹 작업공간(스튜디오) 편집 초안을 서버에 저장한다(2026-08-04 신규 — localStorage 대체).
+ * sections=null이면 초안을 지워 다음 진입 시 정량/정성 결과로 새로 조립한 기본 섹션을
+ * 보여주게 한다("초안 초기화" 버튼용). */
+export async function saveWorkspaceDraft(
+  reportId: string,
+  sections: ReportSectionContent[] | null,
+): Promise<{ savedAt: string | null }> {
+  const [row] = await sql<{ workspace_draft_saved_at: string | null }[]>`
+    update reports set
+      workspace_draft = ${sections ? sql.json(JSON.parse(JSON.stringify(sections))) : null},
+      workspace_draft_saved_at = ${sections ? sql`now()` : null},
+      updated_at = now()
+    where id = ${reportId}
+    returning workspace_draft_saved_at
+  `;
+  return { savedAt: row?.workspace_draft_saved_at ?? null };
 }
 
 export async function getReportById(reportId: string): Promise<ReportRow | null> {

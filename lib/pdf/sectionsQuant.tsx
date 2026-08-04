@@ -451,16 +451,23 @@ export function SectionDemographics({ stats }: { stats: QuantStats }) {
  * 막대, 상대중요도 순위 종합표, 중요도-만족도 사분면 그래프, 2026-07-21 실측 대조). */
 export function SectionCorePurchaseFactor({
   stats,
-  recommendation,
+  analysis,
 }: {
   stats: QuantStats;
-  recommendation: string | null;
+  /** sectionAnalyses.corePurchaseFactor(Tier1 자동 생성, sectionAnalysis.ts) — 예전엔
+      checkpoint-gated `recommendations` 테이블의 "core_purchase_factor" 제언(Tier2, 채팅에서
+      명시 요청+승인해야만 채워짐)을 썼는데, 이 전체 재생성처럼 채팅을 거치지 않은 경로에서는
+      항상 비어 있어 Ⅳ.2 "핵심구매요소 분석"이 통째로 사라진 것처럼 보였다(2026-08-04 사용자
+      지적: "2. 핵심구매요소 분석은 어디갔어요"). Ⅲ/Ⅴ/Ⅵ/Ⅶ 전부 sectionAnalyses의 자동 생성
+      텍스트를 쓰므로 Ⅳ만 다른 소스를 쓸 이유가 없다 — 같은 패턴으로 통일했다. */
+  analysis: string | null | undefined;
 }) {
   const ranked = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
   const satisfactionByName = new Map(stats.featureSatisfaction.map((f) => [f.name, f.mean]));
   return (
     <View break>
       <SectionHeader numeral="IV" title="핵심구매요소" />
+      <SubsectionHeader number={1} title="핵심구매요소 조사 결과" />
       <Text style={styles.subheading}>가장 영향을 미치는 핵심 요인</Text>
       <VerticalBarChart
         items={stats.keyFactorDistribution.map((k) => ({ label: shortenLabel(k.label), value: k.percentage }))}
@@ -563,54 +570,19 @@ export function SectionCorePurchaseFactor({
         </View>
       </View>
 
-      {/* 2026-07-22엔 제목+본문을 wrap={false}로 묶어 고아 제목을 막았는데, 실제 정성 분석이
-          붙은 recommendation 텍스트는 여러 문단+불릿으로 꽤 길어서(2026-08-03 실측) 그 전체를
-          한 페이지에 억지로 욱여넣으려다 Ⅴ장에서 겪은 것과 같은 레이아웃 붕괴 위험이 있다 —
-          제목만 wrap={false}로 남기고 본문은 자연스럽게 흐르게 둔다. */}
-      <Text style={[styles.subheading, { marginTop: 4, marginBottom: 3 }]} wrap={false}>해석</Text>
-      <RichText value={recommendation ?? "제언이 아직 생성·승인되지 않았습니다."} />
-    </View>
-  );
-}
-
-/** Ⅴ. 4대가치 만족도 (표만 — 정성 카테고리는 sectionsQualitative.tsx에서 문항별로 이어붙인다) */
-export function SectionFourValuesTable({ stats }: { stats: QuantStats }) {
-  const rows = [
-    { label: "기능적 가치", ...stats.fourValues.functional },
-    { label: "심미적 가치", ...stats.fourValues.aesthetic },
-    { label: "경제적 가치", ...stats.fourValues.economic },
-    { label: "사회·공공적 가치", ...stats.fourValues.social },
-  ];
-  const average = Math.round((rows.reduce((a, r) => a + r.mean, 0) / rows.length) * 100) / 100;
-  const valueMeans = rows.map((r) => r.mean);
-  const [chartMin, chartMax] = computeBarWithAverageRange(valueMeans, average);
-  return (
-    <View break>
-      <SectionHeader numeral="V" title="4대 가치 만족도" />
-      <VerticalBarChartWithAverage
-        items={rows.map((r) => ({ label: r.label, value: r.mean }))}
-        min={chartMin}
-        max={chartMax}
-        unit="점"
-        title="[ 4대 가치 만족도 종합 결과 ]"
-        average={average}
-        yAxisTitle="만족도 평균"
-        legendBarLabel="가치별 만족도 평균"
-        legendAverageLabel="전체 가치 만족도 평균"
-      />
-      <View style={[styles.table, { marginTop: 6 }]}>
-        <View style={styles.tableRow}>
-          <Text style={styles.tableHeaderCell}>가치</Text>
-          <Text style={styles.tableHeaderCell}>평균</Text>
-          <Text style={styles.tableHeaderCell}>표준편차</Text>
+      {/* 원본 32쪽 "2 핵심구매요소 분석"은 배너 제목 + 개조식 해석이다(Ⅲ/Ⅴ/Ⅵ과 같은 패턴).
+          2026-07-22엔 제목+본문을 wrap={false}로 묶어 고아 제목을 막았는데, 정성 분석이 붙은
+          텍스트는 여러 문단+불릿으로 꽤 길어서(2026-08-03 실측) 그 전체를 한 페이지에 억지로
+          욱여넣으려다 Ⅴ장에서 겪은 것과 같은 레이아웃 붕괴 위험이 있다 — 배너만 wrap={false}로
+          남기고 본문은 자연스럽게 흐르게 둔다. */}
+      <View break>
+        <SubsectionHeader number={2} title="핵심구매요소 분석" />
+        <View style={{ backgroundColor: colors.chartBannerBg, padding: 5, marginBottom: 6 }} wrap={false}>
+          <Text style={{ fontSize: 9.5, fontWeight: "bold", textAlign: "center", color: colors.navy }}>
+            핵심구매요소 중요 순위 및 만족도 종합 해석
+          </Text>
         </View>
-        {rows.map((r, i) => (
-          <View key={r.label} style={i === rows.length - 1 ? styles.tableRowLast : styles.tableRow}>
-            <Text style={styles.tableCell}>{r.label}</Text>
-            <Text style={styles.tableCell}>{r.mean.toFixed(2)}</Text>
-            <Text style={styles.tableCell}>{r.sd.toFixed(2)}</Text>
-          </View>
-        ))}
+        <RichText value={analysis ?? "해석이 아직 생성되지 않았습니다."} />
       </View>
     </View>
   );
@@ -737,6 +709,64 @@ function UxSingleScoreTable({
   );
 }
 
+/** Ⅵ.2 "사용자 경험 품질 평가 종합 해석"/"세부 해석" — UX_QUALITY_SYSTEM(prompts.ts)이 만드는
+ * "[종합 해석]"/"[세부 해석]" 두 블록을 원본 40쪽처럼 라벤더 배너 제목 + (세부 해석은) 그룹별
+ * 2단 컬럼으로 렌더링한다. 예전엔 이 원문을 RichText 하나로만 통째로 흘려서 배너·2단 레이아웃
+ * 없이 밋밋한 문단으로만 나왔다(2026-08-04 실측 — 원본과 대조해 발견). 원본 텍스트 자체는 이미
+ * 정확한 구조([종합 해석]/[세부 해석]/"•"/"→")로 생성돼 있었으므로, 순수 렌더링 버그였다. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function UxQualityAnalysisBlock({ text, groupNames }: { text: string; groupNames: string[] }) {
+  const overallMatch = text.match(/\[종합 해석\]([\s\S]*?)(?=\n\s*\[세부 해석\]|$)/);
+  const detailMatch = text.match(/\[세부 해석\]([\s\S]*)$/);
+  const overall = (overallMatch?.[1] ?? text).trim();
+  const detail = (detailMatch?.[1] ?? "").trim();
+
+  const groupBlocks = groupNames.map((name, i) => {
+    const nextNames = groupNames.slice(i + 1).map(escapeRegExp).join("|");
+    const re = new RegExp(
+      `${escapeRegExp(name)}\\s*\\(평균[\\s\\S]*?(?=${nextNames ? `\\n\\s*(?:${nextNames})\\s*\\(평균|` : ""}$)`,
+    );
+    const block = (detail.match(re)?.[0] ?? "").trim();
+    const [title, ...rest] = block.split(/\r?\n/);
+    return { name, title: title || name, body: rest.join("\n").trim() };
+  });
+
+  return (
+    <View style={{ marginTop: 8 }}>
+      <View style={{ backgroundColor: colors.chartBannerBg, padding: 5, marginBottom: 6 }}>
+        <Text style={{ fontSize: 9.5, fontWeight: "bold", textAlign: "center", color: colors.navy }}>
+          사용자 경험 품질 평가 종합 해석
+        </Text>
+      </View>
+      <RichText value={overall} />
+
+      {detail && (
+        <>
+          <View style={{ backgroundColor: colors.chartBannerBg, padding: 5, marginTop: 8, marginBottom: 6 }}>
+            <Text style={{ fontSize: 9.5, fontWeight: "bold", textAlign: "center", color: colors.navy }}>
+              사용자 경험 품질 세부 해석
+            </Text>
+          </View>
+          {/* flexDirection:"row" 2단 컬럼이 페이지 경계에 걸리면 깨지는 문제가 Ⅴ장(4대가치)에서
+              이미 실측 확인됐다(CLAUDE.md) — 같은 landmine을 피하려 wrap={false}로 통째로
+              묶는다. 그룹당 4~5개 항목의 짧은 해석이라 한 페이지 안에 들어간다. */}
+          <View style={{ flexDirection: "row" }} wrap={false}>
+            {groupBlocks.map((g, i) => (
+              <View key={g.name} style={{ flex: 1, paddingRight: i < groupBlocks.length - 1 ? 10 : 0 }}>
+                <RichText value={g.title} style={{ fontWeight: "bold", fontSize: 9 }} />
+                <RichText value={g.body} />
+              </View>
+            ))}
+          </View>
+        </>
+      )}
+    </View>
+  );
+}
+
 /**
  * Ⅵ. 사용자 경험 품질 평가. [전체]는 그룹 구분이 없으니 색이 무엇이든 상관없어 기존 teal을
  * 그대로 둔다(2026-07-21 사용자 확인). [실용성]/[즐거움]처럼 raw data가 여러 그룹으로 나뉘는
@@ -859,9 +889,7 @@ export function SectionUxQuality({ stats, uxQualityAnalysis }: { stats: QuantSta
           종합 해석" + "사용자 경험 품질 세부 해석") — 예전엔 이 텍스트를 아예 안 읽어서
           레이더 차트만 있고 해석 문단이 없었다(웹뷰어는 이미 표시하고 있었음). */}
       {uxQualityAnalysis && (
-        <View style={{ marginTop: 6 }}>
-          <RichText value={uxQualityAnalysis} />
-        </View>
+        <UxQualityAnalysisBlock text={uxQualityAnalysis} groupNames={uxGroups.map((g) => g.name)} />
       )}
     </View>
   );

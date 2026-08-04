@@ -375,7 +375,9 @@ function ActionPanel({ onCopy, onDownload, selectedBlock, onBlockChange }: { onC
   );
 }
 
-function BlockView({
+// 마법사 정량 리뷰 화면(components/wizard/QuantReviewStep.tsx)이 같은 블록→컴포넌트 매핑을
+// 재사용하기 위해 export한다 — 두 곳에서 이 switch가 따로 자라면 어긋나기 쉽다.
+export function BlockView({
   block,
   onChange,
   sourceFileUrl,

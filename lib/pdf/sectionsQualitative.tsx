@@ -10,9 +10,11 @@ import {
   CanvasQuadrantChart,
   TransposedRankTable,
   computeBarWithAverageRange,
+  PdfPolarityDonut,
+  PdfSatisfactionHistogram,
 } from "./charts";
 import type { NpsResult } from "@/lib/quant/basic";
-import type { QuantStats } from "@/lib/quant/compute";
+import type { QuantStats, FeatureStat } from "@/lib/quant/compute";
 import type { CategoryRow, QuestionWithApprovedCategories, RecommendationRow } from "@/lib/db/reports";
 import { decodeImprovementLabel } from "@/lib/pipeline/stage2";
 import { parseFourValueItemTexts } from "@/lib/pipeline/sectionAnalysis";
@@ -44,7 +46,12 @@ export function splitOverallDirection(text: string | null): { overall: string | 
   const match = text.match(/\[전반적 방향성\]([\s\S]*?)(?=\n\s*\[|$)/);
   if (!match) return { overall: null, rest: text };
   const overall = match[1].trim();
-  const rest = (text.slice(0, match.index) + text.slice((match.index ?? 0) + match[0].length)).trim();
+  // 프롬프트는 "[전반적 방향성]"이 출력의 첫 줄이어야 한다고 지시하지만(prompts.ts), LLM이 그
+  // 앞에 "# Ⅸ장 종합 결과 및 제언" 같은 장 제목을 덧붙이는 경우가 실측 확인됐다(2026-08-03) —
+  // 이걸 그대로 rest에 붙이면 "개발 우선순위 제언" 칸 맨 위에 엉뚱한 헤더가 끼어들어 문서가
+  // 깨진다. 계약상 [전반적 방향성] 앞에는 아무 내용도 없어야 하므로, 있어도 항상 잡음으로
+  // 보고 버린다(보존할 정당한 내용이 이 위치에 올 수 없다).
+  const rest = text.slice((match.index ?? 0) + match[0].length).trim();
   return { overall: overall || null, rest: rest || null };
 }
 
@@ -85,7 +92,9 @@ function CategoryBlock({ category }: { category: CategoryRow }) {
           &ldquo;{q}&rdquo;
         </Text>
       ))}
-      <Text style={styles.insight}>→ {category.insight_final ?? category.insight_draft}</Text>
+      {/* "→"는 이 서브셋 폰트에서 "'"로 mojibake난다(richText.tsx의 arrow 블록과 같은 버그,
+          2026-08-04 실측) — 같은 이유로 "›"를 쓴다. */}
+      <Text style={styles.insight}>› {category.insight_final ?? category.insight_draft}</Text>
     </View>
   );
 }
@@ -192,6 +201,176 @@ function QuestionQualitativeBlock({ question }: { question: QuestionWithApproved
   );
 }
 
+/** raw data 설문 항목("기능별 고객 경험 평가" 단계)에서 featureIndex번째(0-based) 기능의
+ * Q번호를 찾는다. Ⅴ장 findSurveyQuestion과 같은 원리(featureSatisfaction/surveyQuestions 둘
+ * 다 raw data 컬럼 순서를 그대로 유지한다는 전제) — 못 찾으면 0(헤딩에서 "Q" 접두어 생략). */
+function featureQuestionNumber(stats: QuantStats, featureIndex: number): number {
+  let qno = 0;
+  let seen = 0;
+  for (const row of stats.surveyQuestions) {
+    qno += 1;
+    if (row.stage === "기능별 고객 경험 평가") {
+      if (seen === featureIndex) return qno;
+      seen += 1;
+    }
+  }
+  return 0;
+}
+
+/** Ⅲ장 기능별 문항 전용 블록 — 2026-08-04 실제 hwpx 원본(9~29쪽) 대조로 신규 작성.
+ * `QuestionQualitativeBlock`(Ⅷ장이 계속 쓰는 단순 막대+카테고리 형식)과 별개다. 원본은 문항마다
+ * "Q번호+질문" → "만족도 평균/표준편차 배너" → "만족도 분포도"(히스토그램) → "주관식 응답
+ * 감정 분석"(도넛)+"응답 요약"(2열) → "1.긍정/2.부정/3.중립" 상세 카테고리 순으로 구성된다 —
+ * 웹 뷰어(lib/report/workspace.ts의 featureQualitativeBlocks)는 이미 이 구조였는데 PDF만
+ * 빠져 있었다("주요 키워드 도출" 워드클라우드는 2026-07-28 사용자 요청으로 웹도 제외했으므로
+ * 여기서도 만들지 않는다). */
+function FeatureQuestionBlock({
+  question,
+  feature,
+  qno,
+}: {
+  question: QuestionWithApprovedCategories;
+  feature: FeatureStat;
+  qno: number;
+}) {
+  if (question.categories.length === 0) return null;
+  const polarityOrder = ["positive", "negative", "neutral"] as const;
+  const polarityLabel = { positive: "긍정", negative: "부정", neutral: "중립" };
+  const pct = polarityPct(question.categories);
+  const pctByPolarity = { positive: pct.positivePct, negative: pct.negativePct, neutral: pct.neutralPct };
+  const counts = { positive: 0, negative: 0, neutral: 0 };
+  for (const c of question.categories) if (c.polarity) counts[c.polarity] += c.clause_count;
+  const panelHeadStyle = {
+    fontSize: 8.5,
+    fontWeight: "bold" as const,
+    backgroundColor: colors.chartBannerBg,
+    color: colors.navy,
+    padding: 4,
+    textAlign: "center" as const,
+  };
+  const summaries = polarityOrder.filter((p) => question.polarity_summaries?.[p]);
+  let bannerIndex = 0;
+  return (
+    <View style={{ marginBottom: 10 }}>
+      <Text style={styles.qHeading}>
+        {qno > 0 ? `Q${qno}. ` : ""}&apos;{feature.name}&apos; 기능의 만족도는 몇 점입니까?
+      </Text>
+      <View style={{ flexDirection: "row", marginBottom: 6 }}>
+        <View style={{ flex: 2, backgroundColor: colors.chartBannerBg, padding: 6, borderWidth: 1, borderColor: colors.border, alignItems: "center" }}>
+          <Text style={{ fontSize: 9, fontWeight: "bold" }}>만족도 점수 평균 : {feature.mean.toFixed(2)} / 10</Text>
+        </View>
+        <View style={{ flex: 1, backgroundColor: colors.chartBannerBg, padding: 6, borderWidth: 1, borderLeftWidth: 0, borderColor: colors.border, alignItems: "center" }}>
+          <Text style={{ fontSize: 9, fontWeight: "bold" }}>표준편차 : {feature.sd.toFixed(2)}</Text>
+        </View>
+      </View>
+      {feature.scoreDistribution && (
+        <View style={{ marginBottom: 6 }} wrap={false}>
+          <Text style={panelHeadStyle}>만족도 분포도</Text>
+          <View style={{ alignItems: "center", borderWidth: 1, borderTopWidth: 0, borderColor: colors.border, padding: 6 }}>
+            <PdfSatisfactionHistogram distribution={feature.scoreDistribution} width={320} />
+          </View>
+        </View>
+      )}
+      <View style={{ flexDirection: "row", marginBottom: 6 }} wrap={false}>
+        <View style={{ flex: 1, borderWidth: 1, borderColor: colors.border, marginRight: 4 }}>
+          <Text style={panelHeadStyle}>주관식 응답 감정 분석</Text>
+          <View style={{ padding: 6, alignItems: "center", justifyContent: "center" }}>
+            <PdfPolarityDonut positive={counts.positive} negative={counts.negative} neutral={counts.neutral} width={150} />
+          </View>
+        </View>
+        <View style={{ flex: 1, borderWidth: 1, borderColor: colors.border }}>
+          <Text style={panelHeadStyle}>응답 요약</Text>
+          <View style={{ padding: 6 }}>
+            {summaries.length === 0 ? (
+              <Text style={styles.placeholder}>정성 요약이 아직 없습니다.</Text>
+            ) : (
+              summaries.map((p) => (
+                <View key={p} style={{ marginBottom: 4 }}>
+                  <Text style={{ fontSize: 8.5, fontWeight: "bold" }}>[{polarityLabel[p]} 의견 요약]</Text>
+                  <RichText value={question.polarity_summaries![p]!} />
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+      </View>
+      {polarityOrder.map((p) => {
+        const inPolarity = question.categories.filter((c) => c.polarity === p);
+        if (inPolarity.length === 0) return null;
+        bannerIndex += 1;
+        return (
+          <View key={p} style={{ marginTop: 6 }}>
+            <PolarityBanner index={bannerIndex} polarity={p} label={polarityLabel[p]} pct={pctByPolarity[p]} />
+            {inPolarity.map((c) => (
+              <CategoryBlock key={c.id} category={c} />
+            ))}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Ⅲ.2 "기능별 중요 순위 및 만족도 종합 해석" — FEATURE_SYSTEM(prompts.ts)이 만드는
+ * "[종합 해석]"+"▶ 우선 개선 기능"/"▶ 차우선 개발 기능"/"▶ 비우선 개발 기능" 3단 구조를
+ * 원본 29쪽처럼 렌더링한다(2026-08-04 실측 — 예전엔 이 구조화된 텍스트를 RichText 하나로만
+ * 통째로 흘려서, "▶"가 화살표 불릿(→)으로 오인식되고 번호 항목 아래 "→" 서브라인이 들여쓰기
+ * 없이 나열돼 원본의 계층 구조가 안 보였다). 프롬프트 출력은 이미 정확한 구조([종합 해석]/
+ * ▶.../"N. ..."/"→ ...")로 생성돼 있었으므로 이번에도 순수 렌더링 버그였다. */
+function parseFeatureAnalysisTiers(text: string): { overall: string; tiers: { title: string; items: { lead: string; arrows: string[] }[] }[] } {
+  const [overall, ...tierBlocks] = text.split(/\n\s*▶\s*/);
+  const tiers = tierBlocks.map((block) => {
+    const lines = block.split(/\r?\n/).map((l) => l.trim());
+    const title = lines[0] ?? "";
+    const items: { lead: string; arrows: string[] }[] = [];
+    let current: { lead: string; arrows: string[] } | null = null;
+    for (const line of lines.slice(1)) {
+      if (!line) continue;
+      if (/^\d+\.\s*/.test(line)) {
+        if (current) items.push(current);
+        current = { lead: line, arrows: [] };
+      } else if (/^(→|▶)\s*/.test(line) && current) {
+        current.arrows.push(line.replace(/^(→|▶)\s*/, ""));
+      }
+    }
+    if (current) items.push(current);
+    return { title, items };
+  });
+  return { overall: overall.trim(), tiers };
+}
+
+function FeatureAnalysisBlock({ text }: { text: string }) {
+  const { overall, tiers } = parseFeatureAnalysisTiers(text);
+  return (
+    <View style={{ marginTop: 4 }}>
+      <View style={{ backgroundColor: colors.chartBannerBg, padding: 5, marginBottom: 6 }}>
+        <Text style={{ fontSize: 9.5, fontWeight: "bold", textAlign: "center", color: colors.navy }}>
+          기능별 중요 순위 및 만족도 종합 해석
+        </Text>
+      </View>
+      <RichText value={overall} />
+      {tiers.map((tier, ti) => (
+        <View key={ti} style={{ marginTop: 8 }} wrap={false}>
+          {/* 리터럴 "▶" 텍스트는 이 서브셋 폰트에서 mojibake가 난다(위 TriangleBullet 주석
+              참고) — SVG 삼각형으로 대체. */}
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 3 }}>
+            <TriangleBullet />
+            <Text style={{ fontSize: 9, fontWeight: "bold" }}>{tier.title}</Text>
+          </View>
+          {tier.items.map((item, ii) => (
+            <View key={ii} style={{ marginBottom: 4 }}>
+              <RichText value={item.lead} />
+              {item.arrows.map((arrow, ai) => (
+                <RichText key={ai} value={`→ ${arrow}`} style={{ marginLeft: 10 }} />
+              ))}
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /** Ⅲ. 기능별 고객경험평가 — 정량(만족도 세로 막대그래프 + 순위표) + 정성(3종세트). 실제 발행
  * 보고서 형식(전체 평균선 오버레이 + 만족도 순위 종합표, 2026-07-21 실측 대조)에 맞춰
  * 기존 가로 BarChart를 VerticalBarChartWithAverage로 교체했다. */
@@ -238,14 +417,24 @@ export function SectionFeatureExperience({
           items={ranked.map((f) => ({ name: f.name, value: f.mean }))}
         />
       </View>
-      {featureQuestions.map((q) => (
-        <QuestionQualitativeBlock key={q.id} question={q} />
-      ))}
+      {featureQuestions.map((q) => {
+        const featureName = q.question_key.replace(/^feature:/, "");
+        const featureIndex = stats.featureSatisfaction.findIndex((f) => f.name === featureName);
+        const feature = featureIndex >= 0 ? stats.featureSatisfaction[featureIndex] : null;
+        if (!feature) return <QuestionQualitativeBlock key={q.id} question={q} />;
+        return (
+          <FeatureQuestionBlock
+            key={q.id}
+            question={q}
+            feature={feature}
+            qno={featureQuestionNumber(stats, featureIndex)}
+          />
+        );
+      })}
       {featureExperienceAnalysis && (
         <View break>
           <SubsectionHeader number={2} title="기능별 고객 경험 분석" />
-          <Text style={[styles.subheading, { marginTop: 0 }]}>기능별 중요 순위 및 만족도 종합 해석</Text>
-          <RichText value={featureExperienceAnalysis} />
+          <FeatureAnalysisBlock text={featureExperienceAnalysis} />
         </View>
       )}
     </View>
@@ -264,27 +453,75 @@ const FOUR_VALUE_LABEL_BY_KEY: Record<string, "기능적 가치" | "심미적 �
  * Ⅲ장·Ⅷ장이 쓰는 QuestionQualitativeBlock(번호 배너+퍼센트+긍정/부정/중립 3열)과 완전히
  * 다른 원본 구조를 그대로 따른다: 배너·퍼센트·중립 전혀 없이 "긍정 주요 의견 | 부정 주요 의견"
  * 두 열을 나란히 배치하고, 그 아래 "[○○ 가치 조사 결과]" 한 문단 소결론을 붙인다. */
+// 4대 가치 문항의 raw data 컬럼 순서(설문 항목 표·QuantStats.fourValues 둘 다 이 순서를
+// 전제한다) — Ⅲ장 featureQuestionNumber와 같은 원리로 Q번호를 찾는 데 쓴다.
+const FOUR_VALUE_KEY_ORDER = ["values:functional", "values:aesthetic", "values:economic", "values:social"] as const;
+const FOUR_VALUE_STAT_KEY: Record<string, "functional" | "aesthetic" | "economic" | "social"> = {
+  "values:functional": "functional",
+  "values:aesthetic": "aesthetic",
+  "values:economic": "economic",
+  "values:social": "social",
+};
+
+/** 4대 가치 문항의 Q번호+raw data 원문(요약 라벨이 아니라 헤더에 실제로 있는 전체 문장)을
+ * 찾는다 — 웹 뷰어(lib/report/workspace.ts의 findSurveyQuestion)와 동일한 원칙: raw data가
+ * ground truth이므로 하드코딩된 문구 대신 survey.question을 그대로 쓴다. */
+function findValueSurveyQuestion(stats: QuantStats, questionKey: string): { qno: number; question: string } | null {
+  const valueIndex = FOUR_VALUE_KEY_ORDER.indexOf(questionKey as (typeof FOUR_VALUE_KEY_ORDER)[number]);
+  if (valueIndex < 0) return null;
+  let qno = 0;
+  let seen = 0;
+  for (const row of stats.surveyQuestions) {
+    qno += 1;
+    if (row.stage === "4대 가치 만족도 평가") {
+      if (seen === valueIndex) return { qno, question: row.question };
+      seen += 1;
+    }
+  }
+  return null;
+}
+
 export function SectionFourValuesQualitative({
+  stats,
   valueQuestions,
   fourValueItemsText,
   fourValuesAnalysis,
 }: {
+  stats: QuantStats;
   valueQuestions: QuestionWithApprovedCategories[];
   fourValueItemsText?: string | null;
   /** sectionAnalyses.fourValues — Ⅴ.2 "4대 가치 조사 결과 분석"(원본 37쪽, 4개 가치를 합친
    * 3단락 종합해석). 2026-08-03 신규 연결(Ⅲ.2와 같은 이유로 빠져 있었다). */
   fourValuesAnalysis?: string | null;
 }) {
-  if (valueQuestions.every((q) => q.categories.length === 0)) return null;
+  // 예전엔 정성 카테고리가 하나도 없으면 함수 전체가 null을 반환했다 — 이 함수가 순수 정량인
+  // "1 4대 가치 조사 결과" 배너+막대그래프+표까지 떠맡게 된 뒤로는(아래 주석 참고) 그러면 정량
+  // 전용 미리보기에서 Ⅴ장 전체가 통째로 사라진다. 정성 블록만 조건부로 숨기고, 차트+표는
+  // 항상 그린다(다른 장의 quant 섹션과 같은 원칙).
+  const hasQualitative = valueQuestions.some((q) => q.categories.length > 0);
   const itemTexts = parseFourValueItemTexts(fourValueItemsText ?? "");
+  const panelHeadStyle = {
+    fontSize: 8.5,
+    fontWeight: "bold" as const,
+    backgroundColor: colors.chartBannerBg,
+    color: colors.navy,
+    padding: 4,
+    textAlign: "center" as const,
+  };
   return (
-    <View>
+    <View break>
+      <SectionHeader numeral="V" title="4대 가치 만족도" />
+      <SubsectionHeader number={1} title="4대 가치 조사 결과" />
+      {!hasQualitative && <Text style={styles.placeholder}>정성 분석 결과가 아직 없습니다.</Text>}
       {valueQuestions.map((q) => {
         if (q.categories.length === 0) return null;
         const positives = q.categories.filter((c) => c.polarity === "positive");
         const negatives = q.categories.filter((c) => c.polarity === "negative");
         const valueLabel = FOUR_VALUE_LABEL_BY_KEY[q.question_key];
         const itemText = valueLabel ? itemTexts[valueLabel] : "";
+        const statKey = FOUR_VALUE_STAT_KEY[q.question_key];
+        const stat = statKey ? stats.fourValues[statKey] : null;
+        const survey = findValueSurveyQuestion(stats, q.question_key);
         // 긍정/부정을 통짜 2열(각 열 전체를 하나의 flex 컨테이너)로 쌓으면, 두 열의 총
         // 높이가 페이지 하나를 넘어갈 때 react-pdf가 페이지 넘김에서 두 열을 서로 다른
         // 지점에서 잘못 이어붙여 내용이 겹쳐버린다(실측 확인, 2026-08-03 — 카테고리
@@ -296,33 +533,108 @@ export function SectionFourValuesQualitative({
         const pairCount = Math.max(positives.length, negatives.length);
         return (
           <View key={q.id} style={{ marginBottom: 12 }}>
-            <Text style={styles.subheading}>{q.label}</Text>
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <Text style={{ flex: 1, fontSize: 9, fontWeight: "bold", marginBottom: 4 }}>긍정 주요 의견</Text>
-              <Text style={{ flex: 1, fontSize: 9, fontWeight: "bold", marginBottom: 4 }}>부정 주요 의견</Text>
+            <Text style={styles.qHeading}>
+              {survey ? `Q${survey.qno}. ${survey.question}` : q.label}
+            </Text>
+            {stat && (
+              <View style={{ flexDirection: "row", marginBottom: 6, borderWidth: 1, borderColor: colors.border }}>
+                <View style={{ flex: 1, borderRightWidth: 1, borderRightColor: colors.border }}>
+                  <Text style={panelHeadStyle}>평균</Text>
+                  <Text style={{ fontSize: 9, textAlign: "center", padding: 5 }}>전체 {stat.mean.toFixed(2)}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={panelHeadStyle}>표준편차</Text>
+                  <Text style={{ fontSize: 9, textAlign: "center", padding: 5 }}>{stat.sd.toFixed(2)}</Text>
+                </View>
+              </View>
+            )}
+            <View style={{ flexDirection: "row", gap: 4 }}>
+              <Text style={[panelHeadStyle, { flex: 1 }]}>긍정 의견</Text>
+              <Text style={[panelHeadStyle, { flex: 1, backgroundColor: "#fde4d0", color: "#c2410c" }]}>부정 의견</Text>
             </View>
             {Array.from({ length: pairCount }, (_, i) => (
-              <View key={i} style={{ flexDirection: "row", gap: 10 }} wrap={false}>
+              <View key={i} style={{ flexDirection: "row", gap: 4 }} wrap={false}>
                 <View style={{ flex: 1 }}>{positives[i] && <CategoryBlock category={positives[i]} />}</View>
                 <View style={{ flex: 1 }}>{negatives[i] && <CategoryBlock category={negatives[i]} />}</View>
               </View>
             ))}
-            {itemText && (
-              <View style={{ marginTop: 4 }}>
-                <Text style={{ fontSize: 9, fontWeight: "bold", marginBottom: 2 }}>[ {valueLabel} 조사 결과 ]</Text>
-                <RichText value={itemText} />
+            <View style={{ marginTop: 4, borderWidth: 1, borderColor: colors.border }}>
+              <Text style={panelHeadStyle}>[ {valueLabel ?? q.label} 조사 결과 ]</Text>
+              <View style={{ padding: 6 }}>
+                {itemText ? <RichText value={itemText} /> : <Text style={styles.placeholder}>정성 요약이 아직 없습니다.</Text>}
               </View>
-            )}
+            </View>
           </View>
         );
       })}
-      {fourValuesAnalysis && (
-        <View break>
-          <SubsectionHeader number={2} title="4대 가치 조사 결과 분석" />
-          <Text style={[styles.subheading, { marginTop: 0 }]}>4대 가치 만족도 종합 해석</Text>
-          <RichText value={fourValuesAnalysis} />
+      {/* 원본 37쪽 "2 4대 가치 만족도 조사 결과 분석"은 배너 "4대 가치 만족도 종합 결과"
+          (막대그래프+표) 바로 아래 배너 "4대 가치 만족도 종합 해석"(텍스트)이 같은 소절 안에
+          이어진다 — 예전엔 차트+표(SectionFourValuesTable)를 Ⅴ장 맨 앞(이 "1" 문항별 블록보다
+          먼저)에 별도 최상위 컴포넌트로 떼어놨었는데, 이는 chart+표가 통째로 사라진 것처럼
+          보이는 원인이 됐다("2" 배너 아래엔 해석 텍스트만 있고 차트가 없었음, 2026-08-04
+          사용자 지적). ReportDocument.tsx가 SectionFourValuesTable을 독립 컴포넌트로 뺐던
+          이유(2026-08-03, 중첩 break로 인한 표 라벨 겹침 버그)는 "이 컴포넌트 트리 최상위에서
+          두 번 break가 겹치는 것"이 원인이었지 "차트와 정성 콘텐츠를 한 함수에 못 둔다"는
+          뜻이 아니었다 — Ⅲ장(SectionFeatureExperience)이 이미 같은 패턴(차트+표+정성 블록+
+          요약을 한 함수 안에)으로 문제없이 동작한다. 여기서도 그 패턴을 따라 순수 JSX만
+          이 함수 안으로 옮기고(별도 최상위 break-컴포넌트로 안 뺌), ReportDocument.tsx의
+          독립 SectionFourValuesTable 호출은 제거했다. */}
+      <View break>
+        <SubsectionHeader number={2} title="4대 가치 조사 결과 분석" />
+        <FourValuesSummaryChart stats={stats} />
+        <View style={{ backgroundColor: colors.chartBannerBg, padding: 5, marginVertical: 6 }} wrap={false}>
+          <Text style={{ fontSize: 9.5, fontWeight: "bold", textAlign: "center", color: colors.navy }}>
+            4대 가치 만족도 종합 해석
+          </Text>
         </View>
-      )}
+        <RichText value={fourValuesAnalysis ?? "해석이 아직 생성되지 않았습니다."} />
+      </View>
+    </View>
+  );
+}
+
+/** Ⅴ.2 상단 "4대 가치 만족도 종합 결과" 배너+막대그래프+표 — 예전엔 별도 최상위 컴포넌트
+ * (SectionFourValuesTable, sectionsQuant.tsx)로 Ⅴ장 맨 앞에 있었으나, 원본은 이 내용이 "2"
+ * 소절(종합 해석 바로 위)에 속한다(위 SectionFourValuesQualitative 주석 참고). 4개 가치 순서는
+ * 원본 그대로 기능적→심미적→사회·공공적→경제적(2026-08-04 hwpx 재대조 — 기존 코드는
+ * 경제적/사회공공적이 뒤바뀌어 있었다). */
+function FourValuesSummaryChart({ stats }: { stats: QuantStats }) {
+  const rows = [
+    { label: "기능적 가치", ...stats.fourValues.functional },
+    { label: "심미적 가치", ...stats.fourValues.aesthetic },
+    { label: "사회·공공적 가치", ...stats.fourValues.social },
+    { label: "경제적 가치", ...stats.fourValues.economic },
+  ];
+  const average = Math.round((rows.reduce((a, r) => a + r.mean, 0) / rows.length) * 100) / 100;
+  const valueMeans = rows.map((r) => r.mean);
+  const [chartMin, chartMax] = computeBarWithAverageRange(valueMeans, average);
+  return (
+    <View wrap={false}>
+      <VerticalBarChartWithAverage
+        items={rows.map((r) => ({ label: r.label, value: r.mean }))}
+        min={chartMin}
+        max={chartMax}
+        unit="점"
+        title="[ 4대 가치 만족도 종합 결과 ]"
+        average={average}
+        yAxisTitle="만족도 평균"
+        legendBarLabel="가치별 만족도 평균"
+        legendAverageLabel="전체 가치 만족도 평균"
+      />
+      <View style={[styles.table, { marginTop: 6 }]}>
+        <View style={styles.tableRow}>
+          <Text style={styles.tableHeaderCell}>가치</Text>
+          <Text style={styles.tableHeaderCell}>평균</Text>
+          <Text style={styles.tableHeaderCell}>표준편차</Text>
+        </View>
+        {rows.map((r, i) => (
+          <View key={r.label} style={i === rows.length - 1 ? styles.tableRowLast : styles.tableRow}>
+            <Text style={styles.tableCell}>{r.label}</Text>
+            <Text style={styles.tableCell}>{r.mean.toFixed(2)}</Text>
+            <Text style={styles.tableCell}>{r.sd.toFixed(2)}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -441,6 +753,61 @@ function TriangleBullet() {
  * 그래픽·정의·공식·판단문 형식을 그대로 따른다(2026-07-21 실측 대조). Bain 설명·Promoter/
  * Passive/Detractor 정의·NPS 공식은 일반 지식이라 고정 템플릿 문구로 넣고, 특정 회사 비교
  * 문구가 섞인 판단 부분만 npsJudgmentLines()로 우리 계산값 기반으로 재구성했다. */
+/** Ⅷ.1 "전반적인 만족도"(Q26) — 2026-08-04 실제 hwpx 원본 대조로 확정: 이 문항은 Ⅲ장
+ * 기능별 문항과 달리 "긍정/부정/중립" 폴라리티 막대·1.긍정/2.부정/3.중립 상세가 전혀 없다
+ * (원본 전체에 "1. 긍정 의견"이 정확히 6번만 나오는데 전부 Ⅲ장 기능 문항 — Ⅷ.1/NPS는
+ * 없음). 대신 평균/표준편차 표 + "[만족도 구간별 비율]"(0~6/7~8/9~10점, NPS와 같은
+ * 3구간 나눔) + "[주요 시사점]" 정형화된 해설로 구성된다. 셋 다 결정론적으로 계산 가능해
+ * LLM 호출이 필요 없다(NPS의 Promoter/Passive/Detractor 정의 문구와 같은 패턴). */
+function OverallSatisfactionBreakdown({ stats }: { stats: QuantStats }) {
+  const dist = stats.overallSatisfactionDistribution;
+  const total = dist?.reduce((a, b) => a + b, 0) ?? 0;
+  const pct = (from: number, to: number) => {
+    if (!dist || total === 0) return 0;
+    const sum = dist.slice(from, to + 1).reduce((a, b) => a + b, 0);
+    return Math.round((sum / total) * 1000) / 10;
+  };
+  const negative = pct(0, 6);
+  const neutral = pct(7, 8);
+  const positive = pct(9, 10);
+  const panelHeadStyle = {
+    fontSize: 8.5,
+    fontWeight: "bold" as const,
+    backgroundColor: colors.chartBannerBg,
+    color: colors.navy,
+    padding: 4,
+    textAlign: "center" as const,
+  };
+  return (
+    <View>
+      <View style={{ flexDirection: "row", marginBottom: 6, borderWidth: 1, borderColor: colors.border }}>
+        <View style={{ flex: 1, borderRightWidth: 1, borderRightColor: colors.border }}>
+          <Text style={panelHeadStyle}>평균 만족도</Text>
+          <Text style={{ fontSize: 9, textAlign: "center", padding: 5 }}>{stats.overallSatisfaction.mean.toFixed(2)}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={panelHeadStyle}>표준편차</Text>
+          <Text style={{ fontSize: 9, textAlign: "center", padding: 5 }}>{stats.overallSatisfaction.sd.toFixed(2)}</Text>
+        </View>
+      </View>
+      <Text style={[styles.body, { fontWeight: "bold", marginTop: 4, marginBottom: 2 }]}>[만족도 구간별 비율]</Text>
+      <Text style={styles.body}>0~6점 (부정적 구간): {negative}%</Text>
+      <Text style={styles.body}>7~8점 (중립 구간): {neutral}%</Text>
+      <Text style={styles.body}>9~10점 (긍정 구간): {positive}%</Text>
+      <Text style={[styles.body, { fontWeight: "bold", marginTop: 6, marginBottom: 2 }]}>[주요 시사점]</Text>
+      <Text style={[styles.body, { marginBottom: 2 }]}>
+        <Text style={{ fontWeight: "bold" }}>긍정 고객 (9~10점, {positive}%)</Text> 높은 만족도를 보이는 고객군으로, 현재 서비스에 대해 긍정적인 평가를 하고 있음.
+      </Text>
+      <Text style={[styles.body, { marginBottom: 2 }]}>
+        <Text style={{ fontWeight: "bold" }}>중립 고객 (7~8점, {neutral}%)</Text> 만족도가 높지도 낮지도 않은 상태로, 제품 개선을 통해 긍정 고객으로 전환할 수 있는 핵심 타깃층임.
+      </Text>
+      <Text style={styles.body}>
+        <Text style={{ fontWeight: "bold" }}>부정 고객 (0~6점, {negative}%)</Text> 전반적인 평균 점수({stats.overallSatisfaction.mean.toFixed(2)})가 낮은 이유에 기여하고 있음. 단기간에는 중립 고객을 긍정 고객으로 전환하는 것이 전체 만족도 향상에 더 효과적일 수 있음.
+      </Text>
+    </View>
+  );
+}
+
 export function SectionNpsAndImprovement({
   stats,
   overallQuestion,
@@ -521,14 +888,48 @@ export function SectionNpsAndImprovement({
         ))}
       </View>
 
-      {overallQuestion && <QuestionQualitativeBlock question={overallQuestion} />}
-      {npsQuestion && <QuestionQualitativeBlock question={npsQuestion} />}
-      <Text style={styles.subheading}>개선 아이디어</Text>
-      {improvementQuestion ? (
-        <QuestionQualitativeBlock question={improvementQuestion} />
-      ) : (
-        <Text style={styles.placeholder}>정성 분석 결과가 아직 없습니다.</Text>
-      )}
+      {/* 2026-08-04: overallQuestion(전반적인 만족도)·npsQuestion 둘 다 원본엔 폴라리티
+          막대·1.긍정/2.부정/3.중립 상세가 없다(위 OverallSatisfactionBreakdown 주석 참고).
+          NPS의 정성 결과는 이미 npsJudgmentLines(위)가 판단 문구로 소비하므로 여기서 또
+          보여주지 않는다 — QuestionQualitativeBlock 호출을 완전히 뺐다. */}
+      <View style={{ marginTop: 8 }}>
+        <Text style={styles.qHeading}>
+          {(() => {
+            let qno = 0;
+            for (const row of stats.surveyQuestions) {
+              qno += 1;
+              if (row.stage === "종합 만족도") return `Q${qno}. ${row.question}`;
+            }
+            return "전반적인 만족도";
+          })()}
+        </Text>
+        <OverallSatisfactionBreakdown stats={stats} />
+      </View>
+
+      <View break>
+        <SubsectionHeader number={2} title="개선 아이디어" />
+        {improvementQuestion && improvementQuestion.categories.length > 0 ? (
+          <View style={{ borderWidth: 1, borderColor: colors.border }}>
+            <Text
+              style={{
+                fontSize: 8.5,
+                fontWeight: "bold",
+                backgroundColor: colors.chartBannerBg,
+                color: colors.navy,
+                padding: 4,
+                textAlign: "center",
+              }}
+            >
+              주요 의견 종합
+            </Text>
+            <View style={{ padding: 6 }}>
+              <ImprovementCategoryBlocks categories={improvementQuestion.categories} />
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.placeholder}>정성 분석 결과가 아직 없습니다.</Text>
+        )}
+      </View>
     </View>
   );
 }
@@ -699,7 +1100,13 @@ function ResultSummaryTable({
           주요 의견
         </Text>
       </View>
-      {/* 기능별 고객 경험 평가 — 사분면 그래프 + 6열 표 자동 채움 */}
+      {/* 기능별 고객 경험 평가 — 사분면 그래프 + 6열 표 자동 채움. 2026-07-23엔 여기 `break`를
+          걸었었는데, Ⅸ장 자체가 이미 자기 루트에 `<View break>`를 갖고 있어(SectionConclusion)
+          이 행에도 break를 걸면 "IX 배너+1 사용성테스트 결과 요약 소제목+표 헤더"만 있는
+          페이지 하나가 통째로 남고 표 본문은 그 다음 페이지로 밀려, 앞 페이지 대부분이
+          텅 비는 문제가 실측 확인됐다(2026-08-04). 이 행은 Ⅸ장의 첫 콘텐츠라 이미 페이지
+          맨 위 근처에서 시작하므로(위 섹션 break 덕분) 별도 break 없이도 페이지 경계에 걸릴
+          일이 드물다 — `wrap={false}`만으로 충분한지는 실제 렌더로 재검증했다. */}
       <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: colors.border }} wrap={false}>
         <ResultItemLabel label="기능별 고객 경험 평가" />
         <View style={{ flex: 1, padding: 6 }}>
@@ -738,6 +1145,36 @@ function ResultSummaryTable({
   );
 }
 
+/** Ⅸ.3 "기능별 고객 제언 종합" — [기능 N] 기능명 제목 아래, "고객 제언 N" 라벨(왼쪽 좁은 열) +
+ * 행동형 문구(오른쪽 열)를 행마다 테두리로 구분하는 표. 원본 55쪽과 동일한 형식(2026-08-04
+ * 원본 대조 — 예전엔 배너 헤더 + 표 없는 텍스트 나열이었다). */
+function CustomerActionTable({ actions }: { actions: string[] }) {
+  return (
+    <View style={styles.table}>
+      {actions.map((action, j) => (
+        <View key={j} style={j < actions.length - 1 ? styles.tableRow : styles.tableRowLast}>
+          <View
+            style={{
+              width: 68,
+              backgroundColor: "#dfe6f7",
+              justifyContent: "center",
+              alignItems: "center",
+              padding: 5,
+              borderRightWidth: 1,
+              borderRightColor: colors.border,
+            }}
+          >
+            <Text style={{ fontSize: 8, fontWeight: "bold", textAlign: "center" }}>고객 제언 {j + 1}</Text>
+          </View>
+          <View style={{ flex: 1, padding: 6 }}>
+            <Text style={{ fontSize: 8.5, lineHeight: 1.4 }}>{action}</Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /** Ⅸ. 종합결과 및 제언 */
 export function SectionConclusion({
   stats,
@@ -769,59 +1206,116 @@ export function SectionConclusion({
       <SubsectionHeader number={1} title="사용성테스트 결과 요약" />
       <ResultSummaryTable stats={stats} featureQuestions={featureQuestions} resultSummary={resultSummary} />
 
-      <Text style={styles.subheading}>2. 개선 전략 제언</Text>
-
-      <Text style={{ fontSize: 8.5, fontWeight: "bold", marginBottom: 2 }}>전반적 방향성</Text>
-      <RichText value={overall ?? "핵심구매요소, 만족도·상대 중요도, NPS 지수를 함께 참조하여 우선 개선 항목을 검토할 필요가 있습니다."} />
-
-      <Text style={{ fontSize: 8.5, fontWeight: "bold", marginTop: 6, marginBottom: 2 }}>개발 우선순위 제언</Text>
-      <RichText value={devPriorityRest ?? "제언이 아직 생성·승인되지 않았습니다."} />
-
-      <Text style={{ fontSize: 8.5, fontWeight: "bold", marginTop: 6, marginBottom: 2 }}>기능 개선 제안</Text>
-      {featureRecommendations.length === 0 ? (
-        <Text style={styles.placeholder}>승인된 기능개선제안이 아직 없습니다.</Text>
-      ) : (
-        featureRecommendations.map((r) => (
-          <View key={r.id} style={{ marginBottom: 6 }} wrap={false}>
-            <Text style={{ fontSize: 8.5, fontWeight: "bold", marginBottom: 2 }}>
-              [{r.section.replace("feature_improvement:", "")}]
-            </Text>
-            <RichText value={r.final ?? r.draft} />
+      <SubsectionHeader number={2} title="개선 전략 제언" />
+      <View style={styles.table}>
+        <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: colors.border }}>
+          <ResultItemLabel label="전반적 방향성" />
+          <View style={{ flex: 1, padding: 6 }}>
+            <RichText value={overall ?? "핵심구매요소, 만족도·상대 중요도, NPS 지수를 함께 참조하여 우선 개선 항목을 검토할 필요가 있습니다."} />
           </View>
-        ))
-      )}
+        </View>
+        <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: colors.border }}>
+          <ResultItemLabel label="개발 우선순위 제언" />
+          <View style={{ flex: 1, padding: 6 }}>
+            <RichText value={devPriorityRest ?? "제언이 아직 생성·승인되지 않았습니다."} />
+          </View>
+        </View>
+        {/* **문항 단위 행 흐름 구조**(SurveyQuestionTable과 같은 패턴, 2026-08-04) — 예전엔
+            "기능 개선 제안" 6개 항목 전체를 라벨 1칸짜리 행 하나로 묶었는데, 이 행이 페이지에
+            다 못 들어가면 라벨 칸의 배경색만 앞 페이지에 빈 박스로 남고 실제 항목은 전부
+            테두리·라벨 없이 다음 페이지로 밀려버렸다(2026-08-04 실측 — "표가 깨진다"는 사용자
+            지적). 항목(기능) 하나를 최소 단위 행으로 잡아 각각 wrap={false}로 흐르게 하고,
+            "기능 개선 제안" 라벨은 첫 항목 행에만 넣은 뒤 나머지 행은 배경색만 이어서 병합된
+            열처럼 보이게 한다 — 페이지가 넘어가도 이어지는 항목은 계속 테두리·배경 안에 있다. */}
+        {featureRecommendations.length === 0 ? (
+          <View style={{ flexDirection: "row" }}>
+            <ResultItemLabel label="기능 개선 제안" />
+            <View style={{ flex: 1, padding: 6 }}>
+              <Text style={styles.placeholder}>승인된 기능개선제안이 아직 없습니다.</Text>
+            </View>
+          </View>
+        ) : (
+          // FEATURE_IMPROVEMENT_SYSTEM(prompts.ts)의 출력 첫 줄은 그 기능을 규정하는 짧은
+          // 제목(예: "산책 보상 체계 고도화")이다 — 원본 54쪽은 이 제목에 "N. " 번호만 붙이고
+          // 굵게 표시하며, 기능명(raw feature name)은 노출하지 않는다. 이하 줄("• As-is:"/
+          // "• To-be:"/"→ ...")은 RichText가 그대로 불릿·화살표로 렌더링한다.
+          featureRecommendations.map((r, i) => {
+            const text = r.final ?? r.draft;
+            const [title, ...restLines] = text.split(/\r?\n/);
+            const isLast = i === featureRecommendations.length - 1;
+            return (
+              <View key={r.id} wrap={false} style={{ flexDirection: "row" }}>
+                <View
+                  style={{
+                    width: 92,
+                    backgroundColor: "#dfe6f7",
+                    alignItems: "center",
+                    paddingHorizontal: 4,
+                    paddingTop: i === 0 ? 6 : 0,
+                    borderRightWidth: 1,
+                    borderRightColor: colors.border,
+                  }}
+                >
+                  {i === 0 ? (
+                    <Text style={{ fontSize: 8.5, fontWeight: "bold", textAlign: "center" }}>기능 개선 제안</Text>
+                  ) : null}
+                </View>
+                <View
+                  style={{
+                    flex: 1,
+                    padding: 6,
+                    borderBottomWidth: isLast ? 0 : 1,
+                    borderBottomColor: colors.border,
+                  }}
+                >
+                  <Text style={{ fontSize: 8.5, fontWeight: "bold", marginBottom: 2 }}>
+                    {i + 1}. {title.trim()}
+                  </Text>
+                  <RichText value={restLines.join("\n")} />
+                </View>
+              </View>
+            );
+          })
+        )}
+      </View>
 
-      <Text style={styles.subheading}>3. 기능별 고객 제언 종합</Text>
+      <SubsectionHeader number={3} title="기능별 고객 제언 종합" />
       {!customerFeatures || customerFeatures.length === 0 ? (
         <Text style={styles.placeholder}>기능별 고객 제언은 정성 분석 승인 후 표시됩니다.</Text>
       ) : (
         customerFeatures.map((f, i) => (
           <View key={f.featureName} style={{ marginBottom: 8 }} wrap={false}>
-            <Text style={{ fontSize: 8.5, fontWeight: "bold", backgroundColor: colors.chartBannerBg, padding: 4, marginBottom: 2 }}>
+            <Text style={{ fontSize: 9, fontWeight: "bold", marginBottom: 3 }}>
               [기능 {i + 1}] {f.featureName}
             </Text>
-            {f.actions.map((action, j) => (
-              <Text key={j} style={styles.body}>
-                고객 제언 {j + 1}. {action}
-              </Text>
-            ))}
+            <CustomerActionTable actions={f.actions} />
           </View>
         ))
       )}
 
-      <Text style={styles.subheading}>4. 종합 전략 제언</Text>
-      {strategicInput?.draft ? (
-        <RichText value={strategicInput.draft} />
-      ) : (
-        <View>
-          <Text style={styles.placeholder}>담당자 입력 대기 중 (7.3절 — AI가 임의로 작성하지 않음)</Text>
-          {strategicInput?.customerRequest && (
-            <Text style={styles.small}>고객사 요청사항: {strategicInput.customerRequest}</Text>
+      {/* 원본 Ⅸ장 목차는 "1 사용성테스트 결과 요약/2 개선 전략 제언/3 기능별 고객 제언 종합"
+          3개뿐이다(hwpx 재대조 확인, 2026-08-04) — "종합 전략 제언"은 PRD 7.3절이 요구하는
+          이 도구 고유 기능(담당자가 채팅으로 전달한 요청사항을 AI 해석 없이 그대로 보여줌)이라
+          원본엔 없다. 담당자가 실제로 뭔가 입력했을 때만 섹션 자체를 노출하고, 입력이 전혀
+          없으면(이 raw data처럼) "입력 대기 중" placeholder로 섹션을 억지로 채우지 않고
+          통째로 숨긴다 — 원본에 없는 섹션이 빈 채로 나오는 것보다 아예 없는 편이 원본과
+          더 가깝다(2026-08-04 사용자 확인). */}
+      {(strategicInput?.draft || strategicInput?.customerRequest || strategicInput?.priorityMetric) && (
+        <>
+          <SubsectionHeader number={4} title="종합 전략 제언" />
+          {strategicInput.draft ? (
+            <RichText value={strategicInput.draft} />
+          ) : (
+            <View>
+              {strategicInput.customerRequest && (
+                <Text style={styles.small}>고객사 요청사항: {strategicInput.customerRequest}</Text>
+              )}
+              {strategicInput.priorityMetric && (
+                <Text style={styles.small}>우선 고려 지표: {strategicInput.priorityMetric}</Text>
+              )}
+            </View>
           )}
-          {strategicInput?.priorityMetric && (
-            <Text style={styles.small}>우선 고려 지표: {strategicInput.priorityMetric}</Text>
-          )}
-        </View>
+        </>
       )}
     </View>
   );
