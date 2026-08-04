@@ -1044,7 +1044,7 @@ export function SectionCrossAnalysis({ stats, crossAnalysisText }: { stats: Quan
       )}
 
       {genderGroups.length >= 2 && (
-        <View>
+        <View wrap={false}>
           <Text style={styles.subheading}>[사용자 경험 품질 평가]</Text>
           {/* 그룹(실용성/즐거움) 사이에 옅고 얇은 세로 실선(2026-07-21 요청) — 위쪽엔 소제목과
               구분되는 가로 실선도 넣는다. Ⅵ장 SectionUxQuality와 같은 원칙: uxGroupDefs를

@@ -1,0 +1,807 @@
+{
+  "version": 1,
+  "source": "data/[알파브라더스] 케어클_사용성테스트_결과보고서_251028.hwpx",
+  "budget_unit": "non_whitespace_characters",
+  "slots": [
+    {
+      "kind": "paragraph",
+      "key": "p:2",
+      "text_len": 21,
+      "text_len_nospace": 19,
+      "max_chars": 19,
+      "text_preview": "2025 by Alphabrothers",
+      "meta": {
+        "paraPrIDRef": "0",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:3",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "33",
+        "styleIDRef": "13",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:5",
+      "text_len": 16,
+      "text_len_nospace": 13,
+      "max_chars": 13,
+      "text_preview": "발주처 l 정보통신산업진흥원 ",
+      "meta": {
+        "paraPrIDRef": "9",
+        "styleIDRef": "13",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:6",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "9",
+        "styleIDRef": "13",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:7",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "66",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:8",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "66",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:9",
+      "text_len": 38,
+      "text_len_nospace": 29,
+      "max_chars": 29,
+      "text_preview": "사업명 l 2019 SW제품 시장성테스트 및 개선방안 수립 지원 사업",
+      "meta": {
+        "paraPrIDRef": "9",
+        "styleIDRef": "13",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:10",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "66",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:11",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "66",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:12",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "0",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:13",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "66",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:14",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "66",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:15",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "66",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:16",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "66",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:17",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "0",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:18",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "66",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:19",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "66",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:20",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "67",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:21",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "67",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:22",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "68",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:23",
+      "text_len": 7,
+      "text_len_nospace": 6,
+      "max_chars": 6,
+      "text_preview": "사용성 테스트",
+      "meta": {
+        "paraPrIDRef": "0",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:24",
+      "text_len": 5,
+      "text_len_nospace": 5,
+      "max_chars": 5,
+      "text_preview": "결과보고서",
+      "meta": {
+        "paraPrIDRef": "0",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:25",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "68",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:26",
+      "text_len": 3,
+      "text_len_nospace": 3,
+      "max_chars": 3,
+      "text_preview": "케어클",
+      "meta": {
+        "paraPrIDRef": "68",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "key": "p:27",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 0,
+      "text_preview": "",
+      "meta": {
+        "paraPrIDRef": "63",
+        "styleIDRef": "0",
+        "pageBreak": "0",
+        "columnBreak": "0",
+        "inside_cell": true
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:0:0:0:0",
+      "text_len": 21,
+      "text_len_nospace": 19,
+      "max_chars": 19,
+      "text_preview": "2025 by Alphabrothers",
+      "meta": {
+        "table": 0,
+        "row": "0",
+        "col": "0",
+        "occurrence": 0,
+        "estimated_capacity": 18,
+        "char_height": 900,
+        "borderFillIDRef": "9"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:0:0:1:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 18,
+      "text_preview": "",
+      "meta": {
+        "table": 0,
+        "row": "0",
+        "col": "1",
+        "occurrence": 0,
+        "estimated_capacity": 18,
+        "char_height": 900,
+        "borderFillIDRef": "9"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:0:0:2:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 16,
+      "text_preview": "",
+      "meta": {
+        "table": 0,
+        "row": "0",
+        "col": "2",
+        "occurrence": 0,
+        "estimated_capacity": 16,
+        "char_height": 1000,
+        "borderFillIDRef": "9"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:0:0:0",
+      "text_len": 16,
+      "text_len_nospace": 13,
+      "max_chars": 32,
+      "text_preview": "발주처 l 정보통신산업진흥원 ",
+      "meta": {
+        "table": 1,
+        "row": "0",
+        "col": "0",
+        "occurrence": 0,
+        "estimated_capacity": 32,
+        "char_height": 1200,
+        "borderFillIDRef": "72"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:0:1:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 4,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "0",
+        "col": "1",
+        "occurrence": 0,
+        "estimated_capacity": 4,
+        "char_height": 1200,
+        "borderFillIDRef": "73"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:0:2:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 2,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "0",
+        "col": "2",
+        "occurrence": 0,
+        "estimated_capacity": 2,
+        "char_height": 1200,
+        "borderFillIDRef": "73"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:0:3:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 4,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "0",
+        "col": "3",
+        "occurrence": 0,
+        "estimated_capacity": 4,
+        "char_height": 1200,
+        "borderFillIDRef": "73"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:1:0:0",
+      "text_len": 38,
+      "text_len_nospace": 29,
+      "max_chars": 32,
+      "text_preview": "사업명 l 2019 SW제품 시장성테스트 및 개선방안 수립 지원 사업",
+      "meta": {
+        "table": 1,
+        "row": "1",
+        "col": "0",
+        "occurrence": 0,
+        "estimated_capacity": 32,
+        "char_height": 1200,
+        "borderFillIDRef": "74"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:1:2:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 2,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "1",
+        "col": "2",
+        "occurrence": 0,
+        "estimated_capacity": 2,
+        "char_height": 1200,
+        "borderFillIDRef": "73"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:1:3:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 4,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "1",
+        "col": "3",
+        "occurrence": 0,
+        "estimated_capacity": 4,
+        "char_height": 1200,
+        "borderFillIDRef": "73"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:2:0:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 78,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "2",
+        "col": "0",
+        "occurrence": 0,
+        "estimated_capacity": 78,
+        "char_height": 1000,
+        "borderFillIDRef": "72"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:2:2:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 2,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "2",
+        "col": "2",
+        "occurrence": 0,
+        "estimated_capacity": 2,
+        "char_height": 1200,
+        "borderFillIDRef": "73"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:2:3:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 4,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "2",
+        "col": "3",
+        "occurrence": 0,
+        "estimated_capacity": 4,
+        "char_height": 1200,
+        "borderFillIDRef": "73"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:3:2:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 2,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "3",
+        "col": "2",
+        "occurrence": 0,
+        "estimated_capacity": 2,
+        "char_height": 1200,
+        "borderFillIDRef": "73"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:3:3:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 4,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "3",
+        "col": "3",
+        "occurrence": 0,
+        "estimated_capacity": 4,
+        "char_height": 1200,
+        "borderFillIDRef": "73"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:4:0:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 31,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "4",
+        "col": "0",
+        "occurrence": 0,
+        "estimated_capacity": 31,
+        "char_height": 1300,
+        "borderFillIDRef": "75"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:4:2:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 2,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "4",
+        "col": "2",
+        "occurrence": 0,
+        "estimated_capacity": 2,
+        "char_height": 1200,
+        "borderFillIDRef": "76"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:4:3:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 4,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "4",
+        "col": "3",
+        "occurrence": 0,
+        "estimated_capacity": 4,
+        "char_height": 1200,
+        "borderFillIDRef": "76"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:5:0:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 92,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "5",
+        "col": "0",
+        "occurrence": 0,
+        "estimated_capacity": 92,
+        "char_height": 2200,
+        "borderFillIDRef": "8"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:6:0:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 46,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "6",
+        "col": "0",
+        "occurrence": 0,
+        "estimated_capacity": 46,
+        "char_height": 2200,
+        "borderFillIDRef": "8"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:7:0:0",
+      "text_len": 12,
+      "text_len_nospace": 11,
+      "max_chars": 13,
+      "text_preview": "사용성 테스트결과보고서",
+      "meta": {
+        "table": 1,
+        "row": "7",
+        "col": "0",
+        "occurrence": 0,
+        "estimated_capacity": 13,
+        "char_height": 3800,
+        "borderFillIDRef": "8"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:8:0:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 10520,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "8",
+        "col": "0",
+        "occurrence": 0,
+        "estimated_capacity": 10520,
+        "char_height": 100,
+        "borderFillIDRef": "8"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:9:0:0",
+      "text_len": 3,
+      "text_len_nospace": 3,
+      "max_chars": 13,
+      "text_preview": "케어클",
+      "meta": {
+        "table": 1,
+        "row": "9",
+        "col": "0",
+        "occurrence": 0,
+        "estimated_capacity": 13,
+        "char_height": 3800,
+        "borderFillIDRef": "8"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:10:0:0",
+      "text_len": 0,
+      "text_len_nospace": 0,
+      "max_chars": 35,
+      "text_preview": "",
+      "meta": {
+        "table": 1,
+        "row": "10",
+        "col": "0",
+        "occurrence": 0,
+        "estimated_capacity": 35,
+        "char_height": 1500,
+        "borderFillIDRef": "8"
+      }
+    },
+    {
+      "kind": "cell",
+      "key": "cell:1:11:0:0",
+      "text_len": 10,
+      "text_len_nospace": 10,
+      "max_chars": 43,
+      "text_preview": "2025.10.28",
+      "meta": {
+        "table": 1,
+        "row": "11",
+        "col": "0",
+        "occurrence": 0,
+        "estimated_capacity": 43,
+        "char_height": 1200,
+        "borderFillIDRef": "8"
+      }
+    }
+  ]
+}

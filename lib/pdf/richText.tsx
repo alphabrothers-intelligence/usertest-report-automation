@@ -10,10 +10,21 @@
 // 텍스트는 `colors.tealDark`(녹색)를 썼는데, 원본 발행 보고서엔 강조 텍스트에 색이 전혀 없다 —
 // 전부 검정 굵게/밑줄만 쓴다. 이 렌더러도 fontWeight/textDecoration만 바꾸고 color는 절대
 // 건드리지 않는다.
-import { Text, View } from "@react-pdf/renderer";
+import { Text, View, Svg, Line, Polygon } from "@react-pdf/renderer";
 import type { Style } from "@react-pdf/types";
 import { parseRichText, type RichTextRun } from "@/lib/report/richText";
-import { styles } from "./theme";
+import { styles, colors } from "./theme";
+
+/** "→"(U+2192)는 서브셋 폰트에 글자가 없어 mojibake가 난다(아래 arrow 블록 주석 참고).
+ * lib/pdf/sectionsQualitative.tsx의 TriangleBullet과 같은 패턴 — 텍스트 대신 SVG로 그린다. */
+function ArrowGlyph() {
+  return (
+    <Svg width={9} height={7} style={{ marginRight: 4, marginTop: 3 }}>
+      <Line x1={0} y1={3.5} x2={6} y2={3.5} stroke={colors.text} strokeWidth={1.2} />
+      <Polygon points="5,0.5 9,3.5 5,6.5" fill={colors.text} />
+    </Svg>
+  );
+}
 
 // "※"(U+203B)는 서브셋 WOFF 폰트에 없어 렌더 시 사라지거나 깨진다(CLAUDE.md에 이미 기록된
 // "폰트에 없는 특수 유니코드가 텍스트를 지운다" 버그의 재발 사례, 2026-08-03 실측). 검증된
@@ -60,16 +71,15 @@ export function RichText({ value, style = {} }: { value: string; style?: Style }
         if (block.kind === "arrow") {
           // 원본 관례는 굵게+기울임이지만, 이탤릭 폰트가 등록돼 있지 않아 fontStyle:"italic"을
           // 쓰면 즉시 렌더 에러가 난다(CLAUDE.md 기록) — 굵게만 쓴다.
-          // **"→"(U+2192)는 이 서브셋 폰트에서 "'"(작은 따옴표)로 보이는 mojibake가 난다**
-          // (2026-08-04 실측 — 최소 재현 스크립트로 직접 렌더링해 확인. pdftotext 추출에서도
-          // "’"로 나와 시각적 버그와 텍스트 추출 버그가 같은 원인임을 확인했다. CLAUDE.md에
-          // "→는 검증된 안전한 문자"라고 잘못 기록돼 있었다 — 실제로는 아니었다, 이 문서를
-          // 갱신할 것). 여러 대체 문자를 직접 렌더링 비교해 "›"(U+203A)만 정상 렌더됨을
-          // 확인했다(">", "->", "•", "·"도 안전하지만 "›"가 원본의 화살표 뉘앙스에 가장 가깝다).
+          // **"→"(U+2192)는 이 서브셋 폰트에 글자가 없어 mojibake가 난다**(2026-08-04 실측).
+          // "›"(U+203A)로 대체했었지만 실제 화살표가 아니라 ">"처럼 보인다는 지적을 받아
+          // (2026-08-04), TriangleBullet과 같은 패턴으로 SVG 화살표(ArrowGlyph)를 텍스트 대신
+          // 쓴다 — 폰트 글자셋과 무관하게 항상 정확한 모양으로 렌더링된다.
           return (
-            <Text key={i} style={[styles.body, { fontWeight: "bold", marginBottom: 2 }, style]}>
-              › {content}
-            </Text>
+            <View key={i} style={[{ flexDirection: "row", marginBottom: 2 }, style]}>
+              <ArrowGlyph />
+              <Text style={[styles.body, { fontWeight: "bold" }]}>{content}</Text>
+            </View>
           );
         }
         if (block.kind === "bullet") {

@@ -222,8 +222,9 @@ function TableOfContents({
   // 짧은 subitems만 렌더링하므로 빈 배열로 충분하다).
   const plan = useMemo(() => buildReportPlan([]), []);
   return (
-    <aside className="h-fit rounded-xl border border-[#d7dce8] bg-white p-4 shadow-sm lg:sticky lg:top-24">
-      <p className="mb-3 text-base font-bold text-[#315c9c]">목차</p>
+    <aside className="h-fit bg-transparent px-2 py-3 lg:sticky lg:top-36">
+      <p className="px-3 text-xl font-bold tracking-[-0.03em] text-[#20242c]">목차</p>
+      <p className="mb-5 mt-1 px-3 text-sm text-[#8a94a3]">보고서 작성 현황</p>
       <nav className="space-y-1">
         {sections.map((section) => {
           const planSection = plan.find((p) => p.numeral === section.numeral);
@@ -234,20 +235,20 @@ function TableOfContents({
           // 분석 대기"라는 의미를 목차·본문에서 일관되게 유지한다(2026-07-26).
           const hasPending = section.blocks.some((block) => block.kind === "text" && block.pending);
           return (
-            <div key={section.numeral} className={`rounded-lg transition ${active ? "bg-[#315c9c]" : ""}`}>
+            <div key={section.numeral} className={`rounded-lg transition ${active ? "bg-[#eaf3ff]" : ""}`}>
               <button
                 type="button"
                 onClick={() => onSelect(section.numeral)}
-                className={`block w-full rounded-lg px-3 pt-2 text-left ${active ? "text-white" : "hover:bg-[#edf3fc]"}`}
+                className={`block w-full rounded-lg px-3 pt-2 text-left ${active ? "text-[#1473e6]" : "hover:bg-[#edf3fc]"}`}
               >
                 <span className="flex items-center gap-1.5">
-                  <span className={`text-base font-bold ${active ? "text-white" : "text-[#1d5e9e]"}`}>
+                  <span className={`text-sm font-bold ${active ? "text-[#1473e6]" : "text-[#4b5565]"}`}>
                     {section.numeral}. {section.title}
                   </span>
                   {hasPending && (
                     <span
                       className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                        active ? "bg-white/20 text-white" : "bg-[#f7e9e2] text-[#a64d32]"
+                        active ? "bg-white text-[#1473e6]" : "bg-[#f7e9e2] text-[#a64d32]"
                       }`}
                     >
                       정성 대기
@@ -266,7 +267,7 @@ function TableOfContents({
                       type="button"
                       onClick={() => onSelectSubitem(section.numeral, headingBlock?.id ?? null)}
                       className={`mt-1 block w-full rounded px-2 py-1 text-left text-sm leading-4 ${
-                        active ? "text-[#dbe6f7] hover:bg-white/10" : "text-zinc-600 hover:bg-[#edf3fc]"
+                        active ? "text-[#397dc9] hover:bg-white/60" : "text-[#7a8493] hover:bg-[#edf3fc]"
                       }`}
                     >
                       · {item}
@@ -326,23 +327,22 @@ function FormatButton({ label, title, onApply, className }: { label: string; tit
 
 /** 우측 액션 패널 — 현재 스크롤스파이로 활성화된 섹션 하나에 대해 동작한다(2026-07-25 신규,
  * 예전엔 같은 동작이 섹션 카드 하단에 인라인 버튼으로 있었다). */
-function ActionPanel({ onCopy, onDownload, selectedBlock, onBlockChange }: { onCopy: () => void; onDownload: () => void; selectedBlock: ReportBlock | null; onBlockChange: (next: ReportBlock) => void }) {
+function ActionPanel({ activeTitle, onCopy, onDownload, selectedBlock, onBlockChange }: { activeTitle: string; onCopy: () => void; onDownload: () => void; selectedBlock: ReportBlock | null; onBlockChange: (next: ReportBlock) => void }) {
   return (
     // "선택 요소 편집"(예: 비교 집단이 많은 그룹 막대그래프)이 길어지면 sticky 패널 자체 높이가
     // 뷰포트를 넘어서는데, sticky는 top 위치에 고정된 뒤로는 페이지 스크롤을 따라가지 않으므로
     // 아래쪽 항목이 화면 밖으로 잘려서 영영 안 보였다(2026-07-30 사용자 실측 신고). 패널
     // 자체에 최대 높이 + 내부 세로 스크롤을 줘서, 페이지와 별개로 패널 안에서 스크롤해
     // 잘린 항목까지 내려갈 수 있게 한다.
-    <aside className="h-fit rounded-xl border border-[#d7dce8] bg-white shadow-sm lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+    <aside className="h-fit rounded-xl border border-[#c9daf2] bg-white shadow-[0_10px_30px_rgba(31,55,88,0.08)] lg:sticky lg:top-36 lg:flex lg:max-h-[calc(100vh-10rem)] lg:flex-col lg:overflow-hidden">
       {/* 헤더를 옅은 배경 밴드로 구분해 목차/본문 밴드와 톤을 맞췄다(2026-07-26, 기능 변경
           없음 — 참고 이미지의 카드형 우측 패널에서 헤더 구획감을 참고했다). */}
-      <p className="rounded-t-xl border-b border-[#d7dce8] bg-[#f7f9fc] px-4 py-2.5 text-sm font-bold text-[#315c9c]">
-        현재 보고 있는 섹션
-      </p>
+      <div className="border-b border-[#e3e8ef] px-5 py-4"><p className="text-xs font-semibold text-[#8a94a3]">보고서 작업</p><p className="mt-1 text-base font-bold text-[#263449]">{activeTitle}</p></div>
+      <div className="lg:min-h-0 lg:overflow-y-auto">
       {/* 본문 텍스트를 클릭해 커서를 두면(또는 일부 선택하면) 여기 버튼으로 서식을 적용한다
           (2026-07-28 — 문단마다 있던 개별 도구모음을 없앤 대신 이 패널로 모았다). */}
-      <div className="space-y-2 border-b border-[#d7dce8] p-4">
-        <p className="text-sm font-bold text-[#315c9c]">텍스트 서식</p>
+      <div className="space-y-2 border-b border-[#e3e8ef] p-5">
+        <p className="text-sm font-bold text-[#263449]">텍스트 서식</p>
         <p className="text-xs text-[#70675e]">본문에서 서식을 넣을 위치를 클릭(또는 드래그로 선택)한 뒤 눌러주세요.</p>
         <div className="flex flex-wrap gap-1.5">
           <FormatButton label="굵게" title="굵게" onApply={() => applyTextFormat("bold")} className="font-bold" />
@@ -351,25 +351,26 @@ function ActionPanel({ onCopy, onDownload, selectedBlock, onBlockChange }: { onC
           <FormatButton label="제언 화살표" title="→ 제언 문단 추가" onApply={insertArrowLine} />
         </div>
       </div>
-      <div className="space-y-2 p-4">
+      <div className="space-y-2 p-5">
       <button
         type="button"
         onClick={onCopy}
-        className="block w-full rounded border border-[#315c9c] px-3 py-2 text-left text-sm font-semibold text-[#315c9c] hover:bg-[#edf3fc]"
+        className="block w-full rounded-lg border border-[#b9cbe3] px-3 py-2.5 text-left text-sm font-semibold text-[#315f9d] hover:bg-[#f2f7ff]"
       >
         내용 전체 복사하기
       </button>
       <button
         type="button"
         onClick={onDownload}
-        className="block w-full rounded border border-[#315c9c] px-3 py-2 text-left text-sm font-semibold text-[#315c9c] hover:bg-[#edf3fc]"
+        className="block w-full rounded-lg bg-[#1473e6] px-3 py-2.5 text-left text-sm font-semibold text-white hover:bg-[#0f65cf]"
       >
         현재 섹션 차트 이미지 저장
       </button>
       </div>
-      <div className="border-t border-[#d7dce8] p-4">
+      <div className="border-t border-[#e3e8ef] p-5">
         <p className="mb-3 text-sm font-bold text-[#315c9c]">선택 요소 편집</p>
         <ReportPropertyPanel block={selectedBlock} onChange={onBlockChange} />
+      </div>
       </div>
     </aside>
   );
@@ -613,7 +614,7 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
   }
 
   return (
-    <div className="mx-auto grid max-w-[1720px] gap-6 px-4 py-7 lg:grid-cols-[270px_minmax(0,1fr)_310px] lg:px-7">
+    <div className="mx-auto grid max-w-[1880px] gap-5 px-4 py-8 lg:grid-cols-[270px_minmax(0,1fr)_320px] lg:px-7">
       <TableOfContents sections={sections} activeSection={activeSection} onSelect={scrollToSection} onSelectSubitem={scrollToSubitem} />
       <article ref={documentContainerRef} className="flex min-w-0 flex-col items-center gap-10">
         {sections.map((section) => (
@@ -627,7 +628,7 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
             data-section-page={section.numeral}
             // scroll-mt-24: 목차 클릭 시 studio 헤더(sticky)에 섹션 상단이 가려지지 않게.
             // max-w-[794px]: A4 폭 비율 — "실제 문서 크기처럼" 요청에 맞춘 페이지 카드 크기.
-            className="w-full max-w-[794px] scroll-mt-24 bg-white px-7 py-9 shadow-[0_5px_24px_rgba(15,23,42,.13)] sm:px-10 sm:py-12"
+            className="w-full max-w-[860px] scroll-mt-36 border border-[#dfe3e9] bg-white px-7 py-9 shadow-[0_12px_34px_rgba(28,39,55,.11)] sm:px-12 sm:py-12"
           >
             <SectionBanner numeral={section.numeral} title={section.title} />
             {section.blocks.map((block) => (
@@ -646,6 +647,7 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
         ))}
       </article>
       <ActionPanel
+        activeTitle={sections.find((section) => section.numeral === activeSection)?.title ?? "보고서 편집"}
         onCopy={() => void copyActiveSection()}
         onDownload={() => void downloadActiveSectionZip()}
         selectedBlock={selectedBlock}

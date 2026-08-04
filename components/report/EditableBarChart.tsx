@@ -49,6 +49,19 @@ function placeBarLabel(barHeight: number, avgPx: number): number {
   return Math.max(barHeight, avgPx) + 12; // 최후 수단 — 막대 안 어디에도 안 겹치는 자리가 없음
 }
 
+function mixHex(base: string, target: string, amount: number): string {
+  const parse = (hex: string) => {
+    const normalized = hex.replace("#", "");
+    return [0, 2, 4].map((index) => Number.parseInt(normalized.slice(index, index + 2), 16));
+  };
+  const [br, bg, bb] = parse(base);
+  const [tr, tg, tb] = parse(target);
+  return `#${[br, bg, bb].map((value, index) => {
+    const targetValue = [tr, tg, tb][index];
+    return Math.round(value + (targetValue - value) * amount).toString(16).padStart(2, "0");
+  }).join("")}`;
+}
+
 export function EditableBarChart({ block }: { block: ReportChartBlock }) {
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -65,6 +78,19 @@ export function EditableBarChart({ block }: { block: ReportChartBlock }) {
   const grid = Array.from({ length: gridCount + 1 }, (_, i) => block.axisMin + (range / gridCount) * i);
   const average = block.items.length ? block.items.reduce((sum, item) => sum + item.value, 0) / block.items.length : 0;
   const averageY = top + plotHeight - ((average - block.axisMin) / range) * plotHeight;
+  // 값의 순위가 곧 강조 순위인 단일 계열 막대그래프에만 적용한다. 범례 자체에 의미가 있는
+  // 그룹/누적/NPS/사분면 차트는 각 컴포넌트의 의미색을 그대로 유지한다.
+  const rankedValues = [...new Set(block.items.map((item) => item.value))].sort((a, b) => b - a);
+  const emphasisColors = [
+    mixHex(block.color, "#064e3b", 0.52),
+    block.color,
+    mixHex(block.color, "#ffffff", 0.38),
+    "#c9cfd3",
+  ];
+  const barColors = new Map(block.items.map((item) => {
+    const rank = rankedValues.indexOf(item.value);
+    return [item.id, emphasisColors[Math.min(rank, emphasisColors.length - 1)]];
+  }));
 
   async function handleDownload() {
     if (!svgRef.current) return;
@@ -99,8 +125,8 @@ export function EditableBarChart({ block }: { block: ReportChartBlock }) {
               그대로 래스터화하므로(exportImage.ts) 범례도 SVG 안에 있어야 내보내기에 포함된다. */}
           {block.items.length > 1 && (
             <g>
-              <rect x={width / 2 - 90} y="34" width="11" height="11" fill={block.color} />
-              <text x={width / 2 - 75} y="43" fontSize="10" fill="#334155">값</text>
+              <rect x={width / 2 - 114} y="34" width="11" height="11" fill={emphasisColors[0]} />
+              <text x={width / 2 - 99} y="43" fontSize="10" fill="#334155">값이 높을수록 진함</text>
               <line x1={width / 2 + 10} x2={width / 2 + 32} y1="39.5" y2="39.5" stroke="#ef7268" strokeWidth="2" />
               <text x={width / 2 + 38} y="43" fontSize="10" fill="#cf4f48">
                 전체 평균 {average.toFixed(2)}{block.unit}
@@ -127,7 +153,7 @@ export function EditableBarChart({ block }: { block: ReportChartBlock }) {
             const y = top + plotHeight - barHeight;
             return (
               <g key={item.id}>
-                <rect x={x} y={y} width={barWidth} height={barHeight} fill={block.color} />
+                <rect x={x} y={y} width={barWidth} height={barHeight} fill={barColors.get(item.id) ?? block.color} />
                 <text x={x + barWidth / 2} y={top + plotHeight + 18} textAnchor="middle" fontSize="9" fill="#334155">
                   {item.label.split("\n").map((line, lineIndex) => (
                     <tspan key={line} x={x + barWidth / 2} dy={lineIndex === 0 ? 0 : 10}>{line}</tspan>

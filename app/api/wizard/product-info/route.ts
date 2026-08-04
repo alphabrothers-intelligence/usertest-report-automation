@@ -12,7 +12,10 @@ const ProductInfoSchema = z.object(
     z.ZodOptional<z.ZodString>
   >,
 );
-const BodySchema = z.object({ fileUrl: z.string().url() }).and(ProductInfoSchema);
+const BodySchema = z.object({ fileUrl: z.string().url() }).and(ProductInfoSchema).refine(
+  (value) => Boolean(value.companyName?.trim() && value.serviceName?.trim()),
+  { message: "기업명과 서비스/제품명은 필수입니다." },
+);
 
 export async function POST(request: Request) {
   const body = BodySchema.safeParse(await request.json());

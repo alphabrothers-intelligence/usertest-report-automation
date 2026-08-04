@@ -69,7 +69,11 @@ const BLANK_LINE_HTML = `<p style="margin:0">&nbsp;</p>`;
 /** 개선 아이디어(2단) 렌더링 — 원본 45~49쪽 형식: [대분류] → <소분류> → 원문 인용 다수.
  * 카테고리 label이 "대분류소분류"로 인코딩돼 있으므로 대분류로 묶어 계층을 복원한다.
  * 인사이트(→ 요약)는 원본에 없으므로 붙이지 않고, 인용은 3개 제한 없이 전부 보여준다. */
-function improvementCategoryHtml(categories: CategoryRow[]): string[] {
+function quoteHtml(quote: string, questionKey: string): string {
+  return `<div data-report-quote style="margin:0 0 3pt"><p style="display:inline;margin:0">"${richTextToInlineHtml(quote)}"</p> <button type="button" data-copy-ignore contenteditable="false" data-quote-source="${escapeHtml(questionKey)}" data-quote-text="${escapeHtml(encodeURIComponent(quote))}" style="border:0;background:transparent;color:#315c9c;padding:1pt 3pt;font-size:8.5pt;font-weight:700;cursor:pointer">원문 보기</button></div>`;
+}
+
+function improvementCategoryHtml(categories: CategoryRow[], questionKey: string): string[] {
   const byMajor = new Map<string, CategoryRow[]>();
   for (const cat of categories) {
     const { major } = decodeImprovementLabel(cat.label);
@@ -82,18 +86,18 @@ function improvementCategoryHtml(categories: CategoryRow[]): string[] {
     for (const sub of subs) {
       const { sub: subLabel } = decodeImprovementLabel(sub.label);
       out.push(`<p style="font-weight:700;margin:5pt 0 2pt">&lt;${richTextToInlineHtml(subLabel)}&gt;</p>`);
-      for (const quote of sub.quotes) out.push(`<p style="margin:0 0 2pt">"${richTextToInlineHtml(quote)}"</p>`);
+      for (const quote of sub.quotes) out.push(quoteHtml(quote, questionKey));
       out.push(BLANK_LINE_HTML);
     }
   }
   return out;
 }
 
-function categoryHtml(cat: CategoryRow): string[] {
+function categoryHtml(cat: CategoryRow, questionKey: string): string[] {
   // 한글 붙여넣기에서 CSS font-weight만으로는 굵게가 유지되지 않는 사례가 있어,
   // 인라인 스타일과 실제 의미 태그를 반드시 함께 낸다.
   const out = [`<p style="font-weight:700;margin:0 0 2pt"><strong>[${richTextToInlineHtml(cat.label)}]</strong></p>`];
-  for (const quote of cat.quotes.slice(0, 3)) out.push(`<p style="margin:0 0 2pt">"${richTextToInlineHtml(quote)}"</p>`);
+  for (const quote of cat.quotes.slice(0, 3)) out.push(quoteHtml(quote, questionKey));
   out.push(`<p style="font-weight:700;font-style:italic;margin:0 0 2pt"><strong><em>→ ${richTextToInlineHtml(cat.insight_final ?? cat.insight_draft)}</em></strong></p>`);
   out.push(BLANK_LINE_HTML);
   return out;
@@ -228,7 +232,7 @@ function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions
       bannerIndex += 1;
       const pct = total ? ((counts[pol] / total) * 100).toFixed(1) : "0.0";
       restParts.push(polarityBannerHtml(pol, bannerIndex, pct));
-      for (const cat of cats) restParts.push(...categoryHtml(cat));
+      for (const cat of cats) restParts.push(...categoryHtml(cat, q.question_key));
     }
     blocks.push(textBlock({ id: `${idPrefix}-q${qi}-detail`, label: q.label, html: restParts.join(""), styled: true }));
   }
@@ -265,7 +269,7 @@ function qualitativeBlocks(idPrefix: string, questions: QuestionWithApprovedCate
       // 개선 아이디어(2단): label이 "대분류소분류"로 인코딩돼 있으면 원본 45~49쪽처럼
       // [대분류] → <소분류> → 원문 인용(인사이트 없음) 계층으로 렌더링한다.
       const parts = [`<p style="font-weight:700;font-size:12pt;margin:14pt 0 4pt">${escapeHtml(q.label)}</p>`];
-      parts.push(...improvementCategoryHtml(q.categories));
+      parts.push(...improvementCategoryHtml(q.categories, q.question_key));
       blocks.push(textBlock({ id: `${idPrefix}-q${qi}`, label: q.label, html: parts.join(""), styled: true }));
       continue;
     }
@@ -301,7 +305,7 @@ function qualitativeBlocks(idPrefix: string, questions: QuestionWithApprovedCate
       bannerIndex += 1;
       const pct = total ? ((counts[pol] / total) * 100).toFixed(1) : "0.0";
       restParts.push(polarityBannerHtml(pol, bannerIndex, pct));
-      for (const cat of cats) restParts.push(...categoryHtml(cat));
+      for (const cat of cats) restParts.push(...categoryHtml(cat, q.question_key));
     }
     blocks.push(textBlock({ id: `${idPrefix}-q${qi}-detail`, label: q.label, html: restParts.join(""), styled: true }));
   }
@@ -325,9 +329,9 @@ function qualitativeBlock(id: string, label: string, questions: QuestionWithAppr
  * 문구로 남긴다. 표 구조 자체는 rich-static으로 두어 병합·테두리·배경색을 보존하고 웹에서
  * 각 셀을 직접 편집할 수 있다.
  */
-function valueOpinionColumnHtml(title: string, background: string, categories: CategoryRow[]): string {
+function valueOpinionColumnHtml(title: string, background: string, categories: CategoryRow[], questionKey: string): string {
   const body = categories.length
-    ? categories.map((category) => categoryHtml(category).join("")).join("")
+    ? categories.map((category) => categoryHtml(category, questionKey).join("")).join("")
     : `<p style="margin:0;color:#6b7280">분석된 ${title} 의견이 없습니다.</p>`;
   return `<td style="width:50%;vertical-align:top;border:0.75pt solid #9db6e4;padding:10pt;background-color:#ffffff">
     <p style="margin:0 0 8pt;padding:5pt 8pt;background-color:${background};font-weight:700;text-align:center">${title} 의견</p>
@@ -423,7 +427,7 @@ function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questio
       const negative = question.categories.filter((category) => category.polarity === "negative");
       blocks.push(richStaticBlock({
         id: `${idPrefix}-opinion-box-${index + 1}`,
-        html: `<table style="width:100%;border-collapse:collapse;margin:0 0 10pt"><tbody><tr>${valueOpinionColumnHtml("긍정", "#dce7fa", positive)}${valueOpinionColumnHtml("부정", "#fde4d0", negative)}</tr></tbody></table>`,
+        html: `<table style="width:100%;border-collapse:collapse;margin:0 0 10pt"><tbody><tr>${valueOpinionColumnHtml("긍정", "#dce7fa", positive, question.question_key)}${valueOpinionColumnHtml("부정", "#fde4d0", negative, question.question_key)}</tr></tbody></table>`,
       }));
       blocks.push(richStaticBlock({
         id: `${idPrefix}-summary-${index + 1}`,

@@ -354,6 +354,9 @@ function QualitativeAnalysisCard({
         아래 인사이트는 AI 초안입니다 — 담당자 검수 전이며, 최종 보고서에는 검수 후에만 반영됩니다.
       </p>
       <QualitativeResultsAccordion questions={output.questions} />
+      <button type="button" onClick={onGenerateReport} className="mt-4 rounded-full bg-[#315c9c] px-5 py-2 text-sm font-semibold text-white hover:bg-[#294c81]">
+        분석 결과를 바탕으로 보고서 만들기
+      </button>
     </div>
   );
 }
@@ -745,14 +748,17 @@ export default function Chat() {
 
   if (messages.length === 0) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#f7f6f2] px-4">
-        <div className="flex w-full max-w-4xl flex-col items-center gap-6">
-          <div className="text-center">
-            <h1 className="text-3xl font-semibold tracking-[-0.03em] text-[#2f2a26]">사용성테스트 결과보고서</h1>
-            <p className="mt-2 text-sm text-[#81786e]">raw data를 올리면 보고서에 필요한 수치와 응답 내용을 차례로 정리합니다.</p>
+      <div className="flex min-h-screen bg-[#f7f6f2]">
+        <RecentReportsSidebar />
+        <div className="flex min-w-0 flex-1 flex-col items-center justify-center px-4">
+          <div className="flex w-full max-w-4xl flex-col items-center gap-6">
+            <div className="text-center">
+              <h1 className="text-3xl font-semibold tracking-[-0.03em] text-[#2f2a26]">사용성테스트 결과보고서</h1>
+              <p className="mt-2 text-sm text-[#81786e]">raw data를 올리면 보고서에 필요한 수치와 응답 내용을 차례로 정리합니다.</p>
+            </div>
+            {composerForm}
+            <p className="text-sm text-[#81786e]">xlsx·csv 파일을 첨부하거나, 만들고 싶은 보고서를 말씀해주세요.</p>
           </div>
-          {composerForm}
-          <p className="text-sm text-[#81786e]">xlsx·csv 파일을 첨부하거나, 만들고 싶은 보고서를 말씀해주세요.</p>
         </div>
       </div>
     );

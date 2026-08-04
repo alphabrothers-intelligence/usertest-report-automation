@@ -89,6 +89,12 @@ export function UploadStep({
 
   async function saveProductInfo(fields: ProductInfo) {
     if (!rawDataFile) return;
+    if (!fields.companyName?.trim() || !fields.serviceName?.trim()) {
+      setExtractError(`기업명과 ${productType === "physical" ? "제품명" : "서비스명"}을 입력해주세요.`);
+      setLastExtracted(fields);
+      setExtracted(null);
+      return;
+    }
     setSavingInfo(true);
     await fetch("/api/wizard/product-info", {
       method: "POST",
@@ -101,12 +107,12 @@ export function UploadStep({
 
   return (
     <div className="w-full max-w-xl">
-      <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">raw data와 기업 정보를 첨부해주세요</h2>
-      <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">
+      <h2 className="text-xl font-bold text-[#202c40]">raw data와 기업 정보를 첨부해주세요</h2>
+      <p className="mt-1.5 text-sm text-[#748196]">
         raw data(xlsx/csv)는 필수, 기업소개 파일(PDF/워드/텍스트)은 선택입니다.
       </p>
 
-      <div className="mt-4 flex items-center gap-3 rounded-lg border border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      <div className="mt-4 flex items-center gap-3 rounded-lg border border-[#dde5ef] bg-[#f8fafc] px-4 py-3">
         <FileUploadButton
           onUploaded={handleUploaded}
           onUploadingChange={setIsUploading}
@@ -156,6 +162,7 @@ export function UploadStep({
               onSkip={onProductInfoDone}
               onSubmit={saveProductInfo}
               initial={lastExtracted ?? undefined}
+              productType={productType}
             />
           )}
           {savingInfo && <p className="mt-2 text-sm text-zinc-500">저장 중...</p>}
@@ -173,7 +180,7 @@ export function UploadStep({
         type="button"
         disabled={!validation?.valid || !productInfoDone}
         onClick={onNext}
-        className="mt-6 rounded-full bg-zinc-900 px-6 py-2.5 text-sm font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+        className="mt-6 rounded-md bg-[#356df3] px-6 py-2.5 text-sm font-semibold text-white shadow-[0_2px_6px_rgba(53,109,243,0.25)] hover:bg-[#2d60da] disabled:cursor-not-allowed disabled:bg-[#c8d1de] disabled:shadow-none"
       >
         다음
       </button>

@@ -95,6 +95,8 @@ export function ReportStudio({
   const [workspaceSeed, setWorkspaceSeed] = useState<ReportWorkspaceSeed | null>(null);
   const [reportName, setReportName] = useState("");
   const [nameSaving, setNameSaving] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const inlinePdfUrl = useMemo(() => withInlinePdf(pdfUrl), [pdfUrl]);
 
   useEffect(() => {
@@ -191,22 +193,31 @@ export function ReportStudio({
   /** 실제 보고서(sourceFileUrl)는 서버 DB에 저장한다(2026-08-04 신규 — 다른 기기·브라우저에서도
    * 이어서 편집할 수 있게). 데모는 저장할 DB report 행이 없어 그대로 localStorage를 쓴다. */
   async function saveDraft() {
-    if (sourceFileUrl) {
-      const res = await fetch("/api/report-workspace/draft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileUrl: sourceFileUrl, sections }),
-      });
-      const payload = await res.json() as { ok: boolean; savedAt?: string | null };
-      setSavedAt(formatSavedAt(payload.savedAt ?? null) ?? new Date().toLocaleString("ko-KR"));
-      return;
+    setDraftSaving(true);
+    setSaveError(null);
+    try {
+      if (sourceFileUrl) {
+        const res = await fetch("/api/report-workspace/draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileUrl: sourceFileUrl, sections }),
+        });
+        const payload = await res.json() as { ok: boolean; savedAt?: string | null; error?: string };
+        if (!res.ok || !payload.ok) throw new Error(payload.error || "초안을 저장하지 못했습니다.");
+        setSavedAt(formatSavedAt(payload.savedAt ?? null) ?? new Date().toLocaleString("ko-KR"));
+        return;
+      }
+      const savedAtValue = new Date().toLocaleString("ko-KR");
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ sourceFileUrl: demo ? "__rivalabs-demo__" : null, sections, savedAt: savedAtValue } satisfies SavedDraft),
+      );
+      setSavedAt(savedAtValue);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "초안을 저장하지 못했습니다.");
+    } finally {
+      setDraftSaving(false);
     }
-    const savedAtValue = new Date().toLocaleString("ko-KR");
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ sourceFileUrl: demo ? "__rivalabs-demo__" : null, sections, savedAt: savedAtValue } satisfies SavedDraft),
-    );
-    setSavedAt(savedAtValue);
   }
 
   async function resetWorkspaceDraft() {
@@ -256,39 +267,44 @@ export function ReportStudio({
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f6f2] text-[#302b27]">
-      <header className="sticky top-0 z-20 border-b border-[#dfdbd2] bg-[#fffdf9] px-4 py-3 shadow-[0_2px_16px_rgba(69,58,45,0.06)] sm:px-6">
-        <div className="mx-auto flex max-w-[1900px] items-center justify-between gap-3">
+    <main className="min-h-screen bg-[#f4f6f9] text-[#252a34]">
+      <header className="sticky top-0 z-20 bg-white shadow-[0_1px_0_rgba(35,45,65,0.1)]">
+        <div className="mx-auto flex min-h-[68px] max-w-[2000px] items-center justify-between gap-4 px-5 sm:px-8">
           <div>
-            <p className="text-xs font-bold tracking-[0.16em] text-[#d97757]">ALPHABROTHERS REPORT STUDIO</p>
-            <h1 className="text-base font-bold sm:text-lg">사용성 테스트 결과보고서 편집 뷰어</h1>
+            <h1 className="text-[17px] font-bold tracking-[-0.02em] text-[#20242c]">Usability Report Studio</h1>
             {sourceFileUrl && (
-              <div className="mt-1.5 flex items-center gap-1.5">
-                <span aria-hidden className="text-sm text-[#9a9186]">✎</span>
+              <div className="mt-0.5 flex items-center gap-1.5">
                 <input
                   type="text"
                   value={reportName}
                   onChange={(event) => setReportName(event.target.value)}
                   onBlur={saveReportName}
                   placeholder="보고서 제목을 입력하세요 (좌측 목록에 표시됩니다)"
-                  className="w-72 rounded-md border border-[#d8d1c6] bg-white px-2 py-1 text-sm font-medium text-[#302b27] outline-none focus:border-[#315c9c]"
+                  className="w-72 border-0 bg-transparent p-0 text-xs text-[#7d8796] outline-none placeholder:text-[#a4adba] focus:text-[#344054]"
                 />
               </div>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {nameSaving && <span className="hidden text-xs text-[#9a9186] md:block">이름 저장 중...</span>}
-            <div className="hidden rounded-lg border border-[#d8d1c6] bg-[#f5f1e9] p-0.5 md:flex">
-              <button type="button" onClick={() => setWorkspaceMode("web")} className={`rounded-md px-2.5 py-1.5 text-xs font-semibold ${workspaceMode === "web" ? "bg-white text-[#315c9c] shadow-sm" : "text-[#81786e]"}`}>웹 문서·편집</button>
-              {pdfUrl && <button type="button" onClick={() => setWorkspaceMode("pdf")} className={`rounded-md px-2.5 py-1.5 text-xs font-semibold ${workspaceMode === "pdf" ? "bg-white text-[#315c9c] shadow-sm" : "text-[#81786e]"}`}>발행 PDF</button>}
+            {nameSaving && <span className="hidden text-xs text-[#8b95a5] md:block">이름 저장 중...</span>}
+            <div className="hidden rounded-lg bg-[#f1f4f8] p-1 md:flex">
+              <button type="button" onClick={() => setWorkspaceMode("web")} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${workspaceMode === "web" ? "bg-white text-[#1473e6] shadow-sm" : "text-[#667085]"}`}>보고서 편집</button>
+              {pdfUrl && <button type="button" onClick={() => setWorkspaceMode("pdf")} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${workspaceMode === "pdf" ? "bg-white text-[#1473e6] shadow-sm" : "text-[#667085]"}`}>PDF 미리보기</button>}
             </div>
-            <span className="hidden text-xs text-[#81786e] md:block">{savedAt ? `초안 저장됨 · ${savedAt}` : "수정 후 저장하세요"}</span>
-            <button type="button" onClick={undo} disabled={undoStack.length === 0} className="rounded-lg border border-[#d8d1c6] px-3 py-2 text-sm font-medium enabled:hover:bg-[#f5f1e9] disabled:cursor-not-allowed disabled:opacity-40">되돌리기</button>
-            <button type="button" onClick={redo} disabled={redoStack.length === 0} className="rounded-lg border border-[#d8d1c6] px-3 py-2 text-sm font-medium enabled:hover:bg-[#f5f1e9] disabled:cursor-not-allowed disabled:opacity-40">다시 실행</button>
-            <button type="button" onClick={saveDraft} className="rounded-lg bg-[#d97757] px-3 py-2 text-sm font-semibold text-white hover:bg-[#c96648]">초안 저장</button>
-            <button type="button" onClick={resetWorkspaceDraft} className="rounded-lg border border-[#d8d1c6] px-3 py-2 text-sm font-medium hover:bg-[#f5f1e9]">초안 초기화</button>
-            {pdfUrl && <a href={pdfUrl} className="rounded-lg border border-[#d8d1c6] px-3 py-2 text-sm font-semibold hover:bg-[#f5f1e9]">PDF 다운로드</a>}
-            <Link href="/" className="rounded-lg border border-[#d8d1c6] px-3 py-2 text-sm font-medium hover:bg-[#f5f1e9]">채팅</Link>
+            {pdfUrl && <a href={pdfUrl} className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-semibold text-[#475467] hover:bg-[#f7f9fc]">PDF 다운로드</a>}
+            <Link href="/" className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-medium text-[#475467] hover:bg-[#f7f9fc]">나가기</Link>
+          </div>
+        </div>
+        <div className="border-t border-[#e4e8ef] bg-[#f8f9fc]">
+          <div className="mx-auto flex min-h-[54px] max-w-[2000px] items-center gap-2 px-5 sm:px-8">
+            <button type="button" title="되돌리기" onClick={undo} disabled={undoStack.length === 0} className="flex size-9 items-center justify-center rounded-md text-lg text-[#526174] hover:bg-white disabled:opacity-30">↶</button>
+            <button type="button" title="다시 실행" onClick={redo} disabled={redoStack.length === 0} className="flex size-9 items-center justify-center rounded-md text-lg text-[#526174] hover:bg-white disabled:opacity-30">↷</button>
+            <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
+            <span className={`hidden text-xs md:block ${saveError ? "text-[#b54747]" : "text-[#8a94a3]"}`}>{saveError ?? (savedAt ? `저장됨 · ${savedAt}` : "수정 내용을 저장할 수 있습니다")}</span>
+            <div className="ml-auto flex items-center gap-2">
+              <button type="button" onClick={resetWorkspaceDraft} className="rounded-lg px-3 py-2 text-xs font-semibold text-[#667085] hover:bg-white">초기화</button>
+              <button type="button" onClick={() => void saveDraft()} disabled={draftSaving} className="rounded-lg bg-[#1473e6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#0f65cf] disabled:opacity-60">{draftSaving ? "저장 중..." : "변경사항 저장"}</button>
+            </div>
           </div>
         </div>
       </header>

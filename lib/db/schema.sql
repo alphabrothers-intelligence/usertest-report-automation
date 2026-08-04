@@ -76,6 +76,7 @@ create table if not exists clauses (
   created_at timestamptz not null default now()
 );
 alter table clauses add column if not exists raw_clause text;
+alter table clauses add column if not exists needs_review boolean not null default false;
 
 create index if not exists clauses_question_id_idx on clauses (question_id);
 

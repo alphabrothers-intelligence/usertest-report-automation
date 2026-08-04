@@ -55,6 +55,8 @@ export interface FlaggedClause {
   polarity: Polarity;
   rationale: string;
   confidence: ConfidenceLevel;
+  /** 원문 확장이 안전하지 않아 사람 또는 AI 보완안 검토가 필요한지 여부. */
+  needs_review: boolean;
 }
 
 export interface StandardQuestionResult {
@@ -194,6 +196,7 @@ export async function runQualitativeStage1(
       polarity: c.polarity,
       rationale: c.rationale,
       confidence: scoreConfidence(c),
+      needs_review: c.needs_review,
     }))),
   };
 }

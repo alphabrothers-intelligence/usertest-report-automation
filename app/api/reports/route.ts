@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getRecentReports } from "@/lib/db/reports";
+import { z } from "zod";
+import { deleteReport, getRecentReports } from "@/lib/db/reports";
 
 export const runtime = "nodejs";
 
@@ -22,4 +23,11 @@ export async function GET() {
       workspaceDraftSavedAt: r.workspace_draft_saved_at,
     })),
   });
+}
+
+export async function DELETE(request: Request) {
+  const parsed = z.object({ id: z.string().min(1) }).safeParse(await request.json());
+  if (!parsed.success) return NextResponse.json({ ok: false, error: "삭제할 보고서를 찾지 못했습니다." }, { status: 400 });
+  const deleted = await deleteReport(parsed.data.id);
+  return NextResponse.json({ ok: deleted }, { status: deleted ? 200 : 404 });
 }

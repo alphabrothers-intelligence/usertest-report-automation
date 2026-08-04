@@ -1,0 +1,1094 @@
+================================================================
+  HWPX 심층 분석: [알파브라더스] 리바랩스_사용성테스트_결과보고서_0904_상연.hwpx
+================================================================
+
+▶ 폰트 정의
+  hangul/0: 나눔고딕
+  hangul/1: 맑은 고딕
+  hangul/2: 함초롬돋움
+  hangul/3: 함초롬바탕
+  hangul/4: 휴먼고딕
+  hangul/5: 휴먼명조
+  hangul/6: 나눔스퀘어OTF_ac
+  hangul/7: -윤고딕320
+  hangul/8: -윤고딕330
+  hangul/9: -윤고딕340
+
+▶ borderFill (테두리/배경)
+  [1] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [2] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [3] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [4] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [5] left=NONE, right=NONE, top=NONE, bottom=NONE
+       배경=#C9E3EE
+  [6] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [7] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [8] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [9] left=NONE, right=NONE, top=DASH 0.12 mm, bottom=NONE
+  [10] left=NONE, right=NONE, top=NONE, bottom=SOLID 1.0 mm
+  [11] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.1 mm
+       배경=#DFE6F7
+  [12] left=SOLID 0.12 mm, right=SOLID 0.1 mm, top=SOLID 0.1 mm, bottom=SOLID 0.1 mm
+       배경=#DFE6F7
+  [13] left=SOLID 0.1 mm, right=SOLID 0.1 mm, top=SOLID 0.1 mm, bottom=SOLID 0.1 mm
+       배경=#DFE6F7
+  [14] left=SOLID 0.12 mm, right=SOLID 0.1 mm, top=SOLID 0.1 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [15] left=SOLID 0.1 mm, right=SOLID 0.1 mm, top=SOLID 0.1 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [16] left=SOLID 0.1 mm, right=SOLID 0.12 mm, top=SOLID 0.1 mm, bottom=SOLID 0.1 mm
+  [17] left=SOLID 0.1 mm, right=SOLID 0.12 mm, top=SOLID 0.1 mm, bottom=SOLID 0.12 mm
+  [18] left=NONE, right=NONE, top=NONE, bottom=NONE
+       배경=#DFEAF5
+  [19] left=NONE, right=NONE, top=NONE, bottom=NONE
+       배경=#5C73AA
+  [20] left=SOLID 0.1 mm, right=SOLID 0.1 mm, top=SOLID 0.1 mm, bottom=SOLID 0.1 mm
+  [21] left=SOLID 0.1 mm, right=SOLID 0.1 mm, top=SOLID 0.1 mm, bottom=SOLID 0.12 mm
+  [22] left=NONE, right=NONE, top=NONE, bottom=NONE
+       배경=#FFB9B9
+  [23] left=NONE, right=NONE, top=NONE, bottom=NONE
+       배경=#DFE6F7
+  [24] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+  [25] left=NONE, right=NONE, top=SOLID 0.3 mm, bottom=SOLID 0.12 mm
+       배경=#C0CDEF
+  [26] left=NONE, right=DASH 0.12 mm, top=SOLID 0.1 mm, bottom=DASH 0.12 mm
+       배경=#C0CDEF
+  [27] left=DASH 0.12 mm, right=NONE, top=SOLID 0.1 mm, bottom=DASH 0.12 mm
+       배경=#C0CDEF
+  [28] left=NONE, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#DFE6F7
+  [29] left=DASH 0.12 mm, right=NONE, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+  [30] left=NONE, right=NONE, top=DASH 0.12 mm, bottom=SOLID 0.1 mm
+       배경=#DFE6F7
+  [31] left=NONE, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [32] left=SOLID 0.12 mm, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [33] left=SOLID 0.12 mm, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#C0CDEF
+  [34] left=NONE, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [35] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [36] left=NONE, right=NONE, top=SOLID 0.3 mm, bottom=SOLID 0.3 mm
+       배경=#C0CDEF
+  [37] left=NONE, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [38] left=NONE, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#FFE7D8
+  [39] left=NONE, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#F0F0F0
+  [40] left=NONE, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [41] left=SOLID 0.12 mm, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [42] left=NONE, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#D2DAF3
+  [43] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#FEE6D8
+  [44] left=NONE, right=NONE, top=SOLID 0.3 mm, bottom=SOLID 0.3 mm
+       배경=#DFE6F7
+  [45] left=NONE, right=NONE, top=SOLID 0.3 mm, bottom=SOLID 0.3 mm
+  [46] left=NONE, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#C0CDEF
+  [47] left=SOLID 0.12 mm, right=DOUBLE_SLIM 0.7 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#C0CDEF
+  [48] left=DOUBLE_SLIM 0.7 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [49] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [50] left=SOLID 0.12 mm, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [51] left=SOLID 0.12 mm, right=DOUBLE_SLIM 0.7 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [52] left=DOUBLE_SLIM 0.7 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [53] left=NONE, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [54] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [55] left=DASH 0.15 mm, right=NONE, top=SOLID 0.3 mm, bottom=DASH 0.12 mm
+  [56] left=NONE, right=DASH 0.15 mm, top=SOLID 0.3 mm, bottom=DASH 0.12 mm
+       배경=#DFE6F7
+  [57] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.3 mm, bottom=SOLID 0.12 mm
+  [58] left=NONE, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.3 mm
+       배경=#C0CDEF
+  [59] left=NONE, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#C0CDEF
+  [60] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [61] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [62] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [63] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [64] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [65] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [66] left=NONE, right=NONE, top=NONE, bottom=NONE
+  [67] left=SOLID 0.1 mm, right=SOLID 0.12 mm, top=SOLID 0.1 mm, bottom=SOLID 0.1 mm
+  [68] left=SOLID 0.2 mm, right=SOLID 0.2 mm, top=SOLID 0.2 mm, bottom=SOLID 0.2 mm
+       배경=#DFE6F7
+  [69] left=SOLID 0.2 mm, right=SOLID 0.2 mm, top=SOLID 0.2 mm, bottom=SOLID 0.2 mm
+  [70] left=NONE, right=NONE, top=SOLID 0.12 mm, bottom=DASH 0.15 mm
+  [71] left=NONE, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+       배경=#C0CDEF
+  [72] left=NONE, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.12 mm
+       배경=#FFFFFF
+  [73] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#F2F2F2
+  [74] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#DFE6F7
+  [75] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#FFE7D8
+  [76] left=NONE, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#FFFFFF
+  [77] left=NONE, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#D9D9D9
+  [78] left=NONE, right=NONE, top=SOLID 0.12 mm, bottom=DASH 0.15 mm
+       배경=#FFFFFF
+  [79] left=NONE, right=DASH 0.12 mm, top=NONE, bottom=DASH 0.12 mm
+       배경=#D9D9D9
+  [80] left=DASH 0.12 mm, right=NONE, top=NONE, bottom=DASH 0.12 mm
+       배경=#D9D9D9
+  [81] left=NONE, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#FFB689
+  [82] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=SOLID 0.12 mm
+  [83] left=DASH 0.12 mm, right=NONE, top=DASH 0.12 mm, bottom=SOLID 0.12 mm
+  [84] left=NONE, right=DASH 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#FFE7D8
+  [85] left=DASH 0.12 mm, right=DASH 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [86] left=DASH 0.12 mm, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [87] left=NONE, right=DASH 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [88] left=NONE, right=DASH 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [89] left=NONE, right=DASH 0.12 mm, top=SOLID 0.12 mm, bottom=NONE
+       배경=#A0B4E6
+  [90] left=DASH 0.12 mm, right=DASH 0.12 mm, top=SOLID 0.12 mm, bottom=NONE
+  [91] left=DASH 0.12 mm, right=NONE, top=SOLID 0.12 mm, bottom=NONE
+  [92] left=NONE, right=DASH 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [93] left=DASH 0.12 mm, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [94] left=DASH 0.12 mm, right=DASH 0.12 mm, top=SOLID 0.12 mm, bottom=DASH 0.12 mm
+       배경=#DFE6F7
+  [95] left=DASH 0.12 mm, right=DASH 0.12 mm, top=SOLID 0.12 mm, bottom=DASH 0.12 mm
+  [96] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+  [97] left=DASH 0.12 mm, right=DASH 0.12 mm, top=SOLID 0.12 mm, bottom=DASH 0.12 mm
+       배경=#F2F2F2
+  [98] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#F2F2F2
+  [99] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+  [100] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#FFE7D8
+  [101] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#F2F2F2
+  [102] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#DFE6F7
+  [103] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#FFFFFF
+  [104] left=NONE, right=NONE, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+       배경=#C0CDEF
+  [105] left=NONE, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+       배경=#F2F2F2
+  [106] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.15 mm
+       배경=#F2F2F2
+  [107] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#F0F0F0
+  [108] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+  [109] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+       배경=#DEE6F7
+  [110] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+       배경=#FEE6D8
+  [111] left=NONE, right=SOLID 0.12 mm, top=SOLID 0.3 mm, bottom=DOUBLE_SLIM 0.7 mm
+       배경=#DFE6F7
+  [112] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.3 mm, bottom=DOUBLE_SLIM 0.7 mm
+       배경=#DFE6F7
+  [113] left=SOLID 0.12 mm, right=NONE, top=SOLID 0.3 mm, bottom=DOUBLE_SLIM 0.7 mm
+       배경=#DFE6F7
+  [114] left=NONE, right=SOLID 0.12 mm, top=DOUBLE_SLIM 0.7 mm, bottom=SOLID 0.12 mm
+       배경=#F2F2F2
+  [115] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=DOUBLE_SLIM 0.7 mm, bottom=SOLID 0.12 mm
+       배경=#F2F2F2
+  [116] left=SOLID 0.12 mm, right=NONE, top=DOUBLE_SLIM 0.7 mm, bottom=SOLID 0.12 mm
+       배경=#F2F2F2
+  [117] left=NONE, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.3 mm
+  [118] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.3 mm
+  [119] left=SOLID 0.12 mm, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.3 mm
+  [120] left=NONE, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#C0CDEF
+  [121] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [122] left=SOLID 0.12 mm, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [123] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#FFFFFF
+  [124] left=SOLID 0.12 mm, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#FFFFFF
+  [125] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+       배경=#F2F2F2
+  [126] left=DASH 0.12 mm, right=DASH 0.12 mm, top=SOLID 0.1 mm, bottom=DASH 0.12 mm
+  [127] left=NONE, right=NONE, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+  [128] left=DASH 0.12 mm, right=NONE, top=SOLID 0.1 mm, bottom=DASH 0.12 mm
+  [129] left=NONE, right=DASH 0.12 mm, top=SOLID 0.1 mm, bottom=DASH 0.12 mm
+       배경=#DFE6F7
+  [130] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+  [131] left=DASH 0.12 mm, right=NONE, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+  [132] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#FEE6D8
+  [133] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#DEE6F7
+  [134] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#DEE6F7
+  [135] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+       배경=#D9D9D9
+  [136] left=NONE, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [137] left=SOLID 0.12 mm, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [138] left=NONE, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DEE5F6
+  [139] left=NONE, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#BFCCEE
+  [140] left=SOLID 0.12 mm, right=NONE, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#FEE6D8
+  [141] left=NONE, right=NONE, top=DASH 0.12 mm, bottom=SOLID 0.3 mm
+  [142] left=SOLID 0.15 mm, right=SOLID 0.15 mm, top=SOLID 0.15 mm, bottom=SOLID 0.15 mm
+  [143] left=DASH 0.15 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [144] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [145] left=SOLID 0.12 mm, right=DASH 0.15 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [146] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [147] left=SOLID 0.12 mm, right=DASH 0.15 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [148] left=DASH 0.15 mm, right=DASH 0.15 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+  [149] left=DASH 0.15 mm, right=DASH 0.15 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#DFE6F7
+  [150] left=DASH 0.15 mm, right=NONE, top=DASH 0.12 mm, bottom=DASH 0.12 mm
+  [151] left=NONE, right=DASH 0.15 mm, top=DASH 0.12 mm, bottom=SOLID 0.3 mm
+       배경=#DFE6F7
+  [152] left=DASH 0.15 mm, right=NONE, top=DASH 0.12 mm, bottom=SOLID 0.3 mm
+  [153] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.12 mm
+       배경=#DFE6F7
+  [154] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.15 mm
+       배경=#DFE6F7
+  [155] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.12 mm, bottom=DASH 0.15 mm
+  [156] left=NONE, right=NONE, top=DASH 0.15 mm, bottom=NONE
+  [157] left=NONE, right=NONE, top=NONE, bottom=DASH 0.15 mm
+  [158] left=SOLID 0.1 mm, right=SOLID 0.1 mm, top=SOLID 0.1 mm, bottom=SOLID 0.1 mm
+       배경=#FAEDD2
+  [159] left=SOLID 0.1 mm, right=SOLID 0.1 mm, top=SOLID 0.1 mm, bottom=SOLID 0.1 mm
+       배경=#FFFFFF
+  [160] left=NONE, right=SOLID 0.1 mm, top=SOLID 0.1 mm, bottom=SOLID 0.1 mm
+       배경=#FAEDD2
+  [161] left=NONE, right=NONE, top=SOLID 0.1 mm, bottom=SOLID 0.1 mm
+       배경=#F5DCA8
+  [162] left=SOLID 0.1 mm, right=NONE, top=SOLID 0.1 mm, bottom=SOLID 0.1 mm
+       배경=#FAEDD2
+  [163] left=SOLID 0.1 mm, right=NONE, top=SOLID 0.1 mm, bottom=SOLID 0.1 mm
+       배경=#FFFFFF
+  [164] left=NONE, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+       배경=#FAEDD2
+  [165] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+       배경=#FAEDD2
+  [166] left=NONE, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+       배경=#E6EEF7
+  [167] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+       배경=#E6EEF7
+  [168] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+       배경=#DEE5F6
+  [169] left=DASH 0.12 mm, right=DASH 0.12 mm, top=DASH 0.15 mm, bottom=DASH 0.15 mm
+       배경=#FEE6D8
+  [170] left=NONE, right=NONE, top=DASH 0.1 mm, bottom=NONE
+  [171] left=NONE, right=NONE, top=NONE, bottom=DASH 0.1 mm
+  [172] left=NONE, right=NONE, top=SOLID 0.3 mm, bottom=DASH 0.1 mm
+  [173] left=NONE, right=NONE, top=DASH 0.1 mm, bottom=SOLID 0.3 mm
+  [174] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+       배경=#F2F2F2
+  [175] left=SOLID 0.12 mm, right=SOLID 0.12 mm, top=SOLID 0.12 mm, bottom=SOLID 0.12 mm
+
+▶ charPr (글자 스타일)
+  [0] 10.0pt 함초롬바탕 #000000
+       fontRef=hangul:3 borderFillIDRef=2
+  [1] 10.0pt 함초롬돋움 #000000
+       fontRef=hangul:2 borderFillIDRef=2
+  [2] 9.0pt 함초롬돋움 #000000
+       fontRef=hangul:2 borderFillIDRef=2
+  [3] 11.0pt 휴먼고딕 #000000 spacing=-7 볼드
+       fontRef=hangul:4 borderFillIDRef=2
+  [4] 9.0pt 함초롬돋움 #000000 spacing=-5
+       fontRef=hangul:2 borderFillIDRef=2
+  [5] 16.0pt 함초롬돋움 #2E74B5
+       fontRef=hangul:2 borderFillIDRef=2
+  [6] 11.0pt 함초롬돋움 #000000
+       fontRef=hangul:2 borderFillIDRef=2
+  [7] 9.0pt 휴먼명조 #000000
+       fontRef=hangul:5 borderFillIDRef=2
+  [8] 10.0pt 휴먼고딕 #000000
+       fontRef=hangul:4 borderFillIDRef=1
+  [9] 10.0pt -윤고딕330 #FFFFFF spacing=-5
+       fontRef=hangul:8 borderFillIDRef=6
+  [10] 11.0pt -윤고딕340 #000000 spacing=-5
+       fontRef=hangul:9 borderFillIDRef=6
+  [11] 11.0pt -윤고딕330 #000000 spacing=-5
+       fontRef=hangul:8 borderFillIDRef=6
+  [12] 5.0pt 휴먼고딕 #000000 spacing=-3
+       fontRef=hangul:4 borderFillIDRef=6
+  [13] 10.0pt -윤고딕330 #000000 spacing=-5
+       fontRef=hangul:8 borderFillIDRef=6
+  [14] 10.0pt -윤고딕320 #666666 spacing=-5
+       fontRef=hangul:7 borderFillIDRef=6
+  [15] 11.0pt -윤고딕320 #000000 spacing=-5
+       fontRef=hangul:7 borderFillIDRef=4
+  [16] 38.0pt 나눔스퀘어OTF_ac #0B5B9A 볼드
+       fontRef=hangul:6 borderFillIDRef=6
+  [17] 10.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=4
+  [18] 1.0pt 나눔스퀘어OTF_ac #444444
+       fontRef=hangul:6 borderFillIDRef=6
+  [19] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-5
+       fontRef=hangul:6 borderFillIDRef=6
+  [20] 10.0pt 함초롬바탕 #000000
+       fontRef=hangul:3 borderFillIDRef=1
+  [21] 10.0pt 함초롬바탕 #000000
+       fontRef=hangul:3 borderFillIDRef=4
+  [22] 3.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [23] 12.0pt 나눔스퀘어OTF_ac #858585 spacing=-9
+       fontRef=hangul:6 borderFillIDRef=2
+  [24] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 취소선
+       fontRef=hangul:6 borderFillIDRef=6
+  [25] 12.0pt 나눔스퀘어OTF_ac #FFFFFF spacing=-5
+       fontRef=hangul:6 borderFillIDRef=6
+  [26] 10.0pt 나눔스퀘어OTF_ac #E5E5E5 볼드
+       fontRef=hangul:6 borderFillIDRef=6
+  [27] 10.0pt 나눔스퀘어OTF_ac #0000FF
+       fontRef=hangul:6 borderFillIDRef=4
+  [28] 12.0pt 나눔스퀘어OTF_ac #4C4C4C
+       fontRef=hangul:6 borderFillIDRef=6
+  [29] 5.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [30] 13.0pt 나눔스퀘어OTF_ac #E5E5E5 볼드
+       fontRef=hangul:6 borderFillIDRef=6
+  [31] 9.0pt -윤고딕330 #000000
+       fontRef=hangul:8 borderFillIDRef=6
+  [32] 9.0pt -윤고딕330 #000000 spacing=-5
+       fontRef=hangul:8 borderFillIDRef=6
+  [33] 38.0pt 나눔스퀘어OTF_ac #6182D6
+       fontRef=hangul:6 borderFillIDRef=6
+  [34] 16.0pt 나눔스퀘어OTF_ac #4C4C4C spacing=-10
+       fontRef=hangul:6 borderFillIDRef=6
+  [35] 5.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [36] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-7
+       fontRef=hangul:6 borderFillIDRef=6
+  [37] 10.0pt 나눔고딕 #000000 spacing=-5 취소선
+       fontRef=hangul:0 borderFillIDRef=6
+  [38] 7.0pt 나눔스퀘어OTF_ac #808080 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [39] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=6
+  [40] 11.0pt 맑은 고딕 #000000
+       fontRef=hangul:1 borderFillIDRef=1
+  [41] 10.0pt 맑은 고딕 #000000
+       fontRef=hangul:1 borderFillIDRef=1
+  [42] 12.0pt 나눔스퀘어OTF_ac #FFFFFF
+       fontRef=hangul:6 borderFillIDRef=6
+  [43] 11.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=6
+  [44] 22.0pt 나눔스퀘어OTF_ac #FFFFFF
+       fontRef=hangul:6 borderFillIDRef=6
+  [45] 22.0pt 나눔스퀘어OTF_ac #444444
+       fontRef=hangul:6 borderFillIDRef=6
+  [46] 11.0pt 맑은 고딕 #000000 spacing=-5 볼드 취소선
+       fontRef=hangul:1 borderFillIDRef=6
+  [47] 14.0pt 나눔스퀘어OTF_ac #0B5B9A 볼드
+       fontRef=hangul:6 borderFillIDRef=6
+  [48] 12.0pt 나눔스퀘어OTF_ac #E5E5E5
+       fontRef=hangul:6 borderFillIDRef=6
+  [49] 14.0pt 나눔스퀘어OTF_ac #0B5B9A
+       fontRef=hangul:6 borderFillIDRef=6
+  [50] 11.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=6
+  [51] 9.0pt 나눔스퀘어OTF_ac #4C4C4C
+       fontRef=hangul:6 borderFillIDRef=6
+  [52] 11.0pt -윤고딕320 #000000 spacing=-5 취소선
+       fontRef=hangul:7 borderFillIDRef=6
+  [53] 10.0pt 나눔스퀘어OTF_ac #FF0000 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [54] 8.0pt 나눔스퀘어OTF_ac #000000 spacing=-5
+       fontRef=hangul:6 borderFillIDRef=6
+  [55] 12.0pt 나눔스퀘어OTF_ac #BFBFBF 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [56] 15.0pt 나눔스퀘어OTF_ac #FFFFFF spacing=-5 볼드
+       fontRef=hangul:6 borderFillIDRef=6
+  [57] 14.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [58] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-5
+       fontRef=hangul:6 borderFillIDRef=6
+  [59] 12.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=6
+  [60] 8.0pt 나눔스퀘어OTF_ac #000000 spacing=-10
+       fontRef=hangul:6 borderFillIDRef=6
+  [61] 12.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [62] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-15 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [63] 1.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=4
+  [64] 13.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [65] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-6 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [66] 10.0pt 나눔스퀘어OTF_ac #262626 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [67] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=4 볼드
+       fontRef=hangul:6 borderFillIDRef=6
+  [68] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=4
+       fontRef=hangul:6 borderFillIDRef=6
+  [69] 9.0pt 나눔스퀘어OTF_ac #999999
+       fontRef=hangul:6 borderFillIDRef=6
+  [70] 12.0pt 나눔스퀘어OTF_ac #000000 spacing=-7
+       fontRef=hangul:6 borderFillIDRef=2
+  [71] 13.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [72] 8.0pt 나눔스퀘어OTF_ac #999999
+       fontRef=hangul:6 borderFillIDRef=6
+  [73] 9.0pt 나눔스퀘어OTF_ac #808080
+       fontRef=hangul:6 borderFillIDRef=6
+  [74] 10.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=6
+  [75] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드
+       fontRef=hangul:6 borderFillIDRef=6
+  [76] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [77] 12.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [78] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [79] 13.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [80] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-6 볼드 밑줄(SOLID) 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [81] 13.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=4
+  [82] 8.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=6
+  [83] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [84] 10.0pt 나눔스퀘어OTF_ac #000000 밑줄(SOLID)
+       fontRef=hangul:6 borderFillIDRef=4
+  [85] 9.0pt 나눔스퀘어OTF_ac #000000 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [86] 9.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=6
+  [87] 9.0pt 나눔스퀘어OTF_ac #404040 spacing=-14 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [88] 7.0pt 나눔스퀘어OTF_ac #000000 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [89] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [90] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=2 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [91] 13.0pt 나눔스퀘어OTF_ac #BFCCEE spacing=-5 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [92] 12.0pt 나눔스퀘어OTF_ac #FF0000
+       fontRef=hangul:6 borderFillIDRef=6
+  [93] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드
+       fontRef=hangul:6 borderFillIDRef=6
+  [94] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-7
+       fontRef=hangul:6 borderFillIDRef=4
+  [95] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-5
+       fontRef=hangul:6 borderFillIDRef=4
+  [96] 8.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=6
+  [97] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-21 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [98] 9.8pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=4
+  [99] 8.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=4
+  [100] 10.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [101] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-3 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [102] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-3
+       fontRef=hangul:6 borderFillIDRef=4
+  [103] 8.0pt 나눔스퀘어OTF_ac #000000 spacing=-3
+       fontRef=hangul:6 borderFillIDRef=4
+  [104] 4.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [105] 11.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [106] 9.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=4
+  [107] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-10
+       fontRef=hangul:6 borderFillIDRef=4
+  [108] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=2
+       fontRef=hangul:6 borderFillIDRef=4
+  [109] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=2 볼드 밑줄(SOLID)
+       fontRef=hangul:6 borderFillIDRef=4
+  [110] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-6
+       fontRef=hangul:6 borderFillIDRef=4
+  [111] 7.0pt 나눔스퀘어OTF_ac #BFBFBF 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [112] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-6 볼드 밑줄(SOLID)
+       fontRef=hangul:6 borderFillIDRef=4
+  [113] 12.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드
+       fontRef=hangul:6 borderFillIDRef=6
+  [114] 15.0pt 나눔스퀘어OTF_ac #FFFFFF spacing=-5
+       fontRef=hangul:6 borderFillIDRef=6
+  [115] 8.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=4
+  [116] 13.0pt 나눔스퀘어OTF_ac #000000 spacing=-10 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [117] 13.0pt 나눔스퀘어OTF_ac #000000 spacing=-16 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [118] 13.0pt 나눔스퀘어OTF_ac #0000FF spacing=-16 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [119] 10.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=4
+  [120] 13.0pt 나눔스퀘어OTF_ac #000000 spacing=-11 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [121] 8.0pt 나눔스퀘어OTF_ac #FFFFFF 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [122] 13.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [123] 13.0pt 나눔스퀘어OTF_ac #7A8CAA spacing=-5 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [124] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드 밑줄(SOLID) 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [125] 7.0pt 나눔스퀘어OTF_ac #262626 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [126] 8.0pt 나눔스퀘어OTF_ac #262626 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [127] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드
+       fontRef=hangul:6 borderFillIDRef=6
+  [128] 6.0pt 나눔스퀘어OTF_ac #000000 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [129] 13.0pt 나눔스퀘어OTF_ac #000000 spacing=2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [130] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=2 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [131] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-14 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [132] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [133] 2.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [134] 12.0pt 나눔스퀘어OTF_ac #000000 spacing=-11 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [135] 13.0pt 나눔스퀘어OTF_ac #0D0D0D spacing=-2
+       fontRef=hangul:6 borderFillIDRef=4
+  [136] 10.0pt 나눔스퀘어OTF_ac #808080
+       fontRef=hangul:6 borderFillIDRef=4
+  [137] 13.0pt 나눔스퀘어OTF_ac #000000 spacing=-9 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [138] 8.0pt 나눔스퀘어OTF_ac #000000 spacing=-6
+       fontRef=hangul:6 borderFillIDRef=4
+  [139] 10.0pt 나눔스퀘어OTF_ac #262626
+       fontRef=hangul:6 borderFillIDRef=4
+  [140] 9.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=2
+  [141] 11.0pt 나눔스퀘어OTF_ac #FFB689 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [142] 8.0pt 나눔스퀘어OTF_ac #000000 spacing=-11 이탤릭 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [143] 11.0pt 나눔스퀘어OTF_ac #A0B4E6 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [144] 10.0pt 나눔스퀘어OTF_ac #FFB689
+       fontRef=hangul:6 borderFillIDRef=2
+  [145] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [146] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=4
+  [147] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-16 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [148] 11.0pt 나눔스퀘어OTF_ac #0D0D0D 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [149] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [150] 11.0pt 나눔스퀘어OTF_ac #FFE7D8 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [151] 11.0pt 맑은 고딕 #000000
+       fontRef=hangul:1 borderFillIDRef=1
+  [152] 13.0pt 나눔스퀘어OTF_ac #7A8CAA spacing=-8 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [153] 11.0pt 나눔스퀘어OTF_ac #A6A6A6 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [154] 9.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [155] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드 밑줄(SOLID)
+       fontRef=hangul:6 borderFillIDRef=4
+  [156] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-5
+       fontRef=hangul:6 borderFillIDRef=4
+  [157] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [158] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=2
+  [159] 11.0pt 나눔스퀘어OTF_ac #DFE6F7 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [160] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=4
+  [161] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-3 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [162] 11.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [163] 11.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=4
+  [164] 13.0pt 나눔스퀘어OTF_ac #203A7B spacing=-2
+       fontRef=hangul:6 borderFillIDRef=4
+  [165] 11.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=2
+  [166] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-16 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [167] 13.0pt 나눔스퀘어OTF_ac #000000 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [168] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-3 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [169] 13.0pt 나눔스퀘어OTF_ac #000000 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [170] 13.0pt 나눔스퀘어OTF_ac #203A7B spacing=-5 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [171] 12.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [172] 10.0pt 나눔스퀘어OTF_ac #000000 볼드 밑줄(SOLID)
+       fontRef=hangul:6 borderFillIDRef=4
+  [173] 12.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [174] 10.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=2
+  [175] 13.0pt 나눔스퀘어OTF_ac #FF6600 spacing=-5 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [176] 12.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [177] 10.0pt 나눔스퀘어OTF_ac #000000 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [178] 13.0pt 나눔스퀘어OTF_ac #595959 spacing=-5 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [179] 12.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=4
+  [180] 12.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=2
+  [181] 12.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=2
+  [182] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=1 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [183] 14.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [184] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=4
+  [185] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-5
+       fontRef=hangul:6 borderFillIDRef=4
+  [186] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-5 볼드 밑줄(SOLID)
+       fontRef=hangul:6 borderFillIDRef=4
+  [187] 14.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=2
+  [188] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=4
+  [189] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=4
+  [190] 11.0pt 나눔스퀘어OTF_ac #203A7B spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [191] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=2
+  [192] 11.0pt 나눔스퀘어OTF_ac #DEE5F6 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=4
+  [193] 13.0pt 나눔스퀘어OTF_ac #FF6600 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=4
+  [194] 11.0pt 나눔스퀘어OTF_ac #FF6600 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [195] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [196] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [197] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [198] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [199] 11.0pt 나눔스퀘어OTF_ac #DEE5F6 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [200] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-3
+       fontRef=hangul:6 borderFillIDRef=4
+  [201] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-3
+       fontRef=hangul:6 borderFillIDRef=4
+  [202] 13.0pt 나눔스퀘어OTF_ac #203A7B spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [203] 13.0pt 나눔스퀘어OTF_ac #FF6600 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [204] 13.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [205] 13.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=4
+  [206] 13.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [207] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드 밑줄(SOLID)
+       fontRef=hangul:6 borderFillIDRef=2
+  [208] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=6
+  [209] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=6
+  [210] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드 밑줄(SOLID)
+       fontRef=hangul:6 borderFillIDRef=2
+  [211] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드 밑줄(SOLID)
+       fontRef=hangul:6 borderFillIDRef=4
+  [212] 3.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=6
+  [213] 9.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=4
+  [214] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=2
+  [215] 10.0pt 나눔스퀘어OTF_ac #000000 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [216] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [217] 10.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드 밑줄(SOLID)
+       fontRef=hangul:6 borderFillIDRef=2
+  [218] 11.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [219] 12.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [220] 5.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=2
+  [221] 6.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=2
+  [222] 7.0pt 나눔스퀘어OTF_ac #000000 spacing=-2
+       fontRef=hangul:6 borderFillIDRef=2
+  [223] 5.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드
+       fontRef=hangul:6 borderFillIDRef=2
+  [224] 9.0pt 나눔스퀘어OTF_ac #000000 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [225] 10.0pt 나눔스퀘어OTF_ac #000000 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [226] 10.0pt 맑은 고딕 #000000 spacing=-6 볼드 취소선
+       fontRef=hangul:1 borderFillIDRef=4
+  [227] 5.0pt 맑은 고딕 #000000 spacing=-6 취소선
+       fontRef=hangul:1 borderFillIDRef=4
+  [228] 4.0pt 맑은 고딕 #000000 spacing=-6 볼드 취소선
+       fontRef=hangul:1 borderFillIDRef=4
+  [229] 10.0pt 맑은 고딕 #000000 spacing=-5 볼드 취소선
+       fontRef=hangul:1 borderFillIDRef=4
+  [230] 10.0pt 맑은 고딕 #000000 볼드
+       fontRef=hangul:1 borderFillIDRef=2
+  [231] 4.0pt 맑은 고딕 #000000 spacing=-5 취소선
+       fontRef=hangul:1 borderFillIDRef=6
+  [232] 5.0pt 나눔스퀘어OTF_ac #000000
+       fontRef=hangul:6 borderFillIDRef=4
+  [233] 13.0pt 나눔스퀘어OTF_ac #000000 spacing=-2 볼드 취소선
+       fontRef=hangul:6 borderFillIDRef=4
+  [234] 10.0pt 맑은 고딕 #000000 spacing=-5 취소선
+       fontRef=hangul:1 borderFillIDRef=6
+  [235] 10.0pt 맑은 고딕 #000000 spacing=-6 취소선
+       fontRef=hangul:1 borderFillIDRef=4
+  [236] 11.0pt 맑은 고딕 #000000 spacing=-6 볼드 취소선
+       fontRef=hangul:1 borderFillIDRef=4
+  [237] 10.0pt 맑은 고딕 #000000 spacing=-6 볼드 밑줄(SOLID) 취소선
+       fontRef=hangul:1 borderFillIDRef=4
+  [238] 9.0pt 맑은 고딕 #000000 spacing=-6 볼드 취소선
+       fontRef=hangul:1 borderFillIDRef=4
+
+▶ paraPr (문단 스타일)
+  [0] JUSTIFY lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=2
+  [1] JUSTIFY lineSpacing=160PERCENT
+       여백(left=1500) borderFillIDRef=2
+  [2] JUSTIFY lineSpacing=160PERCENT heading=OUTLINE level=0
+       여백(left=1000) borderFillIDRef=2
+  [3] JUSTIFY lineSpacing=160PERCENT heading=OUTLINE level=1
+       여백(left=2000) borderFillIDRef=2
+  [4] JUSTIFY lineSpacing=160PERCENT heading=OUTLINE level=2
+       여백(left=3000) borderFillIDRef=2
+  [5] JUSTIFY lineSpacing=160PERCENT heading=OUTLINE level=3
+       여백(left=4000) borderFillIDRef=2
+  [6] JUSTIFY lineSpacing=160PERCENT heading=OUTLINE level=4
+       여백(left=5000) borderFillIDRef=2
+  [7] JUSTIFY lineSpacing=160PERCENT heading=OUTLINE level=5
+       여백(left=6000) borderFillIDRef=2
+  [8] JUSTIFY lineSpacing=160PERCENT heading=OUTLINE level=6
+       여백(left=7000) borderFillIDRef=2
+  [9] JUSTIFY lineSpacing=150PERCENT
+       여백(없음) borderFillIDRef=2
+  [10] JUSTIFY lineSpacing=130PERCENT
+       여백(intent=-1310) borderFillIDRef=2
+  [11] LEFT lineSpacing=130PERCENT
+       여백(없음) borderFillIDRef=2
+  [12] LEFT lineSpacing=160PERCENT
+       여백(prev=1200, next=300) borderFillIDRef=2
+  [13] LEFT lineSpacing=160PERCENT
+       여백(next=700) borderFillIDRef=2
+  [14] LEFT lineSpacing=160PERCENT
+       여백(left=1100, next=700) borderFillIDRef=2
+  [15] LEFT lineSpacing=160PERCENT
+       여백(left=2200, next=700) borderFillIDRef=2
+  [16] JUSTIFY lineSpacing=160PERCENT heading=OUTLINE level=6
+       여백(left=9000) borderFillIDRef=2
+  [17] JUSTIFY lineSpacing=160PERCENT heading=OUTLINE level=6
+       여백(left=10000) borderFillIDRef=2
+  [18] JUSTIFY lineSpacing=160PERCENT heading=OUTLINE level=6
+       여백(left=8000) borderFillIDRef=2
+  [19] CENTER lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=2
+  [20] LEFT lineSpacing=110PERCENT
+       여백(next=500) borderFillIDRef=2
+  [21] LEFT lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=2
+  [22] CENTER lineSpacing=100PERCENT
+       여백(없음) borderFillIDRef=1
+  [23] CENTER lineSpacing=100PERCENT
+       여백(없음) borderFillIDRef=5
+  [24] CENTER lineSpacing=140PERCENT
+       여백(없음) borderFillIDRef=4
+  [25] CENTER lineSpacing=140PERCENT
+       여백(없음) borderFillIDRef=4
+  [26] CENTER lineSpacing=140PERCENT
+       여백(없음) borderFillIDRef=6
+  [27] JUSTIFY lineSpacing=140PERCENT heading=NUMBER level=0
+       여백(left=500) borderFillIDRef=4
+  [28] LEFT lineSpacing=180PERCENT heading=BULLET level=5
+       여백(left=1500) borderFillIDRef=4
+  [29] CENTER lineSpacing=200PERCENT
+       여백(intent=2373) borderFillIDRef=2
+  [30] JUSTIFY lineSpacing=120PERCENT
+       여백(intent=-900, left=300, prev=300, next=300) borderFillIDRef=6
+  [31] JUSTIFY lineSpacing=180PERCENT
+       여백(없음) borderFillIDRef=2
+  [32] JUSTIFY lineSpacing=180PERCENT
+       여백(없음) borderFillIDRef=2
+  [33] CENTER lineSpacing=150PERCENT
+       여백(없음) borderFillIDRef=2
+       borderOffset(offsetLeft=283, offsetRight=283, offsetTop=283, offsetBottom=283)
+  [34] RIGHT lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=2
+  [35] CENTER lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=4
+  [36] CENTER lineSpacing=140PERCENT
+       여백(left=300) borderFillIDRef=6
+  [37] JUSTIFY lineSpacing=160PERCENT
+       여백(intent=-1452) borderFillIDRef=2
+  [38] JUSTIFY lineSpacing=160PERCENT
+       여백(prev=50, next=50) borderFillIDRef=6
+  [39] CENTER lineSpacing=100PERCENT
+       여백(없음) borderFillIDRef=22
+  [40] JUSTIFY lineSpacing=100PERCENT
+       여백(없음) borderFillIDRef=1
+  [41] CENTER lineSpacing=100PERCENT
+       여백(없음) borderFillIDRef=4
+  [42] LEFT lineSpacing=100PERCENT
+       여백(없음) borderFillIDRef=1
+  [43] CENTER lineSpacing=100PERCENT
+       여백(없음) borderFillIDRef=23
+  [44] JUSTIFY lineSpacing=130PERCENT
+       여백(intent=-2860) borderFillIDRef=4
+  [45] RIGHT lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=4
+  [46] LEFT lineSpacing=180PERCENT heading=BULLET level=5
+       여백(left=1500) borderFillIDRef=6
+  [47] JUSTIFY lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=4
+  [48] LEFT lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=4
+  [49] JUSTIFY lineSpacing=130PERCENT
+       여백(intent=-2252) borderFillIDRef=4
+  [50] LEFT lineSpacing=170PERCENT
+       여백(없음) borderFillIDRef=4
+  [51] CENTER lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=4
+  [52] JUSTIFY lineSpacing=160PERCENT
+       여백(intent=-3181) borderFillIDRef=4
+  [53] JUSTIFY lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=1
+  [54] RIGHT lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=4
+  [55] CENTER lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=4
+  [56] LEFT lineSpacing=150PERCENT
+       여백(intent=-888, prev=385) borderFillIDRef=4
+  [57] LEFT lineSpacing=150PERCENT
+       여백(intent=-768, prev=385) borderFillIDRef=4
+  [58] LEFT lineSpacing=150PERCENT
+       여백(prev=385) borderFillIDRef=4
+  [59] JUSTIFY lineSpacing=200PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=4
+  [60] JUSTIFY lineSpacing=200PERCENT
+       여백(left=900) borderFillIDRef=4
+  [61] JUSTIFY lineSpacing=210PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=4
+  [62] LEFT lineSpacing=160PERCENT
+       여백(left=800) borderFillIDRef=2
+  [63] LEFT lineSpacing=180PERCENT
+       여백(없음) borderFillIDRef=4
+  [64] LEFT lineSpacing=180PERCENT
+       여백(intent=373) borderFillIDRef=2
+  [65] CENTER lineSpacing=160PERCENT
+       여백(intent=-2180) borderFillIDRef=4
+  [66] LEFT lineSpacing=170PERCENT
+       여백(intent=-400) borderFillIDRef=2
+  [67] JUSTIFY lineSpacing=160PERCENT
+       여백(left=500) borderFillIDRef=2
+  [68] JUSTIFY lineSpacing=120PERCENT
+       여백(없음) borderFillIDRef=2
+  [69] JUSTIFY lineSpacing=130PERCENT
+       여백(없음) borderFillIDRef=2
+  [70] CENTER lineSpacing=140PERCENT
+       여백(left=300) borderFillIDRef=4
+  [71] CENTER lineSpacing=140PERCENT
+       여백(left=300) borderFillIDRef=2
+  [72] CENTER lineSpacing=120PERCENT
+       여백(없음) borderFillIDRef=4
+  [73] JUSTIFY lineSpacing=120PERCENT
+       여백(없음) borderFillIDRef=2
+  [74] CENTER lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=2
+  [75] JUSTIFY lineSpacing=120PERCENT heading=NUMBER level=0
+       여백(없음) borderFillIDRef=2
+  [76] JUSTIFY lineSpacing=140PERCENT
+       여백(left=300) borderFillIDRef=2
+  [77] JUSTIFY lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=2
+  [78] JUSTIFY lineSpacing=160PERCENT
+       여백(intent=-300) borderFillIDRef=2
+  [79] JUSTIFY lineSpacing=140PERCENT
+       여백(없음) borderFillIDRef=2
+  [80] JUSTIFY lineSpacing=180PERCENT
+       여백(intent=373) borderFillIDRef=2
+  [81] JUSTIFY lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=2
+  [82] CENTER lineSpacing=120PERCENT
+       여백(없음) borderFillIDRef=2
+  [83] LEFT lineSpacing=180PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=2
+  [84] CENTER lineSpacing=150PERCENT
+       여백(없음) borderFillIDRef=2
+  [85] RIGHT lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=2
+  [86] CENTER lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=2
+  [87] JUSTIFY lineSpacing=160PERCENT
+       여백(intent=-2192) borderFillIDRef=2
+  [88] CENTER lineSpacing=180PERCENT
+       여백(없음) borderFillIDRef=6
+  [89] CENTER lineSpacing=180PERCENT
+       여백(left=298) borderFillIDRef=6
+  [90] LEFT lineSpacing=160PERCENT
+       여백(intent=-400) borderFillIDRef=2
+  [91] LEFT lineSpacing=180PERCENT
+       여백(left=1500) borderFillIDRef=6
+  [92] JUSTIFY lineSpacing=180PERCENT
+       여백(intent=-400) borderFillIDRef=4
+  [93] JUSTIFY lineSpacing=180PERCENT
+       여백(intent=-400) borderFillIDRef=2
+  [94] JUSTIFY lineSpacing=180PERCENT
+       여백(intent=-400) borderFillIDRef=4
+  [95] LEFT lineSpacing=180PERCENT
+       여백(intent=-400) borderFillIDRef=4
+  [96] LEFT lineSpacing=180PERCENT
+       여백(intent=-400) borderFillIDRef=2
+  [97] LEFT lineSpacing=180PERCENT
+       여백(intent=-400) borderFillIDRef=4
+  [98] JUSTIFY lineSpacing=180PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=2
+  [99] JUSTIFY lineSpacing=130PERCENT
+       여백(intent=-2488) borderFillIDRef=4
+  [100] CENTER lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=4
+  [101] JUSTIFY lineSpacing=140PERCENT
+       여백(left=300) borderFillIDRef=2
+  [102] LEFT lineSpacing=180PERCENT
+       여백(intent=-1098) borderFillIDRef=2
+  [103] LEFT lineSpacing=120PERCENT
+       여백(없음) borderFillIDRef=4
+  [104] JUSTIFY lineSpacing=170PERCENT
+       여백(없음) borderFillIDRef=2
+  [105] JUSTIFY lineSpacing=170PERCENT
+       여백(없음) borderFillIDRef=4
+  [106] LEFT lineSpacing=165PERCENT
+       여백(intent=-400) borderFillIDRef=2
+  [107] LEFT lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=4
+  [108] LEFT lineSpacing=200PERCENT
+       여백(없음) borderFillIDRef=6
+  [109] JUSTIFY lineSpacing=160PERCENT
+       여백(intent=-400) borderFillIDRef=2
+  [110] LEFT lineSpacing=180PERCENT
+       여백(intent=-1944) borderFillIDRef=4
+  [111] LEFT lineSpacing=180PERCENT
+       여백(intent=-2098) borderFillIDRef=4
+  [112] LEFT lineSpacing=180PERCENT
+       여백(intent=-1900) borderFillIDRef=4
+  [113] LEFT lineSpacing=160PERCENT
+       여백(intent=-2992, prev=325) borderFillIDRef=4
+       borderOffset(offsetLeft=400, offsetRight=400, offsetTop=100, offsetBottom=100)
+  [114] CENTER lineSpacing=2500FIXED
+       여백(left=108) borderFillIDRef=4
+       borderOffset(offsetLeft=400, offsetRight=400, offsetTop=100, offsetBottom=100)
+  [115] CENTER lineSpacing=3000FIXED
+       여백(left=284) borderFillIDRef=4
+       borderOffset(offsetLeft=400, offsetRight=400, offsetTop=100, offsetBottom=100)
+  [116] CENTER lineSpacing=3000FIXED
+       여백(left=284, prev=376) borderFillIDRef=4
+       borderOffset(offsetLeft=400, offsetRight=400, offsetTop=100, offsetBottom=100)
+  [117] LEFT lineSpacing=100PERCENT
+       여백(없음) borderFillIDRef=1
+       borderOffset(offsetLeft=400, offsetRight=400, offsetTop=100, offsetBottom=100)
+  [118] LEFT lineSpacing=165PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=6
+  [119] LEFT lineSpacing=165PERCENT
+       여백(없음) borderFillIDRef=6
+  [120] LEFT lineSpacing=170PERCENT
+       여백(intent=-2667) borderFillIDRef=4
+  [121] LEFT lineSpacing=165PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=2
+  [122] LEFT lineSpacing=165PERCENT
+       여백(없음) borderFillIDRef=2
+  [123] CENTER lineSpacing=230PERCENT
+       여백(없음) borderFillIDRef=4
+  [124] JUSTIFY lineSpacing=180PERCENT
+       여백(intent=-934) borderFillIDRef=4
+  [125] JUSTIFY lineSpacing=180PERCENT
+       여백(intent=2373) borderFillIDRef=2
+  [126] CENTER lineSpacing=160PERCENT
+       여백(없음) borderFillIDRef=6
+  [127] LEFT lineSpacing=180PERCENT
+       여백(없음) borderFillIDRef=4
+  [128] LEFT lineSpacing=180PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=4
+  [129] LEFT lineSpacing=180PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=4
+  [130] JUSTIFY lineSpacing=160PERCENT
+       여백(intent=2373) borderFillIDRef=2
+  [131] LEFT lineSpacing=180PERCENT
+       여백(없음) borderFillIDRef=2
+  [132] LEFT lineSpacing=170PERCENT
+       여백(intent=-200) borderFillIDRef=2
+  [133] LEFT lineSpacing=180PERCENT
+       여백(intent=-200) borderFillIDRef=2
+  [134] LEFT lineSpacing=160PERCENT
+       여백(left=800) borderFillIDRef=2
+  [135] RIGHT lineSpacing=130PERCENT
+       여백(intent=-2488) borderFillIDRef=4
+  [136] RIGHT lineSpacing=140PERCENT
+       여백(intent=-2488) borderFillIDRef=4
+  [137] JUSTIFY lineSpacing=165PERCENT
+       여백(intent=-2488) borderFillIDRef=4
+  [138] JUSTIFY lineSpacing=160PERCENT
+       여백(intent=2373) borderFillIDRef=2
+  [139] LEFT lineSpacing=180PERCENT
+       여백(없음) borderFillIDRef=4
+  [140] JUSTIFY lineSpacing=170PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=4
+  [141] LEFT lineSpacing=180PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=4
+  [142] LEFT lineSpacing=160PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=4
+  [143] LEFT lineSpacing=180PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=4
+  [144] LEFT lineSpacing=180PERCENT
+       여백(없음) borderFillIDRef=6
+  [145] LEFT lineSpacing=180PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=6
+  [146] LEFT lineSpacing=180PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=6
+  [147] LEFT lineSpacing=180PERCENT
+       여백(없음) borderFillIDRef=6
+  [148] LEFT lineSpacing=170PERCENT
+       여백(없음) borderFillIDRef=4
+  [149] LEFT lineSpacing=190PERCENT
+       여백(없음) borderFillIDRef=4
+  [150] LEFT lineSpacing=190PERCENT heading=BULLET level=0
+       여백(없음) borderFillIDRef=4
+
+▶ 문서 구조
+  페이지: 59528 × 84186 (WIDELY)
+  여백: 좌=4251 우=4251 상=0 하=2834
+  머리말=2835 꼬리말=4251
+  본문폭: 51026 (59528-4251-4251)
+  페이지테두리: borderFill=65 textBorder=PAPER offset=[1417,1417,1417,1417]
+
+  ════════ 본문 ════════
+
+  P id=2613180041 paraPr=20 [secPr] (빈)

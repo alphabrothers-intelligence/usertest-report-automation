@@ -33,13 +33,13 @@ export function ReportPlanCard({
   }
 
   return (
-    <div className="w-full rounded-lg border border-amber-200 bg-amber-50 px-5 py-4 text-base text-zinc-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-zinc-100">
+    <div className="w-full rounded-lg border border-[#dde5ef] bg-white px-5 py-4 text-base text-[#263449]">
       <p className="text-lg font-bold">이런 목차·섹션으로 보고서를 구성할 예정입니다</p>
       <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">
         보고서에 들어갈 항목을 먼저 확인해주세요. 다음 단계에서 그래프와 표에 필요한 응답 수치를
         계산하고, 이어서 서술형 응답 {output.qualitativeQuestionCount}개를 바탕으로 반응·고객 경험·개선 의견을 정리합니다.
       </p>
-      <div className="mt-3 divide-y divide-amber-200/70 rounded-md border border-amber-200/70 dark:divide-amber-900/60 dark:border-amber-900/60">
+      <div className="mt-3 divide-y divide-[#e5eaf1] rounded-md border border-[#dde5ef]">
         {output.sections.map((sec) => (
           <details key={sec.numeral} className="group px-3 py-2.5 first:rounded-t-md last:rounded-b-md open:bg-amber-100/50 dark:open:bg-amber-950/30">
             <summary className="flex cursor-pointer list-none items-center gap-2">
@@ -69,7 +69,7 @@ export function ReportPlanCard({
       <button
         type="button"
         onClick={onApprove}
-        className="mt-4 rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900"
+        className="mt-4 rounded-md bg-[#356df3] px-5 py-2 text-sm font-semibold text-white hover:bg-[#2d60da]"
       >
         목차 확인 후 그래프용 데이터 계산하기
       </button>

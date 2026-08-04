@@ -61,11 +61,15 @@ export async function saveProductInfo(params: {
   fileUrl: string;
   productInfo: ProductInfo;
 }): Promise<void> {
+  const generatedReportName = params.productInfo.companyName?.trim() && params.productInfo.serviceName?.trim()
+    ? `${params.productInfo.companyName.trim()} - ${params.productInfo.serviceName.trim()} 사용성 테스트 보고서`
+    : null;
   await sql`
-    insert into reports (file_url, product_info, updated_at)
-    values (${params.fileUrl}, ${sql.json(JSON.parse(JSON.stringify(params.productInfo)))}, now())
+    insert into reports (file_url, product_info, report_name, updated_at)
+    values (${params.fileUrl}, ${sql.json(JSON.parse(JSON.stringify(params.productInfo)))}, ${generatedReportName}, now())
     on conflict (file_url) do update set
       product_info = coalesce(reports.product_info, '{}'::jsonb) || excluded.product_info,
+      report_name = coalesce(reports.report_name, excluded.report_name),
       updated_at = now()
   `;
 }
@@ -157,6 +161,12 @@ export async function getRecentReports(limit = 30): Promise<RecentReportSummary[
 export async function saveReportName(reportId: string, name: string | null): Promise<void> {
   const trimmed = name?.trim() || null;
   await sql`update reports set report_name = ${trimmed}, updated_at = now() where id = ${reportId}`;
+}
+
+/** 저장 목록에서 보고서를 삭제한다. report를 참조하는 분석 행은 DB 외래키 cascade 규칙에 따라 함께 정리된다. */
+export async function deleteReport(reportId: string): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`delete from reports where id = ${reportId} returning id`;
+  return rows.length > 0;
 }
 
 /** 웹 작업공간(스튜디오) 편집 초안을 서버에 저장한다(2026-08-04 신규 — localStorage 대체).
@@ -267,6 +277,7 @@ export async function saveQualitativeResults(
           polarity: c.polarity,
           rationale: c.rationale,
           confidence: c.confidence,
+          needs_review: c.needs_review,
         }));
         await tx`insert into clauses ${tx(clauseRows)}`;
       }
@@ -333,6 +344,7 @@ export async function saveQualitativeQuestionResult(
         polarity: c.polarity,
         rationale: c.rationale,
         confidence: c.confidence,
+        needs_review: c.needs_review,
       })))}`;
     }
     const categoryRows = (Object.keys(q.stage2ByPolarity) as Polarity[]).flatMap((polarity) => {
@@ -362,6 +374,7 @@ export interface ClauseRow {
   confidence: "high" | "medium" | "low";
   reviewed: boolean;
   overridden_polarity: Polarity | null;
+  needs_review: boolean;
 }
 
 /** 체크포인트 A(7.1절) 대상: 신뢰도 낮음으로 플래그되고 아직 검수 안 된 clause만. */

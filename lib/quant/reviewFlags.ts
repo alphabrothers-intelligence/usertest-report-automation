@@ -4,12 +4,14 @@
 import type { QuantStats } from "./compute";
 
 export interface ReviewFlag {
+  sectionNumeral: "II" | "III" | "VII" | "VIII";
+  targetBlockId: string;
+  title?: string;
   location: string;
   message: string;
   severity: "info" | "warning";
 }
 
-const HIGH_SD_THRESHOLD = 2.5; // 0~10점 척도 기준 — 이 이상이면 응답이 크게 갈렸다고 봄
 const LOW_SAMPLE_THRESHOLD = 10; // 교차분석 그룹 표본이 이 미만이면 해석 주의
 const PRIORITY_IMPORTANCE_THRESHOLD = 2; // 상대중요도(-5~5) 이 값 이상
 const PRIORITY_SATISFACTION_THRESHOLD = 6; // 만족도(0~10) 이 값 이하
@@ -17,28 +19,22 @@ const PRIORITY_SATISFACTION_THRESHOLD = 6; // 만족도(0~10) 이 값 이하
 export function flagQuantStatsForReview(stats: QuantStats): ReviewFlag[] {
   const flags: ReviewFlag[] = [];
 
-  for (const f of stats.featureSatisfaction) {
-    if (f.sd >= HIGH_SD_THRESHOLD) {
-      flags.push({
-        location: `기능별 만족도 > ${f.name}`,
-        message: `표준편차 ${f.sd.toFixed(2)} — 평균만 보면 오해할 수 있어요. 응답이 양극화됐을 가능성이 있으니 긍정/부정 비율을 같이 확인하세요.`,
-        severity: "warning",
-      });
-    }
-  }
-
   if (stats.demographics.priorServiceSatisfaction.n < stats.respondentCount) {
     flags.push({
+      sectionNumeral: "II",
+      targetBlockId: "demo-prior-service",
       location: "인적사항 > 유사 서비스 경험자 만족도",
-      message: `이 값은 전체 응답자 ${stats.respondentCount}명이 아니라, 경험이 있다고 답한 ${stats.demographics.priorServiceSatisfaction.n}명만의 평균이에요.`,
+      message: `이 그래프는 전체 ${stats.respondentCount}명이 아니라 유사 서비스를 써본 ${stats.demographics.priorServiceSatisfaction.n}명만 보여줘요. 전체 사용자 결과처럼 보이지 않는지 확인해주세요.`,
       severity: "info",
     });
   }
 
   if (stats.nps.npsScore < 0) {
     flags.push({
+      sectionNumeral: "VIII",
+      targetBlockId: "nps-diagram",
       location: "종합만족도 및 NPS",
-      message: `NPS 지수가 음수(${stats.nps.npsScore})예요. 초기 기업에서는 흔한 수치라 오류는 아니지만, 이 숫자가 왜 나왔는지 맥락을 같이 챙겨보세요.`,
+      message: `추천하겠다는 사람보다 추천하지 않겠다는 사람이 더 많아요. 계산 오류라는 뜻은 아니며, 어떤 불편이 이 결과를 만들었는지 다음 의견 분석에서 연결해 확인해주세요.`,
       severity: "info",
     });
   }
@@ -52,18 +48,33 @@ export function flagQuantStatsForReview(stats: QuantStats): ReviewFlag[] {
       satisfaction <= PRIORITY_SATISFACTION_THRESHOLD
     ) {
       flags.push({
-        location: `핵심구매요소 > ${item.name}`,
-        message: `중요도는 높은데(${item.score.toFixed(2)}) 만족도는 낮아요(${satisfaction.toFixed(2)}) — 최우선 개선 후보로 눈여겨보세요.`,
+        sectionNumeral: "III",
+        targetBlockId: "feature-importance-satisfaction-quadrant",
+        location: `기능별 상대 중요도·만족도 > ${item.name}`,
+        message: `사용자가 중요하게 생각하지만 만족하지 못한 기능이에요. 보고서에서 ‘먼저 고칠 기능’으로 표시해도 되는지 확인해주세요.`,
         severity: "warning",
       });
     }
   }
 
-  for (const group of [...stats.crossAnalysis.byAgeGroup, ...stats.crossAnalysis.byGender]) {
+  for (const group of stats.crossAnalysis.byAgeGroup) {
     if (group.n > 0 && group.n < LOW_SAMPLE_THRESHOLD) {
       flags.push({
+        sectionNumeral: "VII",
+        targetBlockId: "cross-feature-chart-age",
         location: `교차분석 > ${group.group}`,
-        message: `이 그룹의 표본이 ${group.n}명으로 적어요 — 그룹 간 차이를 해석할 때 주의하세요.`,
+        message: `이 그룹은 ${group.n}명뿐이라 한두 명의 답변이 그래프를 크게 바꿀 수 있어요. 다른 그룹보다 높거나 낮다고 단정하지 않았는지 확인해주세요.`,
+        severity: "info",
+      });
+    }
+  }
+  for (const group of stats.crossAnalysis.byGender) {
+    if (group.n > 0 && group.n < LOW_SAMPLE_THRESHOLD) {
+      flags.push({
+        sectionNumeral: "VII",
+        targetBlockId: "cross-feature-chart-gender",
+        location: `교차분석 > ${group.group}`,
+        message: `이 그룹은 ${group.n}명뿐이라 한두 명의 답변이 그래프를 크게 바꿀 수 있어요. 다른 그룹보다 높거나 낮다고 단정하지 않았는지 확인해주세요.`,
         severity: "info",
       });
     }
@@ -74,11 +85,13 @@ export function flagQuantStatsForReview(stats: QuantStats): ReviewFlag[] {
     const rounded = Number(f.mean.toFixed(2));
     namesByMean.set(rounded, [...(namesByMean.get(rounded) ?? []), f.name]);
   }
-  for (const [mean, names] of namesByMean) {
+  for (const names of namesByMean.values()) {
     if (names.length > 1) {
       flags.push({
+        sectionNumeral: "III",
+        targetBlockId: "feature-satisfaction",
         location: `기능별 만족도 순위 > ${names.join(", ")}`,
-        message: `만족도가 ${mean.toFixed(2)}로 동점이에요 — 표에 나온 순서는 임의로 정해진 것이라 실제 우선순위 차이는 없다고 보세요.`,
+        message: `두 기능의 평균 점수가 같아요. 화면에 먼저 나온 기능이 더 좋은 기능은 아니므로 같은 순위로 이해해주세요.`,
         severity: "info",
       });
     }

@@ -12,7 +12,8 @@ interface JobProgress {
   completedAt: string | null;
 }
 
-const TERMINAL_STATUSES = ["completed", "completed_with_failures", "failed", "cancelled"];
+const SUCCESS_STATUSES = ["completed", "completed_with_failures"];
+const TERMINAL_STATUSES = [...SUCCESS_STATUSES, "failed", "cancelled"];
 
 /**
  * 마법사 5단계 — "정성 분석 시작" 버튼 → job 등록(/api/wizard/qualitative) → 3개 워커로
@@ -70,14 +71,7 @@ export function QualitativeStep({ fileUrl }: { fileUrl: string }) {
     return () => { cancelled = true; };
   }, [jobId]);
 
-  useEffect(() => {
-    if (progress && TERMINAL_STATUSES.includes(progress.status)) {
-      const timer = setTimeout(() => {
-        router.push(`/viewer?source=${encodeURIComponent(fileUrl)}`);
-      }, 900);
-      return () => clearTimeout(timer);
-    }
-  }, [progress, fileUrl, router]);
+  const openReport = () => router.push(`/viewer?source=${encodeURIComponent(fileUrl)}`);
 
   async function handleStart() {
     setStarting(true);
@@ -99,8 +93,8 @@ export function QualitativeStep({ fileUrl }: { fileUrl: string }) {
   if (!jobId) {
     return (
       <div className="w-full max-w-xl">
-        <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">응답 내용 분석을 시작할까요?</h2>
-        <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">
+        <h2 className="text-xl font-bold text-[#202c40]">응답 내용 분석을 시작할까요?</h2>
+        <p className="mt-1.5 text-sm text-[#748196]">
           서술형 응답 14개 문항을 분석해 반응·고객 경험·개선 의견을 정리합니다. 보통 7~10분
           걸립니다.
         </p>
@@ -109,7 +103,7 @@ export function QualitativeStep({ fileUrl }: { fileUrl: string }) {
           type="button"
           onClick={() => void handleStart()}
           disabled={starting}
-          className="mt-4 rounded-full bg-[#315c9c] px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+          className="mt-4 rounded-md bg-[#356df3] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#2d60da] disabled:bg-[#c8d1de]"
         >
           {starting ? "시작하는 중..." : "응답 내용 분석 시작"}
         </button>
@@ -121,12 +115,13 @@ export function QualitativeStep({ fileUrl }: { fileUrl: string }) {
   const total = progress?.total ?? 14;
   const status = progress?.status ?? "queued";
   const isFinished = TERMINAL_STATUSES.includes(status);
+  const isSuccessful = SUCCESS_STATUSES.includes(status);
   const percent = status === "queued" ? 0 : Math.round((done / Math.max(total, 1)) * 100);
   const statusLabel: Record<string, string> = {
     queued: "분석 시작 준비 중",
     running: "응답 내용 분석 중",
-    completed: "분석 완료 — 웹뷰어로 이동합니다",
-    completed_with_failures: "분석 완료(일부 문항 제외) — 웹뷰어로 이동합니다",
+    completed: "분석 완료",
+    completed_with_failures: "분석 완료(일부 문항 제외)",
     failed: "분석을 완료하지 못했습니다",
     cancelled: "분석이 중단되었습니다",
   };
@@ -157,6 +152,15 @@ export function QualitativeStep({ fileUrl }: { fileUrl: string }) {
         )}
         {error && <p className="mt-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
       </div>
+      {isSuccessful && (
+        <button
+          type="button"
+          onClick={openReport}
+          className="mt-4 rounded-md bg-[#356df3] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#2d60da]"
+        >
+          분석 결과로 보고서 열기
+        </button>
+      )}
     </div>
   );
 }
