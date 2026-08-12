@@ -121,7 +121,7 @@ function ImprovementCategoryBlocks({ categories }: { categories: CategoryRow[] }
             const { sub: subLabel } = decodeImprovementLabel(sub.label);
             return (
               <View key={sub.id} style={{ marginBottom: 4 }} wrap={false}>
-                <Text style={{ fontSize: 8.5, fontWeight: "bold", marginBottom: 2 }}>&lt;{subLabel}&gt;</Text>
+                {subLabel && <Text style={{ fontSize: 8.5, fontWeight: "bold", marginBottom: 2 }}>&lt;{subLabel}&gt;</Text>}
                 {sub.quotes.map((q, i) => (
                   <Text key={q} style={styles.quote}>
                     &ldquo;<InlineRichText value={sub.quotes_display?.[i] ?? q} />&rdquo;

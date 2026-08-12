@@ -30,10 +30,11 @@ import { EditablePolarityChart } from "@/components/report/EditablePolarityChart
 import { EditableTable } from "@/components/report/EditableTable";
 import { elementToClipboardHtml, fragmentToClipboardHtml } from "@/lib/report/domClipboard";
 import { downloadSectionExportsAsZip, downloadSvgAsPng } from "@/lib/report/exportImage";
-import { htmlToPlainText } from "@/lib/report/richText";
+import { escapeHtml, htmlToPlainText } from "@/lib/report/richText";
 import { htmlToRtf } from "@/lib/report/rtfClipboard";
-import { reportQuoteEndingToken } from "@/lib/report/quoteEnding";
+import { reportQuoteEndingToken, splitHighlightParts } from "@/lib/report/quoteEnding";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
+import { QuoteCorrectionPanel, type BatchCorrectionItem } from "@/components/QuoteCorrectionPanel";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
 
@@ -423,7 +424,7 @@ function FormatButton({ label, title, onApply, className }: { label: string; tit
 
 /** 우측 액션 패널 — 현재 스크롤스파이로 활성화된 섹션 하나에 대해 동작한다(2026-07-25 신규,
  * 예전엔 같은 동작이 섹션 카드 하단에 인라인 버튼으로 있었다). */
-function ActionPanel({ activeTitle, onCopy, onDownload, selectedBlock, onBlockChange }: { activeTitle: string; onCopy: () => void; onDownload: () => void; selectedBlock: ReportBlock | null; onBlockChange: (next: ReportBlock) => void }) {
+function ActionPanel({ activeTitle, onCopy, onDownload, onOpenCorrections, selectedBlock, onBlockChange }: { activeTitle: string; onCopy: () => void; onDownload: () => void; onOpenCorrections: () => void; selectedBlock: ReportBlock | null; onBlockChange: (next: ReportBlock) => void }) {
   return (
     // "선택 요소 편집"(예: 비교 집단이 많은 그룹 막대그래프)이 길어지면 sticky 패널 자체 높이가
     // 뷰포트를 넘어서는데, sticky는 top 위치에 고정된 뒤로는 페이지 스크롤을 따라가지 않으므로
@@ -461,6 +462,13 @@ function ActionPanel({ activeTitle, onCopy, onDownload, selectedBlock, onBlockCh
         className="block w-full rounded-lg bg-[#1473e6] px-3 py-2.5 text-left text-sm font-semibold text-white hover:bg-[#0f65cf]"
       >
         현재 섹션 차트 이미지 저장
+      </button>
+      <button
+        type="button"
+        onClick={onOpenCorrections}
+        className="block w-full rounded-lg border border-[#b9cbe3] px-3 py-2.5 text-left text-sm font-semibold text-[#315f9d] hover:bg-[#f2f7ff]"
+      >
+        인용문 일괄 검토
       </button>
       </div>
       <div className="border-t border-[#e3e8ef] p-5">
@@ -585,6 +593,7 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
   const [analysisBlockId, setAnalysisBlockId] = useState<string | null>(null);
   const [recommendationStatus, setRecommendationStatus] = useState<"idle" | "loading" | "error">("idle");
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
+  const [correctionsPanelOpen, setCorrectionsPanelOpen] = useState(false);
   const quoteSourceRequestRef = useRef(0);
   const activeEvidenceKeyRef = useRef<string | null>(null);
 
@@ -834,6 +843,37 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     setQuoteCompletionTarget(null);
   }
 
+  /**
+   * 일괄 검토 패널(`QuoteCorrectionPanel`)에서 체크된 항목을 한 번에 본문에 반영한다.
+   * 단건 적용(`applyQuoteCompletion`)과 같은 DOMParser 치환 패턴을 여러 인용문으로 일반화한
+   * 것 — 다른 점은 적용 표시를 boolean 속성(`data-edited-quote`)뿐 아니라 변경된 부분만
+   * `<mark data-edited-quote-diff>`로 감싸 영구적인 빨간 하이라이트로 남긴다는 것이다.
+   */
+  function applyBatchCorrections(items: BatchCorrectionItem[]) {
+    if (items.length === 0) return;
+    checkpoint();
+    const byEncodedQuote = new Map(items.map((item) => [encodeURIComponent(item.quote), item]));
+    setSections((previous) => previous.map((section) => ({
+      ...section,
+      blocks: section.blocks.map((block) => {
+        if (block.kind !== "text" && block.kind !== "rich-static") return block;
+        const doc = new DOMParser().parseFromString(block.html, "text/html");
+        let changed = false;
+        for (const quoteNode of Array.from(doc.body.querySelectorAll<HTMLElement>("[data-quote-text]"))) {
+          const item = byEncodedQuote.get(quoteNode.getAttribute("data-quote-text") ?? "");
+          const quoteParagraph = item ? quoteNode.closest("[data-report-quote]")?.querySelector("p") : null;
+          if (!item || !quoteParagraph) continue;
+          const { prefix, middle, suffix } = splitHighlightParts(item.quote, item.suggestion);
+          quoteParagraph.innerHTML = `“${escapeHtml(prefix)}<mark data-edited-quote-diff style="background-color:#fee2e2">${escapeHtml(middle)}</mark>${escapeHtml(suffix)}”`;
+          quoteParagraph.setAttribute("data-edited-quote", "true");
+          quoteNode.setAttribute("data-quote-text", encodeURIComponent(item.suggestion));
+          changed = true;
+        }
+        return changed ? { ...block, html: doc.body.innerHTML } : block;
+      }),
+    })));
+  }
+
   // 스크롤스파이 콜백 안에서 최신 activeSection/onActiveSectionChange를 읽기 위한 ref —
   // observer 자체는 섹션 개수가 바뀌지 않는 한 재구독할 필요가 없다(스크롤마다 activeSection이
   // 바뀌는데, 그때마다 effect를 재구독하면 옵저버가 계속 재생성돼 낭비다).
@@ -972,7 +1012,12 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
   }
 
   return (
-    <div className={`mx-auto grid max-w-[2200px] gap-5 px-4 py-8 lg:px-7 ${quotePanelOpen ? "lg:grid-cols-[250px_430px_minmax(0,1fr)_320px]" : "lg:grid-cols-[250px_52px_minmax(0,1fr)_320px]"}`}>
+    // minmax(0,1fr) 대신 minmax(520px,1fr)를 쓴다 — 0 바닥이면 사이드 패널(특히 분석 근거
+    // 430px)을 다 펼친 채로 화면 폭이 1300px 미만(흔한 노트북 해상도)이면 본문 열이 거의
+    // 0으로 짜부라져 한글이 한 글자씩 세로로 줄바꿈되는(사실상 전체 문서가 깨져 보이는) 실측
+    // 버그가 있었다(2026-08-12). 본문은 최소 520px을 보장하고, 그래도 안 맞으면(화면이 아주
+    // 좁으면) 그리드 전체를 가로 스크롤하게 한다 — 글자가 세로로 뭉개지는 것보다 훨씬 낫다.
+    <div className={`mx-auto grid max-w-[2200px] gap-5 overflow-x-auto px-4 py-8 lg:px-7 ${quotePanelOpen ? "lg:grid-cols-[250px_430px_minmax(520px,1fr)_320px]" : "lg:grid-cols-[250px_52px_minmax(520px,1fr)_320px]"}`}>
       <TableOfContents sections={sections} activeSection={activeSection} onSelect={scrollToSection} onSelectSubitem={scrollToSubitem} />
       {!quotePanelOpen && (
         <button type="button" onClick={() => setQuotePanelOpen(true)} className="h-fit rounded-lg border border-[#c9daf2] bg-white px-2 py-4 text-xs font-bold text-[#315c9c] shadow-sm lg:sticky lg:top-28" style={{ writingMode: "vertical-rl" }}>분석 근거</button>
@@ -1082,10 +1127,18 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
         activeTitle={sections.find((section) => section.numeral === activeSection)?.title ?? "보고서 편집"}
         onCopy={() => void copyActiveSection()}
         onDownload={() => void downloadActiveSectionZip()}
+        onOpenCorrections={() => setCorrectionsPanelOpen(true)}
         selectedBlock={selectedBlock}
         onBlockChange={(next) => {
           if (selectedBlockRef) updateBlock(selectedBlockRef.numeral, selectedBlockRef.id, next);
         }}
+      />
+      <QuoteCorrectionPanel
+        open={correctionsPanelOpen}
+        onClose={() => setCorrectionsPanelOpen(false)}
+        sections={sections}
+        sourceFileUrl={sourceFileUrl ?? null}
+        onApply={applyBatchCorrections}
       />
     </div>
   );

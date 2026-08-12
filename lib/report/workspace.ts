@@ -100,7 +100,7 @@ function improvementCategoryHtml(categories: CategoryRow[], questionKey: string)
     out.push(`${quoteGroupStart(questionKey, major)}<p style="font-weight:700;margin:10pt 0 3pt"><strong>[${richTextToInlineHtml(major)}]</strong></p>`);
     for (const sub of subs) {
       const { sub: subLabel } = decodeImprovementLabel(sub.label);
-      out.push(`<p style="font-weight:700;margin:5pt 0 2pt">&lt;${richTextToInlineHtml(subLabel)}&gt;</p>`);
+      if (subLabel) out.push(`<p style="font-weight:700;margin:5pt 0 2pt">&lt;${richTextToInlineHtml(subLabel)}&gt;</p>`);
       sub.quotes.forEach((quote, i) => out.push(quoteHtml(quote, questionKey, sub.quotes_display?.[i])));
       out.push(BLANK_LINE_HTML);
     }

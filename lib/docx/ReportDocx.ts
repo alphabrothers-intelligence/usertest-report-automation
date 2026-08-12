@@ -142,9 +142,11 @@ function questionQualitativeBlock(question: QuestionWithApprovedCategories): Blo
       blocks.push(new Paragraph({ spacing: { before: 120, after: 40 }, children: [new TextRun({ text: `[${major}]`, bold: true })] }));
       for (const c of subs) {
         const { sub } = decodeImprovementLabel(c.label);
-        blocks.push(
-          new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text: `<${sub}>`, bold: true })] }),
-        );
+        if (sub) {
+          blocks.push(
+            new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text: `<${sub}>`, bold: true })] }),
+          );
+        }
         c.quotes.forEach((q, qi) => {
           blocks.push(
             new Paragraph({
