@@ -1,12 +1,17 @@
 import { renderQuadrantChart } from "../lib/charts/canvasCharts";
 import { writeFileSync, readFileSync } from "fs";
 
-const quant = JSON.parse(readFileSync("/tmp/hwpx_poc2/quant.json", "utf-8"));
-const ranked = [...quant.relativeImportance].sort((a: any, b: any) => b.score - a.score);
-const satisfactionByName = new Map(quant.featureSatisfaction.map((f: any) => [f.name, f.mean]));
+type QuantChartInput = {
+  relativeImportance: Array<{ name: string; score: number }>;
+  featureSatisfaction: Array<{ name: string; mean: number }>;
+};
+
+const quant = JSON.parse(readFileSync("/tmp/hwpx_poc2/quant.json", "utf-8")) as QuantChartInput;
+const ranked = [...quant.relativeImportance].sort((a, b) => b.score - a.score);
+const satisfactionByName = new Map<string, number>(quant.featureSatisfaction.map((feature) => [feature.name, feature.mean]));
 
 const chart = renderQuadrantChart(
-  ranked.map((r: any) => ({ name: r.name, importance: r.score, satisfaction: satisfactionByName.get(r.name) ?? 0 })),
+  ranked.map((item) => ({ name: item.name, importance: item.score, satisfaction: satisfactionByName.get(item.name) ?? 0 })),
   920,
   880,
 );
