@@ -6,6 +6,10 @@ const FORBIDDEN_PATTERNS: { label: string; regex: RegExp }[] = [
   { label: "판단된다/판단됨", regex: /판단된다|판단됨/ },
   { label: "때문이다", regex: /때문이다/ },
   { label: "인 요소이다", regex: /인\s*요소이다/ },
+  {
+    label: "이탈 단정 표현",
+    regex: /(절대|무조건|100%)[^.!?\n]*이탈|이탈[^.!?\n]*(절대|무조건|100%)/,
+  },
 ];
 
 const HEDGE_PHRASES = ["해석할 수 있", "볼 수 있", "일 가능성이 있", "로 보임", "보입니다"];

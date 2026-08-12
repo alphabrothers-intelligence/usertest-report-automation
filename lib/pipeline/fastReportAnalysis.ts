@@ -14,8 +14,11 @@ import { isVerbatimClause, type Polarity } from "./stage1";
 import {
   Stage2CombinedOutputSchema,
   Stage2ImprovementOutputSchema,
+  buildQuoteDisplayText,
   type Stage2ImprovementOutput,
+  type Stage2ImprovementRawOutput,
   type Stage2Output,
+  type Stage2RawOutput,
 } from "./stage2";
 import { streamStructured, withClaudeGuard } from "./claudeGuard";
 import type { QuestionResult } from "./orchestrate";
@@ -25,16 +28,15 @@ import { FAST_STANDARD_SYSTEM, FAST_IMPROVEMENT_SYSTEM } from "./prompts";
 
 const FAST_MODEL = process.env.ANTHROPIC_QUALITATIVE_FAST_MODEL ?? process.env.ANTHROPIC_STAGE2_MODEL ?? "claude-sonnet-5";
 
-function filterVerifiedQuotes<T extends { categories: Array<{ quotes: string[] }> }>(
-  output: T,
-  reasons: string[],
-): T {
+function filterVerifiedQuotes(output: Stage2RawOutput, reasons: string[]): Stage2Output {
   return {
     ...output,
-    categories: output.categories.map((category) => ({
-      ...category,
-      quotes: category.quotes.filter((quote) => reasons.some((reason) => isVerbatimClause(reason, quote))),
-    })),
+    categories: output.categories.map((category) => {
+      const quotes = category.quotes.filter((quote) => reasons.some((reason) => isVerbatimClause(reason, quote)));
+      const quotesDisplay = quotes.map((quote) => buildQuoteDisplayText(quote, category.quoteEvidence));
+      const { quoteEvidence: _quoteEvidence, ...rest } = category;
+      return { ...rest, quotes, quotesDisplay };
+    }),
   };
 }
 
@@ -46,15 +48,20 @@ function assertCounts(output: { total_clause_count: number; categories: Array<{ 
 }
 
 /** 개선아이디어 2단 출력에서 각 소분류의 quotes 중 원문에 verbatim으로 있는 것만 남긴다. */
-function filterImprovementQuotes(output: Stage2ImprovementOutput, reasons: string[]): Stage2ImprovementOutput {
+function filterImprovementQuotes(
+  output: Stage2ImprovementRawOutput,
+  reasons: string[],
+): Stage2ImprovementOutput {
   return {
     ...output,
     major_categories: output.major_categories.map((major) => ({
       ...major,
-      subcategories: major.subcategories.map((sub) => ({
-        ...sub,
-        quotes: sub.quotes.filter((quote) => reasons.some((reason) => isVerbatimClause(reason, quote))),
-      })),
+      subcategories: major.subcategories.map((sub) => {
+        const quotes = sub.quotes.filter((quote) => reasons.some((reason) => isVerbatimClause(reason, quote)));
+        const quotesDisplay = quotes.map((quote) => buildQuoteDisplayText(quote, sub.quoteEvidence));
+        const { quoteEvidence: _quoteEvidence, ...rest } = sub;
+        return { ...rest, quotes, quotesDisplay };
+      }),
     })),
   };
 }
@@ -63,7 +70,7 @@ function filterImprovementQuotes(output: Stage2ImprovementOutput, reasons: strin
 // 함께 언급한 응답), 소분류 clause_count 합이 응답 수를 초과하는 것이 정상이다. 따라서 표준
 // 문항의 assertCounts(엄격 일치)와 달리 여기서는 던지지 않고, 소분류·인용이 하나도 없는
 // 비정상 출력만 오류로 막는다.
-function assertImprovementCounts(output: Stage2ImprovementOutput, label: string) {
+function assertImprovementCounts(output: Stage2ImprovementRawOutput, label: string) {
   const subs = output.major_categories.flatMap((major) => major.subcategories);
   if (subs.length === 0) {
     throw new Error(`${label} 개선 아이디어 소분류가 비어 있습니다.`);

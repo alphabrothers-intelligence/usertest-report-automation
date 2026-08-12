@@ -12,7 +12,7 @@
 // 건드리지 않는다.
 import { Text, View, Svg, Line, Polygon } from "@react-pdf/renderer";
 import type { Style } from "@react-pdf/types";
-import { parseRichText, type RichTextRun } from "@/lib/report/richText";
+import { parseRichText, parseRichRuns, type RichTextRun } from "@/lib/report/richText";
 import { styles, colors } from "./theme";
 
 /** "→"(U+2192)는 서브셋 폰트에 글자가 없어 mojibake가 난다(아래 arrow 블록 주석 참고).
@@ -44,6 +44,13 @@ function RunText({ run }: { run: RichTextRun }) {
       {sanitizeGlyphs(run.text)}
     </Text>
   );
+}
+
+/** 인용문처럼 이미 바깥에서 `<Text style={styles.quote}>`로 감싼 한 줄 안에 강조(볼드+밑줄)
+ * run만 끼워 넣을 때 쓴다 — RichText(블록 단위, "-"/"#"/"→" 등을 불릿·제목·화살표로 재해석)와
+ * 달리 마크다운 블록 구조를 해석하지 않고 **__..__** 강조만 순수 인라인으로 splice한다. */
+export function InlineRichText({ value }: { value: string }) {
+  return <>{parseRichRuns(value).map((run, i) => <RunText key={i} run={run} />)}</>;
 }
 
 /** LLM 생성 텍스트(마크다운 강조 포함)를 문단/불릿/제목 블록으로 렌더링한다.

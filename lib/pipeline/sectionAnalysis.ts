@@ -24,6 +24,7 @@ import {
 } from "@/lib/db/reports";
 import { detectProductType, type ProductType } from "@/lib/report/productType";
 import { decodeImprovementLabel } from "./stage2";
+import { checkHedgeWording } from "./hedgeCheck";
 import { streamPlainText, withClaudeGuard } from "./claudeGuard";
 import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 import {
@@ -272,7 +273,12 @@ async function generate(
     // 장문이 아닌 4개 종합 해석은 2분 안에 결과 또는 실패가 확정돼야 다음 단계를 막지 않는다.
     hardTimeoutMs: 120_000,
   }, `section-analysis:${label}`), { onUsage });
-  return normalizeSectionText(text);
+  const normalized = normalizeSectionText(text);
+  const hedgeViolations = checkHedgeWording(normalized);
+  if (hedgeViolations.length > 0) {
+    console.warn(`[sectionAnalysis] ${label} 헤지 워딩 경고:`, hedgeViolations);
+  }
+  return normalized;
 }
 
 /**

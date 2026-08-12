@@ -9,12 +9,26 @@ import { STAGE2_SYSTEM_PROMPT, STAGE2_COMBINED_SYSTEM_PROMPT, STAGE2_IMPROVEMENT
 
 const STAGE2_MODEL = process.env.ANTHROPIC_STAGE2_MODEL ?? "claude-sonnet-5";
 
+/** 인용문 안에서 근거/이유 구간을 별도로 지목하는 병렬 필드. quotes 자체(verbatim 안전장치
+ * 기준)는 절대 건드리지 않고, 표시용 볼드+밑줄 마킹은 stage2.ts 후처리(buildQuoteDisplayText)가
+ * 코드로만 스플라이스한다 — LLM이 직접 마크다운을 인용문에 써넣지 않는다. */
+export const QuoteEvidenceSchema = z.object({
+  quote: z.string().describe("quotes 배열의 인용문과 정확히 같은 문자열"),
+  reasonSpan: z
+    .string()
+    .describe("quote 안에서 근거·이유에 해당하는 연속된 부분 문자열. 원문 그대로, 새로 쓰거나 요약하지 않음"),
+});
+
 export const CategorySchema = z.object({
   label: z.string().describe("대괄호 없이 카테고리명만 (예: GPS 및 걸음 수 측정 부정확성 문제)"),
   clause_count: z
     .number()
     .describe("이 카테고리에 속하는 전체 clause 개수 — quotes에 포함 안 된 것도 포함"),
   quotes: z.array(z.string()).describe("입력 raw_clause 원문 중에서만 verbatim으로 선택한 대표 인용 2~4개"),
+  quoteEvidence: z
+    .array(QuoteEvidenceSchema)
+    .default([])
+    .describe("quotes 각각에 대해 근거/이유 구간을 지목 — 위치 표시용"),
   insight: z.string().describe("관찰·시사점 톤의 인사이트 한 줄. 화살표 기호는 붙이지 않음"),
 });
 
@@ -24,7 +38,15 @@ export const Stage2OutputSchema = z.object({
   categories: z.array(CategorySchema),
 });
 
-export type Stage2Output = z.infer<typeof Stage2OutputSchema>;
+/** LLM이 그대로 뱉은 원본 파싱 결과(quoteEvidence 포함, quotesDisplay 없음) — 인용 검증
+ * 직전까지만 쓴다. */
+export type Stage2RawOutput = z.infer<typeof Stage2OutputSchema>;
+
+/** 인용 검증(retainOnlyVerifiedQuotes) 이후의 최종 형태. quoteEvidence는 buildQuoteDisplayText가
+ * 소비하고 나면 더 필요 없어 제거하고, 표시용 quotesDisplay를 대신 채운다. */
+export type Stage2Output = Omit<Stage2RawOutput, "categories"> & {
+  categories: (Omit<Stage2RawOutput["categories"][number], "quoteEvidence"> & { quotesDisplay: string[] })[];
+};
 
 /** NPS 문항에만 함께 생성하는 원본 NPS 결과표 하단의 3개 판단문. */
 export const NpsJudgmentSchema = z.object({
@@ -62,7 +84,7 @@ export interface Stage2ClauseInput {
 }
 
 function assertCategoryCounts(
-  output: Stage2Output,
+  output: Stage2RawOutput,
   expectedClauseCount: number,
   traceLabel: string,
 ) {
@@ -80,13 +102,25 @@ function quoteCandidate(clause: Stage2ClauseInput): string | null {
 }
 
 /**
- * 모델 지시를 한 번 더 강제한다. 분석용 보정 문장이나 모델이 새로 만든 문장이 직접 인용으로
- * 저장되는 것을 막되, 카테고리·건수·인사이트(분석 결과)는 유지한다.
+ * quoteEvidence가 지목한 reasonSpan이 실제로 quote의 부분 문자열일 때만 볼드+밑줄 마커를
+ * 스플라이스한 표시용 문자열을 만든다. 마킹은 코드가 하고 LLM은 위치만 지목하므로 verbatim
+ * 검증(quotes 원본)과 완전히 분리된다. 일치하는 항목이 없으면 원본 quote를 그대로 쓴다.
  */
-function retainOnlyVerifiedQuotes<T extends { categories: Array<{ quotes: string[] }> }>(
-  output: T,
-  clauses: Stage2ClauseInput[],
-): T {
+export function buildQuoteDisplayText(
+  quote: string,
+  evidence: { quote: string; reasonSpan: string }[],
+): string {
+  const match = evidence.find((e) => e.quote === quote && e.reasonSpan && quote.includes(e.reasonSpan));
+  if (!match) return quote;
+  return quote.replace(match.reasonSpan, `**__${match.reasonSpan}__**`);
+}
+
+/**
+ * 모델 지시를 한 번 더 강제한다. 분석용 보정 문장이나 모델이 새로 만든 문장이 직접 인용으로
+ * 저장되는 것을 막되, 카테고리·건수·인사이트(분석 결과)는 유지한다. 검증을 통과한 quote마다
+ * quoteEvidence를 근거로 표시용 quotesDisplay도 함께 만든다.
+ */
+function retainOnlyVerifiedQuotes(output: Stage2RawOutput, clauses: Stage2ClauseInput[]): Stage2Output {
   const approvedQuotes = new Set(
     clauses.flatMap((clause) => {
       const candidate = quoteCandidate(clause);
@@ -100,7 +134,9 @@ function retainOnlyVerifiedQuotes<T extends { categories: Array<{ quotes: string
       if (!allowed) removedCount += 1;
       return allowed;
     });
-    return { ...category, quotes };
+    const quotesDisplay = quotes.map((quote) => buildQuoteDisplayText(quote, category.quoteEvidence));
+    const { quoteEvidence: _quoteEvidence, ...rest } = category;
+    return { ...rest, quotes, quotesDisplay };
   });
   if (removedCount > 0) {
     console.warn(`[qualitative] Stage2 removed ${removedCount} quote(s) that did not exactly match verified raw text`);
@@ -118,7 +154,7 @@ export async function runStage2({
   clauses: Stage2ClauseInput[];
 }): Promise<Stage2Output> {
   const traceLabel = `stage2:${questionLabel}:${polarity}`;
-  const { output } = await withClaudeGuard(traceLabel, () => streamStructured<Stage2Output>({
+  const { output } = await withClaudeGuard(traceLabel, () => streamStructured<Stage2RawOutput>({
     model: anthropic(STAGE2_MODEL),
     // 표준 문항 13개 × 극성 최대 3개 = 최대 39회 호출되는데 시스템 프롬프트가 매번 동일하다.
     // `instructions` 옵션 사용 이유는 stage1.ts의 상세 주석 참고(`system` 단축 파라미터는 이
@@ -201,6 +237,10 @@ export const Stage2ImprovementSubcategorySchema = z.object({
   label: z.string().describe("소분류명 — 홑화살괄호 없이 이름만 (예: 설명 부족)"),
   clause_count: z.number().describe("이 소분류에 속하는 전체 clause 개수"),
   quotes: z.array(z.string()).describe("이 소분류에 속하는 verbatim 인용 2~6개(가능한 많이, 원문 그대로)"),
+  quoteEvidence: z
+    .array(QuoteEvidenceSchema)
+    .default([])
+    .describe("quotes 각각에 대해 근거/이유 구간을 지목 — 위치 표시용"),
 });
 export const Stage2ImprovementMajorSchema = z.object({
   label: z.string().describe("대분류명 — 대괄호 없이 이름만 (예: 튜토리얼/가이드 고도화)"),
@@ -211,7 +251,18 @@ export const Stage2ImprovementOutputSchema = z.object({
   major_categories: z.array(Stage2ImprovementMajorSchema),
 });
 
-export type Stage2ImprovementOutput = z.infer<typeof Stage2ImprovementOutputSchema>;
+/** LLM 원본 파싱 결과(quoteEvidence 포함, quotesDisplay 없음). */
+export type Stage2ImprovementRawOutput = z.infer<typeof Stage2ImprovementOutputSchema>;
+
+/** 인용 검증(retainVerifiedImprovementQuotes) 이후의 최종 형태 — Stage2Output과 같은 원칙. */
+export type Stage2ImprovementOutput = Omit<Stage2ImprovementRawOutput, "major_categories"> & {
+  major_categories: (Omit<Stage2ImprovementRawOutput["major_categories"][number], "subcategories"> & {
+    subcategories: (Omit<
+      Stage2ImprovementRawOutput["major_categories"][number]["subcategories"][number],
+      "quoteEvidence"
+    > & { quotesDisplay: string[] })[];
+  })[];
+};
 
 /** 저장 시 flat categories.label에 두 계층을 인코딩하는 구분자(유닛 세퍼레이터 — 본문에 안 나옴). */
 export const IMPROVEMENT_LABEL_SEP = "";
@@ -222,9 +273,10 @@ export function decodeImprovementLabel(label: string): { major: string; sub: str
   const idx = label.indexOf(IMPROVEMENT_LABEL_SEP);
   return idx >= 0 ? { major: label.slice(0, idx), sub: label.slice(idx + 1) } : { major: "", sub: label };
 }
-/** 개선아이디어 2단 출력에서 verify 안 된 인용만 제거한다(각 소분류의 quotes 대상). */
+/** 개선아이디어 2단 출력에서 verify 안 된 인용만 제거한다(각 소분류의 quotes 대상). 검증을 통과한
+ * quote마다 quoteEvidence를 근거로 표시용 quotesDisplay도 함께 만든다. */
 function retainVerifiedImprovementQuotes(
-  output: Stage2ImprovementOutput,
+  output: Stage2ImprovementRawOutput,
   clauses: Stage2ClauseInput[],
 ): Stage2ImprovementOutput {
   const approvedQuotes = new Set(
@@ -242,7 +294,9 @@ function retainVerifiedImprovementQuotes(
         if (!allowed) removedCount += 1;
         return allowed;
       });
-      return { ...sub, quotes };
+      const quotesDisplay = quotes.map((quote) => buildQuoteDisplayText(quote, sub.quoteEvidence));
+      const { quoteEvidence: _quoteEvidence, ...rest } = sub;
+      return { ...rest, quotes, quotesDisplay };
     }),
   }));
   if (removedCount > 0) {
@@ -259,7 +313,7 @@ export async function runStage2ImprovementIdea({
   clauses: Stage2ClauseInput[];
 }): Promise<Stage2ImprovementOutput> {
   const traceLabel = `stage2-improvement:${questionLabel}`;
-  const { output } = await withClaudeGuard(traceLabel, () => streamStructured<Stage2ImprovementOutput>({
+  const { output } = await withClaudeGuard(traceLabel, () => streamStructured<Stage2ImprovementRawOutput>({
     model: anthropic(STAGE2_MODEL),
     instructions: {
       role: "system",

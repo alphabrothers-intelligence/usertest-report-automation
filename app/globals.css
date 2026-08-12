@@ -35,6 +35,39 @@ body {
   letter-spacing: -0.015em;
 }
 
+/* 원문 확인 진입점은 왼쪽 컨텍스트 탭으로 통합했다. 과거 저장 초안에 남은 본문 버튼도
+   화면과 복사 결과에서 다시 노출되지 않게 한다. */
+.report-rich-editor [data-quote-group-source] {
+  display: none !important;
+}
+
+/* 끝맺음 검토 표시는 웹 편집 화면의 교정 보조선이다. 배경이나 문장 색은 바꾸지 않아
+   보고서를 읽는 흐름을 방해하지 않고, PDF/HWPX/인쇄 결과에는 절대 포함하지 않는다. */
+.report-rich-editor [data-quote-ending-token="true"],
+.report-rich-static [data-quote-ending-token="true"] {
+  display: inline;
+  border-radius: 2px;
+  background: #ffd8d3;
+  box-shadow: 0 0 0 1px rgba(211, 107, 98, 0.08);
+}
+
+@media print {
+  .report-rich-editor [data-quote-ending-token="true"],
+  .report-rich-static [data-quote-ending-token="true"] {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+}
+
+@keyframes quote-context-updated {
+  from { background-color: #e6f2ff; border-color: #5ca5ef; transform: translateY(-2px); }
+  to { background-color: #f5f9ff; border-color: #c9daf2; transform: translateY(0); }
+}
+
+.quote-context-updated {
+  animation: quote-context-updated 420ms ease-out;
+}
+
 .report-rich-editor h1,
 .report-rich-editor h2,
 .report-rich-editor h3 {

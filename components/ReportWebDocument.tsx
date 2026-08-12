@@ -15,7 +15,7 @@
  * 그대로 쓴다(차트/표/글 3종 블록, `lib/report/sections.ts`). 정성 데이터가 아직 없는 자리는
  * `pending: true`로 정직하게 "정성 분석 승인 후 표시"라고 보여준다.
  */
-import { useEffect, useMemo, useRef, useState, type Dispatch, type FocusEvent, type MouseEvent, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type FocusEvent, type MouseEvent, type ReactNode, type SetStateAction } from "react";
 import { ReportPropertyPanel } from "@/components/ReportPropertyPanel";
 import { RichReportEditor, writeRichClipboard } from "@/components/RichReportEditor";
 import { EditableBarChart } from "@/components/report/EditableBarChart";
@@ -32,6 +32,7 @@ import { elementToClipboardHtml, fragmentToClipboardHtml } from "@/lib/report/do
 import { downloadSectionExportsAsZip, downloadSvgAsPng } from "@/lib/report/exportImage";
 import { htmlToPlainText } from "@/lib/report/richText";
 import { htmlToRtf } from "@/lib/report/rtfClipboard";
+import { reportQuoteEndingToken } from "@/lib/report/quoteEnding";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
@@ -49,6 +50,94 @@ type Props = {
   /** 저장된 보고서를 찾는 키. 없으면 데모이므로 AI 요약 호출은 숨긴다. */
   sourceFileUrl?: string | null;
 };
+
+type QuoteSourceResult = {
+  questionLabel: string;
+  groupLabel: string;
+  sources: Array<{
+    questionLabel?: string;
+    sectionLabel?: string;
+    respondentId: number;
+    originalResponse: string;
+    matches: Array<{ quote: string; matchStart: number; matchEnd: number; needsReview: boolean }>;
+  }>;
+};
+
+type QuoteCompletionTarget = { quote: string; originalResponse: string };
+type QuoteGroupReference = { groupLabel: string; sources: Array<{ questionKey: string; quotes: string[]; sectionLabel?: string }> };
+type AnalysisReference = { title: string; kind: "종합 분석" | "종합 결과" | "제언"; bullets: string[] };
+
+const ANALYSIS_EVIDENCE_BY_BLOCK: Record<string, AnalysisReference> = {
+  "feature-analysis-summary": { title: "기능별 중요 순위 및 만족도 종합 해석", kind: "종합 분석", bullets: ["정량 근거: 기능별 상대 중요도 점수, 만족도 평균, 응답 분포를 함께 비교했습니다.", "우선순위 판단: 중요도는 높지만 만족도가 낮은 기능과 두 값이 모두 낮은 기능을 구분했습니다.", "정성 근거: 각 기능의 부정·중립 인용문에서 반복된 튜토리얼 부족, 조작 불편, 진행 지연 등의 원인을 묶었습니다.", "해석 연결: 동일 문제가 여러 기능에서 반복되는 경우 개별 기능 문제가 아니라 온보딩·진행 구조의 공통 문제로 판단했습니다."] },
+  "core-analysis-summary": { title: "핵심구매요소 종합 분석", kind: "종합 분석", bullets: ["정량 근거: 구매요소별 선택 비율과 순위, 상위 응답 집중도를 확인했습니다.", "정성 근거: 구매 결정에 영향을 준 이유와 구매를 망설이게 한 이유를 원문 카테고리별로 대조했습니다.", "해석 연결: 선택 비율이 높고 같은 이유가 반복된 요소는 핵심 구매 동인으로, 중요하지만 불만이 반복된 요소는 개선 과제로 분류했습니다."] },
+  "four-values-analysis-summary": { title: "4대 가치 만족도 종합 해석", kind: "종합 분석", bullets: ["정량 근거: 기능적·감성적·사회공공적·경제적 가치의 평균, 표준편차와 항목 간 차이를 비교했습니다.", "정성 근거: 각 가치 표의 긍정 의견과 부정 의견을 모두 사용해 점수가 형성된 이유를 확인했습니다.", "해석 연결: 평균이 높아도 부정 의견이 반복되면 강점으로 단정하지 않고 유지·보완 과제로 분리했습니다."] },
+  "ux-analysis-summary": { title: "사용자 경험 품질 종합 분석", kind: "종합 분석", bullets: ["정량 근거: 실용성·즐거움의 세부 항목 평균과 항목별 격차를 확인했습니다.", "정성 근거: 사용 과정에서 반복된 이해 어려움, 조작 부담, 몰입 저하 의견을 함께 대조했습니다.", "해석 연결: 낮은 점수와 같은 불편 원문이 함께 확인된 경험 구간을 우선 개선 대상으로 판단했습니다."] },
+  "ux-analysis-detail": { title: "사용자 경험 품질 상세 분석", kind: "종합 분석", bullets: ["세부 근거: 각 UX 품질 항목의 평균과 응답 분포를 항목별로 비교했습니다.", "원문 대조: 점수가 낮거나 편차가 큰 항목에 연결된 실제 불편 의견을 확인했습니다.", "판단 방식: 정량 저점과 동일한 불편이 반복되는 사용 구간을 구체적인 개선 대상으로 정리했습니다."] },
+  "cross-age-analysis": { title: "연령대별 차이 분석", kind: "종합 분석", bullets: ["연령대별 기능 만족도, 4대 가치, UX 품질 평균을 동일 척도에서 비교했습니다.", "집단별 응답자 수가 작은 경우 평균 차이를 단정하지 않고 참고 경향으로 처리했습니다.", "특정 연령대에서만 반복된 저점과 불편 의견이 함께 있는지 확인해 차이의 원인을 해석했습니다."] },
+  "cross-gender-analysis": { title: "성별 차이 분석", kind: "종합 분석", bullets: ["성별 기능 만족도, 4대 가치, UX 품질 평균을 동일 척도에서 비교했습니다.", "평균 차이뿐 아니라 각 집단의 응답 분포와 표본 크기를 함께 확인했습니다.", "한 집단에서 반복적으로 나타난 불편 원문이 있을 때만 차이의 가능 원인으로 연결했습니다."] },
+  "nps-reference-and-summary": { title: "종합 만족도 및 NPS 결과", kind: "종합 결과", bullets: ["종합 만족도 점수와 점수대별 응답 분포를 사용했습니다.", "NPS는 추천 고객 비율에서 비추천 고객 비율을 뺀 값으로 산정했습니다.", "추천·중립·비추천 집단의 주관식 이유를 대조해 지수 상승·하락 요인을 함께 정리했습니다."] },
+  "conclusion-feature-summary-table": { title: "기능별 고객 경험 종합 결과", kind: "종합 결과", bullets: ["기능별 중요도와 만족도를 교차해 우선·차우선·비우선 개선 영역을 분류했습니다.", "각 기능의 긍정·부정·중립 의견에서 반복 빈도가 높은 요지를 연결했습니다.", "점수와 원문이 같은 방향을 가리키는지 확인한 뒤 최종 기능별 결과로 요약했습니다."] },
+  "conclusion-feature-summary-bullets": { title: "기능별 고객 경험 결과 요약", kind: "종합 결과", bullets: ["앞선 기능별 정량 순위와 만족도 결과를 다시 사용했습니다.", "기능별 정성 분석에서 반복된 강점·불편·개선 요구를 한 문장으로 압축했습니다.", "근거가 엇갈리는 기능은 확정 평가 대신 추가 검토 항목으로 남겼습니다."] },
+  "conclusion-evidence-table": { title: "사용성테스트 결과 종합", kind: "종합 결과", bullets: ["정량 근거: 기능, 가치, UX 품질, 종합 만족도와 NPS 결과를 종합했습니다.", "정성 근거: 긍정·부정·중립 의견의 반복 카테고리와 대표 인용문을 사용했습니다.", "종합 방식: 여러 섹션에서 동시에 확인되는 문제와 강점을 우선해 최종 결과를 구성했습니다."] },
+  "conclusion-strategy-table": { title: "개선 전략 제언", kind: "제언", bullets: ["중요도가 높고 만족도가 낮은 문제를 가장 먼저 검토했습니다.", "여러 기능에서 반복되거나 핵심 이용 흐름을 막는 문제에 더 높은 우선순위를 부여했습니다.", "사용자 원문에서 제시된 개선 요구와 실제 구현 가능 범위를 연결해 단기·중기 방향으로 정리했습니다."] },
+  "conclusion-feature-customer-table": { title: "기능별 고객 제언 종합", kind: "제언", bullets: ["기능별 부정 의견과 사용자가 직접 제안한 개선 아이디어를 모았습니다.", "서로 비슷한 요구는 하나의 실행 과제로 묶고 반복 응답이 많은 요구를 앞에 배치했습니다.", "정량 결과와 충돌하는 제언은 확정 과제가 아니라 추가 검증이 필요한 가설로 구분했습니다."] },
+};
+
+function markQuoteEndingReviews(root: HTMLElement) {
+  for (const note of Array.from(root.querySelectorAll<HTMLElement>("[data-quote-ending-note]"))) note.remove();
+  for (const previousMarker of Array.from(root.querySelectorAll<HTMLElement>("[data-quote-ending-token]"))) {
+    previousMarker.replaceWith(...Array.from(previousMarker.childNodes));
+  }
+  for (const quoteNode of Array.from(root.querySelectorAll<HTMLElement>("[data-quote-text]"))) {
+    const quote = decodeURIComponent(quoteNode.dataset.quoteText ?? "");
+    const token = reportQuoteEndingToken(quote);
+    quoteNode.removeAttribute("data-quote-ending-review");
+    if (!token) continue;
+    const paragraph = quoteNode.querySelector("p");
+    if (!paragraph) continue;
+    const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+    const target = [...textNodes].reverse().find((node) => node.data.lastIndexOf(token) >= 0);
+    if (!target) continue;
+    const start = target.data.lastIndexOf(token);
+    const marker = document.createElement("span");
+    marker.dataset.quoteEndingToken = "true";
+    marker.textContent = token;
+    target.replaceWith(document.createTextNode(target.data.slice(0, start)), marker, document.createTextNode(target.data.slice(start + token.length)));
+    quoteNode.dataset.quoteEndingReview = "true";
+  }
+}
+
+function cleanQuoteEndingReviewMarkup(root: HTMLElement) {
+  for (const note of Array.from(root.querySelectorAll<HTMLElement>("[data-quote-ending-note]"))) note.remove();
+  for (const marker of Array.from(root.querySelectorAll<HTMLElement>("[data-quote-ending-token]"))) marker.replaceWith(...Array.from(marker.childNodes));
+  for (const quoteNode of Array.from(root.querySelectorAll<HTMLElement>("[data-quote-ending-review]"))) quoteNode.removeAttribute("data-quote-ending-review");
+}
+
+function QuoteWithEndingReview({ quote, needsReview }: { quote: string; needsReview: boolean }) {
+  const token = needsReview ? reportQuoteEndingToken(quote) : null;
+  if (!token) return <>“{quote}”</>;
+  const start = quote.lastIndexOf(token);
+  return <>“{quote.slice(0, start)}<span className="decoration-dotted decoration-[1.5px] underline underline-offset-4 decoration-[#d36b62]">{token}</span>{quote.slice(start + token.length)}”</>;
+}
+
+function HighlightedOriginal({ text, matches }: { text: string; matches: QuoteSourceResult["sources"][number]["matches"] }) {
+  const ranges = matches
+    .filter((match) => match.matchStart >= 0 && match.matchEnd > match.matchStart)
+    .sort((a, b) => a.matchStart - b.matchStart);
+  if (ranges.length === 0) return <>{text}</>;
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  ranges.forEach((range, index) => {
+    if (range.matchStart < cursor) return;
+    parts.push(text.slice(cursor, range.matchStart));
+    parts.push(<mark key={`${range.matchStart}-${index}`} className="rounded bg-[#fff0a8] px-0.5 text-inherit">{text.slice(range.matchStart, range.matchEnd)}</mark>);
+    cursor = range.matchEnd;
+  });
+  parts.push(text.slice(cursor));
+  return <>{parts}</>;
+}
 
 /**
  * 개요/설문 항목처럼 병합 셀이 있는 표는 데이터 배열로 단순화하면 원본의 행·열 병합과
@@ -72,11 +161,14 @@ function EditableRichStaticBlock({
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor || editor.contains(document.activeElement)) return;
-    if (editor.innerHTML !== block.html) editor.innerHTML = block.html;
+    editor.innerHTML = block.html;
+    markQuoteEndingReviews(editor);
   }, [block.html]);
 
   function save() {
-    const html = editorRef.current?.innerHTML;
+    const clone = editorRef.current?.cloneNode(true) as HTMLElement | undefined;
+    if (clone) cleanQuoteEndingReviewMarkup(clone);
+    const html = clone?.innerHTML;
     if (html && html !== block.html) onChange({ ...block, html });
   }
 
@@ -221,11 +313,15 @@ function TableOfContents({
   // subitems는 featureNames와 무관(featureNames는 III의 긴 source 설명에만 쓰이는데, 여기선
   // 짧은 subitems만 렌더링하므로 빈 배열로 충분하다).
   const plan = useMemo(() => buildReportPlan([]), []);
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    navRef.current?.querySelector<HTMLElement>(`[data-toc-section="${activeSection}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [activeSection]);
   return (
-    <aside className="h-fit bg-transparent px-2 py-3 lg:sticky lg:top-36">
-      <p className="px-3 text-xl font-bold tracking-[-0.03em] text-[#20242c]">목차</p>
-      <p className="mb-5 mt-1 px-3 text-sm text-[#8a94a3]">보고서 작성 현황</p>
-      <nav className="space-y-1">
+    <aside className="h-fit bg-transparent px-1 py-2 lg:sticky lg:top-28 lg:flex lg:max-h-[calc(100vh-8rem)] lg:flex-col lg:overflow-hidden">
+      <p className="px-2 text-xl font-bold tracking-[-0.03em] text-[#20242c]">목차</p>
+      <p className="mb-2 mt-0.5 px-2 text-xs text-[#8a94a3]">보고서 작성 현황</p>
+      <nav ref={navRef} className="min-h-0 space-y-0.5 pr-1 lg:overflow-y-auto lg:overscroll-contain">
         {sections.map((section) => {
           const planSection = plan.find((p) => p.numeral === section.numeral);
           const active = section.numeral === activeSection;
@@ -235,19 +331,19 @@ function TableOfContents({
           // 분석 대기"라는 의미를 목차·본문에서 일관되게 유지한다(2026-07-26).
           const hasPending = section.blocks.some((block) => block.kind === "text" && block.pending);
           return (
-            <div key={section.numeral} className={`rounded-lg transition ${active ? "bg-[#eaf3ff]" : ""}`}>
+            <div key={section.numeral} data-toc-section={section.numeral} className={`rounded-md transition ${active ? "bg-[#eaf3ff]" : ""}`}>
               <button
                 type="button"
                 onClick={() => onSelect(section.numeral)}
-                className={`block w-full rounded-lg px-3 pt-2 text-left ${active ? "text-[#1473e6]" : "hover:bg-[#edf3fc]"}`}
+                className={`block w-full rounded-md px-2 py-1 text-left ${active ? "text-[#1473e6]" : "hover:bg-[#edf3fc]"}`}
               >
                 <span className="flex items-center gap-1.5">
-                  <span className={`text-sm font-bold ${active ? "text-[#1473e6]" : "text-[#4b5565]"}`}>
+                  <span className={`text-[13px] font-bold leading-[1.4] ${active ? "text-[#1473e6]" : "text-[#4b5565]"}`}>
                     {section.numeral}. {section.title}
                   </span>
                   {hasPending && (
                     <span
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                      className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold ${
                         active ? "bg-white text-[#1473e6]" : "bg-[#f7e9e2] text-[#a64d32]"
                       }`}
                     >
@@ -256,7 +352,7 @@ function TableOfContents({
                   )}
                 </span>
               </button>
-              <div className="px-3 pb-2">
+              <div className="px-2 pb-1">
                 {planSection?.subitems.map((item) => {
                   const headingBlock = section.blocks.find(
                     (block) => block.kind === "heading" && (block.variant === "numbered" || block.variant === "subheading") && block.text === item,
@@ -266,7 +362,7 @@ function TableOfContents({
                       key={item}
                       type="button"
                       onClick={() => onSelectSubitem(section.numeral, headingBlock?.id ?? null)}
-                      className={`mt-1 block w-full rounded px-2 py-1 text-left text-sm leading-4 ${
+                      className={`block w-full rounded px-2 py-0.5 text-left text-xs leading-[1.4] ${
                         active ? "text-[#397dc9] hover:bg-white/60" : "text-[#7a8493] hover:bg-[#edf3fc]"
                       }`}
                     >
@@ -382,10 +478,12 @@ export function BlockView({
   block,
   onChange,
   sourceFileUrl,
+  onQuoteSource,
 }: {
   block: ReportBlock;
   onChange: (next: ReportBlock) => void;
   sourceFileUrl?: string | null;
+  onQuoteSource?: (questionKey: string, quotes: string[], groupLabel: string) => void;
 }) {
   if (block.kind === "heading") {
     const saveHeading = (event: FocusEvent<HTMLElement>) => {
@@ -456,6 +554,7 @@ export function BlockView({
           label={block.label}
           value={block.html}
           onChange={(html) => onChange({ ...block, html })}
+          onQuoteSource={onQuoteSource}
         />
       </div>
     );
@@ -466,6 +565,7 @@ export function BlockView({
         label={block.label}
         value={block.html}
         onChange={(html) => onChange({ ...block, html })}
+        onQuoteSource={onQuoteSource}
       />
     </div>
   );
@@ -475,6 +575,264 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
   const documentContainerRef = useRef<HTMLDivElement>(null);
   const sectionElementsRef = useRef<Map<string, HTMLElement>>(new Map());
   const [selectedBlockRef, setSelectedBlockRef] = useState<{ numeral: string; id: string } | null>(null);
+  const [quoteSource, setQuoteSource] = useState<QuoteSourceResult | null>(null);
+  const [quoteSourceStatus, setQuoteSourceStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [quoteCompletion, setQuoteCompletion] = useState<{ completedQuote: string; changedFrom: string; changedTo: string } | null>(null);
+  const [quoteCompletionStatus, setQuoteCompletionStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [quoteCompletionTarget, setQuoteCompletionTarget] = useState<QuoteCompletionTarget | null>(null);
+  const [quotePanelOpen, setQuotePanelOpen] = useState(true);
+  const [analysisReference, setAnalysisReference] = useState<AnalysisReference | null>(null);
+  const [analysisBlockId, setAnalysisBlockId] = useState<string | null>(null);
+  const [recommendationStatus, setRecommendationStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [recommendationError, setRecommendationError] = useState<string | null>(null);
+  const quoteSourceRequestRef = useRef(0);
+  const activeEvidenceKeyRef = useRef<string | null>(null);
+
+  // RichReportEditor와 rich-static은 contentEditable 내부 HTML을 각각 effect에서 주입한다.
+  // 부모 렌더 시점에만 표시하면 그 뒤의 innerHTML 주입에 검토 마커가 덮일 수 있으므로,
+  // 보고서 전체 DOM이 확정된 다음 프레임에 모든 인용문을 한 번 더 표시한다.
+  useEffect(() => {
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        const container = documentContainerRef.current;
+        if (container) markQuoteEndingReviews(container);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [sections, quoteSource]);
+
+  async function openQuoteSource(sources: QuoteGroupReference["sources"], groupLabel: string) {
+    if (!sourceFileUrl) return;
+    const requestId = ++quoteSourceRequestRef.current;
+    setQuotePanelOpen(true);
+    setQuoteSourceStatus("loading");
+    setQuoteCompletion(null);
+    setQuoteCompletionStatus("idle");
+    setQuoteCompletionTarget(null);
+    const results = await Promise.all(sources.map(async (source) => {
+      const response = await fetch("/api/report-workspace/quote-source", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: sourceFileUrl, questionKey: source.questionKey, quotes: source.quotes }),
+      });
+      const result = await response.json();
+      return { response, result };
+    }));
+    if (requestId !== quoteSourceRequestRef.current) return;
+    const successful = results.filter(({ response, result }) => response.ok && result.ok);
+    if (successful.length === 0) {
+      setQuoteSourceStatus("error");
+      return;
+    }
+    setQuoteSource({
+      questionLabel: successful.length === 1 ? successful[0].result.questionLabel : `${successful.length}개 문항`,
+      groupLabel,
+      sources: successful.flatMap(({ result }, index) => result.sources.map((source: QuoteSourceResult["sources"][number]) => ({ ...source, questionLabel: result.questionLabel, sectionLabel: sources[index]?.sectionLabel }))),
+    });
+    setQuoteSourceStatus("idle");
+  }
+
+  useEffect(() => {
+    const container = documentContainerRef.current;
+    if (!container) return;
+    let frame = 0;
+
+    const quoteSourcesFor = (root: HTMLElement): { label: string; sources: QuoteGroupReference["sources"] } | null => {
+      const marker = root.querySelector<HTMLElement>("[data-quote-group-source]");
+      if (!marker) return null;
+      const label = root.matches("table") ? "긍정·부정 의견" : decodeURIComponent(marker.dataset.quoteGroupLabel ?? "인용 의견");
+      const grouped = new Map<string, { questionKey: string; quotes: string[]; sectionLabel?: string }>();
+      const quoteGroups = root.matches("[data-quote-group]") ? [root] : Array.from(root.querySelectorAll<HTMLElement>("[data-quote-group]"));
+      for (const quoteGroup of quoteGroups) {
+        const groupMarker = quoteGroup.querySelector<HTMLElement>("[data-quote-group-source]") ?? marker;
+        const questionKey = groupMarker.dataset.quoteGroupSource ?? "";
+        const sectionsInGroup = Array.from(quoteGroup.querySelectorAll<HTMLElement>("[data-quote-section]"));
+        const partitions = sectionsInGroup.length > 0 ? sectionsInGroup : [quoteGroup];
+        for (const partition of partitions) {
+          const sectionLabel = partition.dataset.quoteSection ?? decodeURIComponent(groupMarker.dataset.quoteGroupLabel ?? label);
+          const quotes = Array.from(partition.querySelectorAll<HTMLElement>("[data-quote-text]"))
+            .map((node) => decodeURIComponent(node.dataset.quoteText ?? "")).filter(Boolean);
+          if (questionKey && quotes.length > 0) grouped.set(`${questionKey}:${sectionLabel}`, { questionKey, quotes: [...new Set(quotes)], sectionLabel });
+        }
+      }
+      const sources = [...grouped.values()];
+      return sources.length > 0 ? { label, sources } : null;
+    };
+
+    const updateEvidence = () => {
+      const readingLine = window.innerHeight * 0.32;
+      const containerRect = container.getBoundingClientRect();
+      const readingPointX = Math.min(window.innerWidth - 1, Math.max(0, containerRect.left + Math.min(containerRect.width / 2, 360)));
+      const readingPoint = document.elementFromPoint(readingPointX, readingLine) as HTMLElement | null;
+      const reportSections = Array.from(container.querySelectorAll<HTMLElement>("[data-section-page]"));
+      const sectionAtReadingPoint = readingPoint?.closest<HTMLElement>("[data-section-page]");
+      const currentSection = sectionAtReadingPoint ?? reportSections.find((section) => {
+        const rect = section.getBoundingClientRect();
+        return rect.top <= readingLine && rect.bottom >= readingLine;
+      }) ?? reportSections.reduce<HTMLElement | null>((nearest, section) => {
+        if (!nearest) return section;
+        const rect = section.getBoundingClientRect();
+        const nearestRect = nearest.getBoundingClientRect();
+        return Math.abs(rect.top - readingLine) < Math.abs(nearestRect.top - readingLine) ? section : nearest;
+      }, null);
+      if (!currentSection) return;
+
+      // 화면의 실제 읽기선에 닿은 본문 블록만 사용한다. 섹션 전체에서 "가장 가까운" 근거를
+      // 고르면 근거가 없는 공백·표·그래프에서도 이전/다음 인용문이 잘못 붙는 문제가 생긴다.
+      const blockAtReadingPoint = readingPoint?.closest<HTMLElement>("[data-report-block-id]");
+      const blockId = blockAtReadingPoint?.dataset.reportBlockId ?? "";
+      const reference = ANALYSIS_EVIDENCE_BY_BLOCK[blockId];
+      const quoteGroupAtReadingPoint = readingPoint?.closest<HTMLElement>("[data-quote-group]");
+      const quoteScope = quoteGroupAtReadingPoint && !quoteGroupAtReadingPoint.closest("[data-analysis-evidence]") && !reference
+        ? quoteGroupAtReadingPoint.closest<HTMLElement>("table") ?? quoteGroupAtReadingPoint
+        : null;
+
+      if (!reference && !quoteScope) {
+        const key = `none:${currentSection.dataset.sectionPage}`;
+        if (activeEvidenceKeyRef.current === key) return;
+        activeEvidenceKeyRef.current = key;
+        quoteSourceRequestRef.current += 1;
+        setQuoteSource(null);
+        setQuoteSourceStatus("idle");
+        setAnalysisReference(null);
+        setAnalysisBlockId(null);
+        setQuotePanelOpen(true);
+        return;
+      }
+
+      if (reference) {
+        const key = `analysis:${blockId}`;
+        if (activeEvidenceKeyRef.current === key) return;
+        activeEvidenceKeyRef.current = key;
+        quoteSourceRequestRef.current += 1;
+        setQuoteSource(null);
+        setQuoteSourceStatus("idle");
+        setQuoteCompletion(null);
+        setQuoteCompletionTarget(null);
+        setAnalysisReference(reference);
+        setAnalysisBlockId(blockId);
+        setQuotePanelOpen(true);
+        return;
+      }
+
+      const quoteContext = quoteScope ? quoteSourcesFor(quoteScope) : null;
+      if (!quoteContext) return;
+      const key = `quote:${quoteContext.label}:${quoteContext.sources.flatMap((source) => [source.questionKey, ...source.quotes]).join("|")}`;
+      if (activeEvidenceKeyRef.current === key) return;
+      activeEvidenceKeyRef.current = key;
+      setAnalysisReference(null);
+      setAnalysisBlockId(null);
+      void openQuoteSource(quoteContext.sources, quoteContext.label);
+    };
+
+    const schedule = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(updateEvidence);
+    };
+    schedule();
+    window.addEventListener("scroll", schedule, { passive: true });
+    // 보고서 바깥 레이아웃이 독립 스크롤 컨테이너로 바뀌어도 동일하게 동작한다.
+    document.addEventListener("scroll", schedule, { passive: true, capture: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      document.removeEventListener("scroll", schedule, { capture: true });
+      window.removeEventListener("resize", schedule);
+    };
+    // openQuoteSource는 선택된 컨텍스트가 바뀔 때만 호출되는 외부 요청 함수다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sections]);
+
+  async function regenerateRecommendation() {
+    if (!sourceFileUrl || recommendationStatus === "loading" || !analysisBlockId) return;
+    const target = analysisBlockId === "conclusion-strategy-table" ? "strategy" : analysisBlockId === "conclusion-feature-customer-table" ? "customer" : null;
+    if (!target) return;
+    setRecommendationStatus("loading");
+    setRecommendationError(null);
+    try {
+      const response = await fetch("/api/report-workspace/recommendations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: sourceFileUrl, target }),
+      });
+      const result = await response.json() as { ok: boolean; block?: ReportBlock; error?: string };
+      if (!response.ok || !result.ok || !result.block) throw new Error(result.error || "제언을 다시 생성하지 못했습니다.");
+      checkpoint();
+      setSections((previous) => previous.map((section) => ({
+        ...section,
+        blocks: section.blocks.map((block) => block.id === analysisBlockId ? result.block as ReportBlock : block),
+      })));
+      setRecommendationStatus("idle");
+    } catch (error) {
+      setRecommendationStatus("error");
+      setRecommendationError(error instanceof Error ? error.message : "제언을 다시 생성하지 못했습니다.");
+    }
+  }
+
+  async function generateQuoteCompletion(target: QuoteCompletionTarget) {
+    if (quoteCompletionStatus === "loading") return;
+    setQuoteCompletionTarget(target);
+    setQuoteCompletion(null);
+    setQuoteCompletionStatus("loading");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 25_000);
+    try {
+      const response = await fetch("/api/report-workspace/quote-completion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(target),
+        signal: controller.signal,
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        setQuoteCompletionStatus("error");
+        return;
+      }
+      setQuoteCompletion({ completedQuote: result.completedQuote, changedFrom: result.changedFrom, changedTo: result.changedTo });
+      setQuoteCompletionStatus("idle");
+    } catch {
+      setQuoteCompletionStatus("error");
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+  function applyQuoteCompletion() {
+    if (!quoteCompletion || !quoteCompletionTarget) return;
+    checkpoint();
+    const encodedQuote = encodeURIComponent(quoteCompletionTarget.quote);
+    setSections((previous) => previous.map((section) => ({
+      ...section,
+      blocks: section.blocks.map((block) => {
+        if (block.kind !== "text" && block.kind !== "rich-static") return block;
+        const doc = new DOMParser().parseFromString(block.html, "text/html");
+        const quoteNode = Array.from(doc.body.querySelectorAll<HTMLElement>("[data-quote-text]")).find((node) => node.dataset.quoteText === encodedQuote);
+        const quoteParagraph = quoteNode?.closest("[data-report-quote]")?.querySelector("p");
+        if (!quoteParagraph) return block;
+        quoteParagraph.textContent = `“${quoteCompletion.completedQuote}”`;
+        quoteParagraph.setAttribute("data-edited-quote", "true");
+        quoteNode?.setAttribute("data-quote-text", encodeURIComponent(quoteCompletion.completedQuote));
+        quoteNode?.querySelector("[data-quote-completion-source]")?.remove();
+        return { ...block, html: doc.body.innerHTML };
+      }),
+    })));
+    setQuoteSource((current) => current ? {
+      ...current,
+      sources: current.sources.map((source) => ({
+        ...source,
+        matches: source.matches.map((match) => match.quote === quoteCompletionTarget.quote
+          ? { ...match, quote: quoteCompletion.completedQuote, needsReview: false }
+          : match),
+      })),
+    } : current);
+    setQuoteCompletion(null);
+    setQuoteCompletionTarget(null);
+  }
 
   // 스크롤스파이 콜백 안에서 최신 activeSection/onActiveSectionChange를 읽기 위한 ref —
   // observer 자체는 섹션 개수가 바뀌지 않는 한 재구독할 필요가 없다(스크롤마다 activeSection이
@@ -614,9 +972,82 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
   }
 
   return (
-    <div className="mx-auto grid max-w-[1880px] gap-5 px-4 py-8 lg:grid-cols-[270px_minmax(0,1fr)_320px] lg:px-7">
+    <div className={`mx-auto grid max-w-[2200px] gap-5 px-4 py-8 lg:px-7 ${quotePanelOpen ? "lg:grid-cols-[250px_430px_minmax(0,1fr)_320px]" : "lg:grid-cols-[250px_52px_minmax(0,1fr)_320px]"}`}>
       <TableOfContents sections={sections} activeSection={activeSection} onSelect={scrollToSection} onSelectSubitem={scrollToSubitem} />
-      <article ref={documentContainerRef} className="flex min-w-0 flex-col items-center gap-10">
+      {!quotePanelOpen && (
+        <button type="button" onClick={() => setQuotePanelOpen(true)} className="h-fit rounded-lg border border-[#c9daf2] bg-white px-2 py-4 text-xs font-bold text-[#315c9c] shadow-sm lg:sticky lg:top-28" style={{ writingMode: "vertical-rl" }}>분석 근거</button>
+      )}
+      {quotePanelOpen && (
+        <aside className="h-fit rounded-xl border border-[#c9daf2] bg-white shadow-sm lg:sticky lg:top-36 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto">
+          <div className="flex items-start justify-between border-b border-[#e3e8ef] px-4 py-3">
+            <div><p className="text-xs font-semibold text-[#356df3]">분석 근거</p><p className="mt-1 text-sm font-bold text-[#263449]">{analysisReference ? "종합 해석의 참고 근거" : "인용문과 원문 대조"}</p></div>
+            <button type="button" onClick={() => setQuotePanelOpen(false)} className="rounded px-2 py-1 text-lg text-[#8a94a3] hover:bg-[#f2f5f9]" aria-label="원문 패널 접기">×</button>
+          </div>
+          <div className="p-4">
+            {analysisReference && !quoteSource && quoteSourceStatus === "idle" && (
+              <section key={analysisReference.title} className="quote-context-updated rounded-xl border border-[#c9daf2] bg-[#f5f9ff] p-4">
+                <p className="flex items-center gap-1.5 text-[11px] font-bold text-[#1473e6]"><span className="h-1.5 w-1.5 rounded-full bg-[#1473e6]" />현재 보고 있는 분석</p>
+                <p className="mt-1.5 text-[18px] font-bold leading-6 tracking-[-0.035em] text-[#1f3554]">{analysisReference.title}</p>
+                <p className="mt-2 inline-flex rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-[#315c9c]">{analysisReference.kind}</p>
+                <div className="mt-4 border-t border-[#d9e6f7] pt-3"><p className="text-sm font-bold text-[#354158]">이 내용이 생성된 근거</p><ul className="mt-2 space-y-2">{analysisReference.bullets.map((bullet) => <li key={bullet} className="flex gap-2 text-xs leading-5 text-[#53627a]"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[#5c83bc]" />{bullet}</li>)}</ul><p className="mt-3 rounded-lg bg-white p-2.5 text-[11px] leading-5 text-[#7a8799]">직접 인용문이 아니라 위 정량·정성 근거를 종합해 생성된 내용입니다.</p></div>
+                {analysisReference.kind === "제언" && sourceFileUrl && (
+                  <div className="mt-3 border-t border-[#d9e6f7] pt-3">
+                    <p className="text-xs font-bold text-[#354158]">제언 AI 작업</p>
+                    <p className="mt-1 text-[11px] leading-5 text-[#7a8799]">현재 정량·정성 근거는 유지하고 제언 초안만 다시 생성합니다. 생성 후 본문에서 직접 수정할 수 있습니다.</p>
+                    <button type="button" onClick={() => void regenerateRecommendation()} disabled={recommendationStatus === "loading"} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#1473e6] px-3 py-2.5 text-xs font-bold text-white hover:bg-[#0f65cf] disabled:cursor-wait disabled:opacity-70">
+                      {recommendationStatus === "loading" && <span className="inline-block size-3 animate-spin rounded-full border-2 border-white/45 border-t-white" />}
+                      {recommendationStatus === "loading" ? "근거를 바탕으로 다시 생성 중" : "AI로 제언 다시 생성"}
+                    </button>
+                    {recommendationStatus === "error" && <div className="mt-2 rounded-md bg-[#fff3f1] p-2 text-[11px] leading-5 text-[#b54747]">{recommendationError}<button type="button" onClick={() => void regenerateRecommendation()} className="ml-1 font-bold underline">다시 시도</button></div>}
+                  </div>
+                )}
+              </section>
+            )}
+            {!analysisReference && !quoteSource && quoteSourceStatus === "idle" && <section className="rounded-xl border border-[#e3e8ef] bg-[#f8fafc] p-4"><p className="text-sm font-bold text-[#53627a]">현재 영역의 분석 근거</p><p className="mt-2 text-xs leading-5 text-[#7a8799]">이 영역에는 직접 인용문이나 별도의 생성 해석이 없습니다. 결과 표·그래프 자체를 확인하는 구간입니다.</p></section>}
+            {!analysisReference && <>
+            {quoteSourceStatus === "loading" && <p className="text-sm text-[#748196]">원문을 찾고 있습니다...</p>}
+            {quoteSourceStatus === "error" && <p className="text-sm leading-6 text-[#b54747]">원본 응답에서 인용문을 찾지 못했습니다.</p>}
+            {quoteSource && quoteSourceStatus === "idle" && (
+              <>
+                <section key={`${quoteSource.groupLabel}-${quoteSource.questionLabel}`} className="quote-context-updated rounded-xl border border-[#c9daf2] bg-[#f5f9ff] p-3.5">
+                  <p className="flex items-center gap-1.5 text-[11px] font-bold text-[#1473e6]"><span className="h-1.5 w-1.5 rounded-full bg-[#1473e6]" />현재 보고 있는 분석</p>
+                  <p className="mt-1.5 text-[18px] font-bold leading-6 tracking-[-0.035em] text-[#1f3554]">{quoteSource.groupLabel}</p>
+                  <div className="mt-3 border-t border-[#d9e6f7] pt-2.5"><p className="text-[11px] font-bold text-[#66758b]">대상 문항</p><p className="mt-1 text-[15px] font-semibold leading-6 tracking-[-0.025em] text-[#315c9c]">{quoteSource.questionLabel}</p></div>
+                </section>
+                <p className="mt-4 text-[11px] leading-5 text-[#7a8799]">사용된 인용문 {quoteSource.sources.reduce((count, source) => count + source.matches.length, 0)}건 · 원문 응답 {quoteSource.sources.length}건입니다. 확인할 응답만 펼쳐보세요.</p>
+                <div className="mt-3 space-y-3">
+                  {quoteSource.sources.map((source, sourceIndex) => (
+                    <div key={`${source.sectionLabel}-${source.respondentId}-${source.originalResponse}`}>
+                    {source.sectionLabel && source.sectionLabel !== quoteSource.sources[sourceIndex - 1]?.sectionLabel && <div className={`mb-2 mt-4 rounded-md px-3 py-2 text-sm font-bold ${source.sectionLabel.includes("부정") ? "bg-[#fff0e5] text-[#a64d32]" : source.sectionLabel.includes("중립") ? "bg-[#eef0f3] text-[#596273]" : "bg-[#eaf3ff] text-[#315c9c]"}`}>{source.sectionLabel}</div>}
+                    <details open className="group rounded-lg border border-[#e3e8ef] bg-[#f7f9fc]">
+                      <summary className="cursor-pointer list-none p-3 [&::-webkit-details-marker]:hidden"><p className="text-xs font-bold text-[#315c9c]">{source.questionLabel ? `${source.questionLabel} · ` : ""}응답자 {source.respondentId}번 <span className="ml-1 font-medium text-[#7a8799]">인용 {source.matches.length}건</span></p><p className="mt-1.5 line-clamp-2 text-xs leading-5 text-[#53627a]"><QuoteWithEndingReview quote={source.matches[0]?.quote ?? ""} needsReview={source.matches[0]?.needsReview ?? false} /></p><p className="mt-2 text-[11px] font-semibold text-[#315c9c] group-open:hidden">원문 펼쳐 보기</p><p className="mt-2 hidden text-[11px] font-semibold text-[#315c9c] group-open:block">원문 접기</p></summary>
+                      <div className="border-t border-[#e3e8ef] p-3">
+                        <div className="space-y-2">
+                          {source.matches.map((match) => (
+                            <div key={match.quote} className="rounded-md border border-[#dbe3ee] bg-white p-2.5">
+                              <p className="text-[10px] font-bold text-[#748196]">보고서 인용문</p>
+                              <p className="mt-1 text-xs leading-5 text-[#354158]"><QuoteWithEndingReview quote={match.quote} needsReview={match.needsReview} /></p>
+                              {match.needsReview && quoteCompletionTarget?.quote !== match.quote && <button type="button" onClick={() => void generateQuoteCompletion({ quote: match.quote, originalResponse: source.originalResponse })} className="mt-2 rounded-md border border-[#efc1bc] bg-[#fff7f6] px-2.5 py-1.5 text-xs font-bold text-[#b54747] hover:bg-[#fff0ee]">문장 끝맺음 자동 수정</button>}
+                              {quoteCompletionTarget?.quote === match.quote && quoteCompletionStatus === "loading" && <div className="mt-2 flex items-center gap-2 rounded-md border border-[#efc1bc] bg-[#fff7f6] px-2.5 py-2 text-xs font-semibold text-[#a64d32]"><span className="inline-block size-3 animate-spin rounded-full border-2 border-[#e7aaa4] border-t-[#b54747]" />문장 끝맺음을 확인하고 있습니다.</div>}
+                              {quoteCompletionTarget?.quote === match.quote && quoteCompletionStatus === "error" && <div className="mt-2 rounded bg-[#fff5f3] p-2 text-xs leading-5 text-[#b54747]">보완안을 만들지 못했습니다. 본문의 인용문은 그대로 유지되며 직접 수정할 수 있습니다.<button type="button" onClick={() => void generateQuoteCompletion({ quote: match.quote, originalResponse: source.originalResponse })} className="ml-1 font-bold underline">다시 시도</button></div>}
+                              {quoteCompletionTarget?.quote === match.quote && quoteCompletion && <div className="mt-2 rounded-md border border-[#cfe0f5] bg-[#f7faff] p-2"><p className="text-[10px] font-bold text-[#356df3]">보완안 · 끝어미만 변경</p><p className="mt-1 text-xs leading-5 text-[#354158]">{quoteCompletion.completedQuote.slice(0, quoteCompletion.completedQuote.length - quoteCompletion.changedTo.length)}<mark className="rounded bg-[#cfe8ff] text-[#174e91]">{quoteCompletion.changedTo}</mark></p><div className="mt-2 flex gap-2"><button type="button" onClick={() => { setQuoteCompletionTarget(null); setQuoteCompletion(null); setQuoteCompletionStatus("idle"); }} className="flex-1 rounded border border-[#ccd5e0] px-2 py-1.5 text-[11px] font-semibold text-[#667085]">유지</button><button type="button" onClick={applyQuoteCompletion} className="flex-1 rounded bg-[#1473e6] px-2 py-1.5 text-[11px] font-semibold text-white">적용</button></div></div>}
+                            </div>
+                          ))}
+                        </div>
+                        <p className="mb-1 mt-3 text-[10px] font-bold text-[#748196]">응답 원문</p>
+                        <p className="whitespace-pre-wrap text-sm leading-7 text-[#354158]"><HighlightedOriginal text={source.originalResponse} matches={source.matches} /></p>
+                      </div>
+                    </details>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            </>}
+          </div>
+        </aside>
+      )}
+      <article ref={documentContainerRef} className="flex min-w-0 flex-col items-start gap-10">
         {sections.map((section) => (
           <section
             key={section.numeral}
@@ -634,13 +1065,14 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
             {section.blocks.map((block) => (
               <div
                 key={block.id}
+                data-report-block-id={block.id}
                 role="button"
                 tabIndex={0}
                 onClick={() => setSelectedBlockRef({ numeral: section.numeral, id: block.id })}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedBlockRef({ numeral: section.numeral, id: block.id }); }}
                 className={`rounded transition-shadow ${selectedBlockRef?.numeral === section.numeral && selectedBlockRef.id === block.id ? "ring-2 ring-[#4fc8e8] ring-offset-2" : "hover:ring-1 hover:ring-[#c9d8ef]"}`}
               >
-                <BlockView block={block} sourceFileUrl={sourceFileUrl} onChange={(next) => updateBlock(section.numeral, block.id, next)} />
+                <BlockView block={block} sourceFileUrl={sourceFileUrl} onQuoteSource={(questionKey, quotes, groupLabel) => void openQuoteSource([{ questionKey, quotes }], groupLabel)} onChange={(next) => updateBlock(section.numeral, block.id, next)} />
               </div>
             ))}
           </section>

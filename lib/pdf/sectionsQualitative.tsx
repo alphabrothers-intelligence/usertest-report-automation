@@ -19,7 +19,7 @@ import type { CategoryRow, QuestionWithApprovedCategories, RecommendationRow } f
 import { decodeImprovementLabel } from "@/lib/pipeline/stage2";
 import { parseFourValueItemTexts } from "@/lib/pipeline/sectionAnalysis";
 import { SectionHeader, SubsectionHeader } from "./sectionsQuant";
-import { RichText } from "./richText";
+import { RichText, InlineRichText } from "./richText";
 
 const NPS_SCALE_PATH = path.join(process.cwd(), "public", "images", "nps-scale.png");
 
@@ -87,9 +87,9 @@ function CategoryBlock({ category }: { category: CategoryRow }) {
   return (
     <View style={styles.categoryBlock} wrap={false}>
       <Text style={styles.categoryLabel}>[{category.label}]</Text>
-      {category.quotes.slice(0, 3).map((q) => (
+      {category.quotes.slice(0, 3).map((q, i) => (
         <Text key={q} style={styles.quote}>
-          &ldquo;{q}&rdquo;
+          &ldquo;<InlineRichText value={category.quotes_display?.[i] ?? q} />&rdquo;
         </Text>
       ))}
       {/* "→"는 이 서브셋 폰트에서 "'"로 mojibake난다(richText.tsx의 arrow 블록과 같은 버그,
@@ -122,9 +122,9 @@ function ImprovementCategoryBlocks({ categories }: { categories: CategoryRow[] }
             return (
               <View key={sub.id} style={{ marginBottom: 4 }} wrap={false}>
                 <Text style={{ fontSize: 8.5, fontWeight: "bold", marginBottom: 2 }}>&lt;{subLabel}&gt;</Text>
-                {sub.quotes.map((q) => (
+                {sub.quotes.map((q, i) => (
                   <Text key={q} style={styles.quote}>
-                    &ldquo;{q}&rdquo;
+                    &ldquo;<InlineRichText value={sub.quotes_display?.[i] ?? q} />&rdquo;
                   </Text>
                 ))}
               </View>

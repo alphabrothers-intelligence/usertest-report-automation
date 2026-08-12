@@ -17,6 +17,7 @@ function improvementCategoryRows(questionId: string, stage2: Stage2ImprovementOu
       label: encodeImprovementLabel(major.label, sub.label),
       clause_count: sub.clause_count,
       quotes: sub.quotes,
+      quotes_display: sub.quotesDisplay,
       insight_draft: "",
     })),
   );
@@ -291,6 +292,7 @@ export async function saveQualitativeResults(
           label: c.label,
           clause_count: c.clause_count,
           quotes: c.quotes,
+          quotes_display: c.quotesDisplay,
           insight_draft: c.insight,
         }));
       });
@@ -356,6 +358,7 @@ export async function saveQualitativeQuestionResult(
         label: c.label,
         clause_count: c.clause_count,
         quotes: c.quotes,
+        quotes_display: c.quotesDisplay,
         insight_draft: c.insight,
       }));
     });
@@ -408,6 +411,7 @@ export interface CategoryRow {
   label: string;
   clause_count: number;
   quotes: string[];
+  quotes_display: string[] | null;
   insight_draft: string;
   insight_final: string | null;
   insight_approved: boolean;

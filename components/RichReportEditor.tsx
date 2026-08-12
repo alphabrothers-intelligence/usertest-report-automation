@@ -1,16 +1,44 @@
 "use client";
 
-import { useEffect, useRef, type ClipboardEvent } from "react";
+import { useEffect, useRef, type ClipboardEvent, type MouseEvent } from "react";
 import { htmlToPlainText, richTextToHtml, CLIPBOARD_FONT_FAMILY } from "@/lib/report/richText";
 import { htmlToRtf } from "@/lib/report/rtfClipboard";
+import { reportQuoteEndingToken } from "@/lib/report/quoteEnding";
 
 type RichReportEditorProps = {
   label: string;
   value: string;
   onChange: (html: string, plainText: string) => void;
+  onQuoteSource?: (questionKey: string, quotes: string[], groupLabel: string) => void;
 };
 
-const allowedTags = new Set(["P", "DIV", "H1", "H2", "H3", "STRONG", "B", "U", "EM", "I", "UL", "OL", "LI", "BR", "SPAN"]);
+const allowedTags = new Set(["P", "DIV", "H1", "H2", "H3", "STRONG", "B", "U", "EM", "I", "UL", "OL", "LI", "BR", "SPAN", "BUTTON"]);
+
+/** 화면에서만 쓰는 끝맺음 검토 표시. Stage 1의 규칙과 같은 최소 판정만 클라이언트에서
+ * 반복하며, 문장 내용이나 출력 서식에는 손대지 않는다. */
+function markQuoteEndingReview(quoteNode: HTMLElement, quote: string) {
+  quoteNode.querySelector("[data-quote-ending-note]")?.remove();
+  const token = reportQuoteEndingToken(quote);
+  if (!token) {
+    quoteNode.removeAttribute("data-quote-ending-review");
+    return;
+  }
+  quoteNode.dataset.quoteEndingReview = "true";
+  const paragraph = quoteNode.querySelector("p");
+  if (!paragraph) return;
+  const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+  const target = [...textNodes].reverse().find((node) => node.data.lastIndexOf(token) >= 0);
+  if (!target) return;
+  const start = target.data.lastIndexOf(token);
+  const before = target.data.slice(0, start);
+  const after = target.data.slice(start + token.length);
+  const marker = document.createElement("span");
+  marker.dataset.quoteEndingToken = "true";
+  marker.textContent = token;
+  target.replaceWith(document.createTextNode(before), marker, document.createTextNode(after));
+}
 
 /**
  * 보고서 본문에서만 쓰는 안전한 인라인 서식 목록.
@@ -86,7 +114,7 @@ function sanitizeReportHtml(value: string): string {
       continue;
     }
     for (const attribute of Array.from(element.attributes)) {
-      if (attribute.name === "data-report-kind") continue;
+      if (["data-report-kind", "data-report-quote", "data-quote-group", "data-quote-section", "data-analysis-evidence", "data-analysis-label", "data-edited-quote", "data-copy-ignore", "data-quote-source", "data-quote-text", "data-quote-group-source", "data-quote-group-label", "data-quote-group-bundle", "data-quote-completion-source", "data-quote-ending-review", "data-quote-ending-token", "data-quote-ending-note", "contenteditable", "type", "title", "hidden"].includes(attribute.name)) continue;
       if (attribute.name === "style") {
         const style = sanitizeStyle(attribute.value);
         if (style) element.setAttribute("style", style);
@@ -207,7 +235,7 @@ export async function writeRichClipboard(html: string) {
   await navigator.clipboard.writeText(plainText);
 }
 
-export function RichReportEditor({ label, value, onChange }: RichReportEditorProps) {
+export function RichReportEditor({ label, value, onChange, onQuoteSource }: RichReportEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -217,11 +245,29 @@ export function RichReportEditor({ label, value, onChange }: RichReportEditorPro
     // 표시한다 — 화면에 `**`·`__` 같은 제어문자가 노출되지 않게 한다(PRD 3.3.2).
     const looksLikeHtml = /<[a-z][\s\S]*>/i.test(value);
     editor.innerHTML = sanitizeReportHtml(looksLikeHtml ? value : richTextToHtml(value || ""));
+    for (const quoteNode of Array.from(editor.querySelectorAll<HTMLElement>("[data-quote-text]"))) {
+      const quote = decodeURIComponent(quoteNode.dataset.quoteText ?? "");
+      markQuoteEndingReview(quoteNode, quote);
+    }
   }, [value]);
 
   function emitChange() {
-    const html = sanitizeReportHtml(editorRef.current?.innerHTML ?? "");
+    const clone = editorRef.current?.cloneNode(true) as HTMLElement | undefined;
+    for (const note of Array.from(clone?.querySelectorAll<HTMLElement>("[data-quote-ending-note]") ?? [])) note.remove();
+    for (const marker of Array.from(clone?.querySelectorAll<HTMLElement>("[data-quote-ending-token]") ?? [])) marker.replaceWith(...Array.from(marker.childNodes));
+    for (const quoteNode of Array.from(clone?.querySelectorAll<HTMLElement>("[data-quote-ending-review]") ?? [])) quoteNode.removeAttribute("data-quote-ending-review");
+    const html = sanitizeReportHtml(clone?.innerHTML ?? "");
     onChange(html, htmlToPlainText(html));
+  }
+
+  function handleClick(event: MouseEvent<HTMLDivElement>) {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-quote-group-source]");
+    if (!button || !onQuoteSource) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const group = button.closest("[data-quote-group]");
+    const quotes = Array.from(group?.querySelectorAll<HTMLElement>("[data-quote-text]") ?? []).map((node) => decodeURIComponent(node.dataset.quoteText ?? "")).filter(Boolean);
+    onQuoteSource(button.dataset.quoteGroupSource ?? "", quotes, decodeURIComponent(button.dataset.quoteGroupLabel ?? ""));
   }
 
   /**
@@ -259,8 +305,8 @@ export function RichReportEditor({ label, value, onChange }: RichReportEditorPro
       suppressContentEditableWarning
       role="textbox"
       aria-label={`${label} 편집`}
-      title="본문을 바로 수정할 수 있습니다. 굵게·기울임·밑줄은 브라우저 단축키를 사용하세요."
       onInput={emitChange}
+      onClick={handleClick}
       onPaste={pasteMarkdownAsRichText}
       style={{ fontFamily: CLIPBOARD_FONT_FAMILY }}
       className="report-rich-editor min-h-7 rounded px-1 py-1 text-[15px] leading-8 text-[#202020] outline-none transition hover:bg-[#fafcff] focus:bg-[#fafcff] focus:ring-2 focus:ring-[#4fc8e8]/60"

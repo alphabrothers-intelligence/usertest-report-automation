@@ -36,6 +36,7 @@ import { decodeImprovementLabel } from "@/lib/pipeline/stage2";
 import { computeNiceRadarRange, computeBarWithAverageRange } from "@/lib/pdf/charts";
 import { colors, FONT } from "./theme";
 import { h1, h2, h3, body, markdownLite, placeholder, fieldRow, dataTable, spacer } from "./helpers";
+import { parseRichRuns } from "@/lib/report/richText";
 import { chartParagraph } from "./chartImage";
 import {
   renderVerticalBarChart,
@@ -60,6 +61,17 @@ function findQuestion(questions: QuestionWithApprovedCategories[], key: string) 
 function findRecommendation(recs: RecommendationRow[], section: string) {
   const r = recs.find((r) => r.section === section);
   return r ? (r.final ?? r.draft) : null;
+}
+
+/** 인용문(따옴표로 감싼)을 근거 구간 볼드+밑줄 강조 포함해 TextRun 배열로 만든다.
+ * display(quotes_display 항목)가 있으면 그 안의 **__..__** 마킹만 강조로 splice하고,
+ * 없으면 원문 quote를 강조 없이 그대로 쓴다. */
+function quoteRuns(display: string, color: string): TextRun[] {
+  return [
+    new TextRun({ text: '"', color }),
+    ...parseRichRuns(display).map((run) => new TextRun({ text: run.text, bold: run.bold, underline: run.underline ? {} : undefined, color })),
+    new TextRun({ text: '"', color }),
+  ];
 }
 
 /** Ⅲ/Ⅴ/Ⅷ의 "3종세트"(카테고리+대표인용+인사이트) — PDF의 QuestionQualitativeBlock과
@@ -98,15 +110,15 @@ function questionQualitativeBlock(question: QuestionWithApprovedCategories): Blo
         blocks.push(
           new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text: `[${c.label}] (${c.clause_count}건)`, bold: true })] }),
         );
-        for (const q of c.quotes.slice(0, 3)) {
+        c.quotes.slice(0, 3).forEach((q, qi) => {
           blocks.push(
             new Paragraph({
               indent: { left: 200 },
               spacing: { after: 20 },
-              children: [new TextRun({ text: `"${q}"`, color: colors.subtext })],
+              children: quoteRuns(c.quotes_display?.[qi] ?? q, colors.subtext),
             }),
           );
-        }
+        });
         blocks.push(
           new Paragraph({
             spacing: { after: 100 },
@@ -133,15 +145,15 @@ function questionQualitativeBlock(question: QuestionWithApprovedCategories): Blo
         blocks.push(
           new Paragraph({ spacing: { after: 20 }, children: [new TextRun({ text: `<${sub}>`, bold: true })] }),
         );
-        for (const q of c.quotes) {
+        c.quotes.forEach((q, qi) => {
           blocks.push(
             new Paragraph({
               indent: { left: 200 },
               spacing: { after: 20 },
-              children: [new TextRun({ text: `"${q}"`, color: colors.subtext })],
+              children: quoteRuns(c.quotes_display?.[qi] ?? q, colors.subtext),
             }),
           );
-        }
+        });
       }
     }
   }

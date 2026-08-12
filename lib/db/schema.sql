@@ -98,6 +98,10 @@ create table if not exists categories (
 
 create index if not exists categories_question_id_idx on categories (question_id);
 
+-- quotes와 나란한 표시용 배열(근거 구간에 **__..__** 마킹 포함). quotes 자체는 verbatim
+-- 검증 기준이라 건드리지 않고, 렌더링은 이 컬럼을 우선 쓴다(없으면 quotes로 폴백).
+alter table categories add column if not exists quotes_display text[];
+
 -- 제언 문단 (6.5절: 핵심구매요소 해석, 개발우선순위제언 등). 체크포인트 B 대상.
 create table if not exists recommendations (
   id uuid primary key default gen_random_uuid(),
