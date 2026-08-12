@@ -350,7 +350,7 @@ export function ReportStudio({
               {pdfUrl && <button type="button" onClick={() => setWorkspaceMode("pdf")} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${workspaceMode === "pdf" ? "bg-white text-[#1473e6] shadow-sm" : "text-[#667085]"}`}>PDF 미리보기</button>}
             </div>
             {pdfUrl && <a href={pdfUrl} className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-semibold text-[#475467] hover:bg-[#f7f9fc]">PDF 다운로드</a>}
-            <Link href="/" className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-medium text-[#475467] hover:bg-[#f7f9fc]">나가기</Link>
+            <Link href="/new" className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-medium text-[#475467] hover:bg-[#f7f9fc]">나가기</Link>
           </div>
         </div>
         <div className="border-t border-[#e4e8ef] bg-[#f8f9fc]">

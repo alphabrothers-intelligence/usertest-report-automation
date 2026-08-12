@@ -62,7 +62,6 @@ export function RecentReportsSidebar() {
       </div>
       <nav className="space-y-1 border-b border-[#e7ecf3] px-3 py-4 text-sm text-[#435066]">
         <Link href="/new" className="flex items-center gap-2 rounded-md bg-[#eef3f9] px-3 py-2 font-semibold text-[#243248]"><span aria-hidden>＋</span> 새 보고서 생성</Link>
-        <Link href="/" className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-[#f3f6fa]"><span aria-hidden>⌁</span> 보고서 도우미</Link>
       </nav>
       {/* 목록이 길어지면 한눈에 보기 힘들다는 피드백으로 접기/펼치기 가능하게 함(2026-08-04) —
           네이티브 <details>라 별도 상태 없이 브라우저가 열림/닫힘을 관리한다. 기본은 열림. */}
