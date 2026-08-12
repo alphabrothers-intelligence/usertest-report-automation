@@ -46,3 +46,6 @@ next-env.d.ts
 
 # claude code local state
 /.claude/
+
+# graphify 스킬 산출물(지식그래프 캐시·시각화) — 실행할 때마다 로컬에 생성되는 임시 파일
+/graphify-out/
