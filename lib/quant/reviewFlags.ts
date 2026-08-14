@@ -32,7 +32,7 @@ export function flagQuantStatsForReview(stats: QuantStats): ReviewFlag[] {
   if (stats.nps.npsScore < 0) {
     flags.push({
       sectionNumeral: "VIII",
-      targetBlockId: "nps-diagram",
+      targetBlockId: "nps-reference-and-summary",
       location: "종합만족도 및 NPS",
       message: `추천하겠다는 사람보다 추천하지 않겠다는 사람이 더 많아요. 계산 오류라는 뜻은 아니며, 어떤 불편이 이 결과를 만들었는지 다음 의견 분석에서 연결해 확인해주세요.`,
       severity: "info",

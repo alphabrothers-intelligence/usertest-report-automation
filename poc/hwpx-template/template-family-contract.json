@@ -1,0 +1,84 @@
+{
+  "version": 2,
+  "scope": "local template and renderer POC only; no existing service, database, or analysis-pipeline mutation",
+  "canonicalDocument": "HWPX template plus a shared structured document model",
+  "templateFamilies": {
+    "sw": {
+      "name": "SW 사용성 테스트 보고서",
+      "sourceTemplate": "data/[알파브라더스] 리바랩스_사용성테스트_결과보고서_0904_상연.hwpx",
+      "productTypes": ["sw"],
+      "requiredSections": [
+        "개요", "인적 사항 및 특성 조사", "기능별 고객 경험 평가",
+        "핵심구매요소", "4대 가치 만족도", "사용자 경험 품질 평가",
+        "교차 분석", "종합 만족도 및 NPS", "종합 결과 및 제언"
+      ],
+      "uniqueSections": ["기능 중요도·만족도 종합 해석", "사용자 경험 품질", "교차 분석", "SW 개선 전략"],
+      "featureAnalysis": {
+        "section": "Contents/section1.xml",
+        "featureBlocks": [
+          { "featureOrdinal": 1, "summarySlots": [243, 246, 248], "countSlots": [252, 253, 254], "polarityBlockContainers": [255, 277, 326] },
+          { "featureOrdinal": 2, "summarySlots": [348, 351, 354], "countSlots": [358, 359, 360], "polarityBlockContainers": [362, 388, 420] },
+          { "featureOrdinal": 3, "summarySlots": [444, 447, 450], "countSlots": [454, 455, 456], "polarityBlockContainers": [457, 469, 489] },
+          { "featureOrdinal": 4, "summarySlots": [524, 527, 530], "countSlots": [534, 535, 536], "polarityBlockContainers": [537, 560, 603] },
+          { "featureOrdinal": 5, "summarySlots": [630, 632, 634], "countSlots": [638, 639, 640], "polarityBlockContainers": [641, 660, 701] },
+          { "featureOrdinal": 6, "summarySlots": [723, 726, 729], "countSlots": [733, 734, 735], "polarityBlockContainers": [736, 750, 784] }
+        ]
+      }
+    },
+    "physical": {
+      "name": "실제품 사용성 테스트 보고서",
+      "sourceTemplate": "data/[알파브라더스] 케어클_사용성테스트_결과보고서_251028.hwpx",
+      "productTypes": ["physical"],
+      "requiredSections": [
+        "개요", "인적 사항 및 특성·경험 조사", "기능별 고객 경험 평가",
+        "고객 여정 기반 경험 평가", "핵심 구매 요소", "4대 가치 만족도",
+        "NPS 및 종합 만족도", "종합 결과 및 제언"
+      ],
+      "uniqueSections": ["고객 여정: 첫인상·개봉·첫 사용·반복 사용", "실제품 물리적 조작성", "패키지·구성품·사용 환경"],
+      "featureAnalysis": {
+        "section": "Contents/section1.xml",
+        "firstFeature": { "polarityBlockContainers": [328, 351, 394] },
+        "sharedPolarityInsertion": {
+          "required": true,
+          "parts": ["donut", "wordcloud", "positive-negative-neutral percentage/count table", "three summaries", "repeatable evidence blocks"],
+          "source": "DB categories[].clauseCount and original quotes"
+        }
+      },
+      "journey": { "section": "Contents/section1.xml", "startParagraph": 909, "analysisParagraph": 984 }
+    },
+    "unified": {
+      "name": "통합 사용성 테스트 보고서",
+      "sourceTemplate": "new canonical HWPX assembled from source-style block definitions; not the generic blank form",
+      "productTypes": ["ambiguous", "hybrid"],
+      "requiredSections": [
+        "개요", "인적 사항 및 특성 조사", "기능별 고객 경험 평가", "공통 정성 분석 모듈",
+        "핵심 구매 요소", "4대 가치 만족도", "NPS 및 종합 만족도", "종합 결과 및 제언"
+      ],
+      "conditionalSections": {
+        "swEvidencePresent": ["기능 중요도·만족도 종합 해석", "사용자 경험 품질", "교차 분석", "SW 개선 전략"],
+        "physicalEvidencePresent": ["고객 여정", "물리적 조작성", "패키지·구성품·사용 환경"]
+      },
+      "rule": "문항과 분석 결과가 존재하는 조건부 블록만 활성화한다. 두 원본의 XML/style ID를 직접 섞지 않고, 통합 기준 HWPX에 각 블록 스타일을 재정의한다."
+    }
+  },
+  "sharedPolarityModule": {
+    "order": ["donut", "wordcloud", "percentage/count table", "positive summary", "negative summary", "neutral summary", "repeatable category evidence"],
+    "countFormula": "sum(categories[].clauseCount by polarity) / sum(all polarity clauseCount) * 100",
+    "quotePolicy": "original quote text is preserved; overflow clones the source-template evidence block onto the next page",
+    "exportPolicy": "web-only review annotations are excluded from HWPX and PDF"
+  },
+  "webEditing": {
+    "initialRender": "pre-rendered paginated template surface plus immediate shared-document-model data binding",
+    "editableTargets": ["paragraph", "style run", "table cell", "chart dataset", "repeat block"],
+    "reflow": "When a save changes line/page flow, rebuild the affected HWPX range and replace the affected rendered page(s).",
+    "finalPreview": "PDF pages rendered from the same finalized HWPX version",
+    "download": "only the HWPX/PDF matching finalPreview.version is downloadable"
+  },
+  "qualityGates": [
+    "HWPX structure and namespace validation",
+    "source-template style preservation check",
+    "page/overflow check",
+    "final HWPX rendered PDF page check",
+    "web page version equals downloadable artifact version"
+  ]
+}

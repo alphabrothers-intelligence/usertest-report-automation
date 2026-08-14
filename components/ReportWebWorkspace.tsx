@@ -16,6 +16,7 @@ type ReportWebWorkspaceProps = {
   workspaceError?: string | null;
   onRetry: () => void;
   sourceFileUrl?: string | null;
+  onToolbarActionsChange?: (actions: { copy: () => void; openCorrections: () => void }) => void;
 };
 
 /**
@@ -34,6 +35,7 @@ export function ReportWebWorkspace({
   workspaceError,
   onRetry,
   sourceFileUrl,
+  onToolbarActionsChange,
 }: ReportWebWorkspaceProps) {
   return (
     <div data-workspace-status={workspaceStatus}>
@@ -48,6 +50,7 @@ export function ReportWebWorkspace({
         workspaceError={workspaceError}
         onRetry={onRetry}
         sourceFileUrl={sourceFileUrl}
+        onToolbarActionsChange={onToolbarActionsChange}
       />
     </div>
   );

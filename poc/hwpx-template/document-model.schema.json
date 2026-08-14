@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UsabilityReportDocumentModel",
+  "description": "페이지형 웹뷰와 HWPX 컴파일러가 함께 사용하는 문서 데이터 모델. 분석 파이프라인의 DB 결과를 바꾸지 않는다.",
+  "type": "object",
+  "required": ["version", "templateFamily", "artifactVersion", "identity", "sections"],
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "templateFamily": { "enum": ["sw", "physical", "unified"] },
+    "artifactVersion": { "type": "string", "description": "웹 페이지, HWPX, PDF의 동일 버전을 식별한다." },
+    "identity": {
+      "type": "object",
+      "required": ["companyName", "serviceOrProductName", "productType"],
+      "properties": {
+        "companyName": { "type": "string", "minLength": 1 },
+        "serviceOrProductName": { "type": "string", "minLength": 1 },
+        "productType": { "enum": ["sw", "physical", "ambiguous", "hybrid"] }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/section" }
+    },
+    "reviewAnnotations": {
+      "type": "array",
+      "description": "웹뷰 전용 끝맺음·근거·검토 표시. HWPX/PDF export에서 제외한다.",
+      "items": { "$ref": "#/$defs/reviewAnnotation" }
+    }
+  },
+  "$defs": {
+    "section": {
+      "type": "object",
+      "required": ["id", "title", "enabled", "pageBlocks"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "pageBlocks": { "type": "array", "items": { "$ref": "#/$defs/pageBlock" } }
+      }
+    },
+    "pageBlock": {
+      "type": "object",
+      "required": ["id", "kind", "templateRef", "content"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "enum": ["paragraph", "table", "chart", "image", "feature-analysis", "polarity-analysis", "repeat-block"] },
+        "templateRef": {
+          "type": "object",
+          "required": ["sectionXml", "anchor"],
+          "properties": {
+            "sectionXml": { "type": "string" },
+            "anchor": { "type": "string", "description": "원본 HWPX paragraph/table/image anchor" },
+            "repeatPrototypeAnchor": { "type": "string" }
+          }
+        },
+        "content": { "type": "object" },
+        "styleRuns": { "type": "array", "items": { "$ref": "#/$defs/styleRun" } },
+        "overflowPolicy": { "enum": ["reflow", "repeat-next-page", "block-save-required"] }
+      }
+    },
+    "styleRun": {
+      "type": "object",
+      "required": ["text", "styleRef"],
+      "properties": {
+        "text": { "type": "string" },
+        "styleRef": { "type": "string", "description": "원본 HWPX charPrIDRef/paraPrIDRef 매핑" },
+        "bold": { "type": "boolean" },
+        "underline": { "type": "boolean" },
+        "italic": { "type": "boolean" }
+      }
+    },
+    "reviewAnnotation": {
+      "type": "object",
+      "required": ["targetBlockId", "kind"],
+      "properties": {
+        "targetBlockId": { "type": "string" },
+        "kind": { "enum": ["quote-ending-review", "analysis-evidence", "quantitative-review"] },
+        "export": { "const": false }
+      }
+    }
+  }
+}

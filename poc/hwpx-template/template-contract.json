@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "scope": "local-poc-only",
+  "rendering": {
+    "canonicalArtifact": "HWPX",
+    "pdf": "canonical HWPX converted with Hancom-compatible renderer",
+    "webPreview": "rendered final PDF pages",
+    "editing": "structured paragraph/table/style-run edits, followed by HWPX rebuild"
+  },
+  "templates": {
+    "sw": {
+      "reference": "data/[알파브라더스] 리바랩스_사용성테스트_결과보고서_0904_상연.hwpx",
+      "referenceRole": "SW canonical layout",
+      "preserve": ["cover", "toc", "sections", "tables", "styles", "paragraph-spacing", "graph-frames", "images"],
+      "uniqueSections": ["기능별 고객 경험 평가", "교차 분석", "SW 개선방안"]
+    },
+    "physical": {
+      "reference": "data/[알파브라더스] 케어클_사용성테스트_결과보고서_251028.hwpx",
+      "referenceRole": "physical-product canonical layout",
+      "preserve": ["cover", "toc", "sections", "tables", "styles", "paragraph-spacing", "graph-frames", "images"],
+      "uniqueSections": ["고객 여정 기반 경험 평가", "실제품 사용 맥락"]
+    }
+  },
+  "sharedModules": {
+    "polarityAnalysis": {
+      "appliesTo": ["sw", "physical"],
+      "source": "DB qualitative categories and quotes",
+      "layout": [
+        "긍정·부정·중립 도넛 그래프",
+        "긍정·부정·중립 비율·건수 표",
+        "긍정·부정·중립 요약",
+        "극성별 카테고리·대표 인용문·인사이트"
+      ],
+      "rule": "리바랩스의 정성 분석 시각 구조를 공통 HWPX 블록으로 정의하고 케어클에도 같은 블록을 삽입한다"
+    }
+  },
+  "overflowPolicy": {
+    "paragraph": "원본 문단 예산 내에서만 입력",
+    "quotes": "극성별 대표 인용문 수와 글자 수를 템플릿 슬롯 예산으로 제한",
+    "categories": "원본 고정 지면에는 중요도 순으로 선택, 전체 근거는 웹 분석 근거 패널에서 제공",
+    "pageGrowth": "승인된 반복 블록 외 페이지 증가 금지"
+  }
+}

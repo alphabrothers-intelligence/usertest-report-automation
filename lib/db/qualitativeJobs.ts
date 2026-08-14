@@ -237,10 +237,17 @@ export async function getQualitativeJobItems(jobId: string): Promise<Qualitative
 /** 여러 작업자가 동시에 요청해도 SKIP LOCKED로 서로 다른 문항/단계만 가져간다. */
 export async function claimNextQualitativeJobItem(jobId: string): Promise<QualitativeJobItemRow | null> {
   return sql.begin(async (tx) => {
+    // stage2를 stage1보다 먼저 배정한다(2026-08-12 변경, 실제 stuck 사고로 발견). stage2는
+    // 이미 stage1을 통과한 "거의 끝난" 문항이라 짧고 안정적으로 끝나는데, 예전엔 stage1을
+    // 항상 먼저 배정해서 — 특정 문항 몇 개가 hard timeout으로 계속 재시도되면 그 몇 개가
+    // 워커(동시성 3)를 전부 붙잡고, 이미 stage1을 마치고 stage2만 남은 문항들이 하나도
+    // 배정받지 못한 채 무한정 대기하는 게 실측됐다(job 하나가 19분+ 동안 0/14 완료).
+    // stage2를 먼저 비우면 어려운 문항이 재시도를 반복하는 동안에도 나머지 문항은 계속
+    // 끝까지 진행되고, 최악의 경우에도 실패는 그 어려운 문항 몇 개로 국한된다.
     const [candidate] = await tx<QualitativeJobItemRow[]>`
       select * from qualitative_job_items
       where job_id = ${jobId} and status = 'queued'
-      order by case phase when 'stage1' then 0 else 1 end, created_at
+      order by case phase when 'stage2' then 0 else 1 end, created_at
       for update skip locked
       limit 1
     `;

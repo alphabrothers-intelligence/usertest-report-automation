@@ -4,7 +4,7 @@
 // generateObject/streamObject가 deprecated이고 generateText({ output: Output.object(...) })가
 // 후속 API다(node_modules/ai/docs/03-ai-sdk-core/60-telemetry.mdx 참고). 강제되는 구조·의미는
 // 동일하므로 여기서는 최신 API로 구현한다.
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "@/lib/anthropic";
 import { Output } from "ai";
 import { z } from "zod";
 import { streamStructured, withClaudeGuard } from "./claudeGuard";

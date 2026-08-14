@@ -12,7 +12,7 @@ type RichReportEditorProps = {
   onQuoteSource?: (questionKey: string, quotes: string[], groupLabel: string) => void;
 };
 
-const allowedTags = new Set(["P", "DIV", "H1", "H2", "H3", "STRONG", "B", "U", "EM", "I", "UL", "OL", "LI", "BR", "SPAN", "BUTTON"]);
+const allowedTags = new Set(["P", "DIV", "H1", "H2", "H3", "STRONG", "B", "U", "EM", "I", "UL", "OL", "LI", "BR", "SPAN", "BUTTON", "MARK"]);
 
 /** 화면에서만 쓰는 끝맺음 검토 표시. Stage 1의 규칙과 같은 최소 판정만 클라이언트에서
  * 반복하며, 문장 내용이나 출력 서식에는 손대지 않는다. */
@@ -114,7 +114,7 @@ function sanitizeReportHtml(value: string): string {
       continue;
     }
     for (const attribute of Array.from(element.attributes)) {
-      if (["data-report-kind", "data-report-quote", "data-quote-group", "data-quote-section", "data-analysis-evidence", "data-analysis-label", "data-edited-quote", "data-copy-ignore", "data-quote-source", "data-quote-text", "data-quote-group-source", "data-quote-group-label", "data-quote-group-bundle", "data-quote-completion-source", "data-quote-ending-review", "data-quote-ending-token", "data-quote-ending-note", "contenteditable", "type", "title", "hidden"].includes(attribute.name)) continue;
+      if (["data-report-kind", "data-report-quote", "data-quote-group", "data-quote-section", "data-analysis-evidence", "data-analysis-label", "data-edited-quote", "data-edited-quote-diff", "data-copy-ignore", "data-quote-source", "data-quote-text", "data-quote-group-source", "data-quote-group-label", "data-quote-group-bundle", "data-quote-completion-source", "data-quote-ending-review", "data-quote-ending-token", "data-quote-ending-note", "contenteditable", "type", "title", "hidden"].includes(attribute.name)) continue;
       if (attribute.name === "style") {
         const style = sanitizeStyle(attribute.value);
         if (style) element.setAttribute("style", style);

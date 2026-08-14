@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import { withDefaultQuadrantZones, type ReportSectionContent } from "@/lib/report/sections";
 import { ReportWebWorkspace } from "@/components/ReportWebWorkspace";
+import { applyTextFormat, insertArrowLine, FormatButton } from "@/components/ReportWebDocument";
 
 const STORAGE_KEY = "usertest-report-studio-v3";
 
@@ -155,6 +156,9 @@ export function ReportStudio({
   const [nameSaving, setNameSaving] = useState(false);
   const [draftSaving, setDraftSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // 텍스트 서식·전체 복사·인용문 검토 버튼(2026-08-12, 헤더로 이전) — activeSection이
+  // 바뀔 때마다 ReportWebDocument가 최신 핸들러로 갱신해준다.
+  const [toolbarActions, setToolbarActions] = useState<{ copy: () => void; openCorrections: () => void } | null>(null);
   const inlinePdfUrl = useMemo(() => withInlinePdf(pdfUrl), [pdfUrl]);
 
   useEffect(() => {
@@ -358,6 +362,22 @@ export function ReportStudio({
             <button type="button" title="되돌리기" onClick={undo} disabled={undoStack.length === 0} className="flex size-9 items-center justify-center rounded-md text-lg text-[#526174] hover:bg-white disabled:opacity-30">↶</button>
             <button type="button" title="다시 실행" onClick={redo} disabled={redoStack.length === 0} className="flex size-9 items-center justify-center rounded-md text-lg text-[#526174] hover:bg-white disabled:opacity-30">↷</button>
             <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
+            {workspaceMode === "web" && toolbarActions && (
+              <>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <FormatButton label="굵게" title="굵게" onApply={() => applyTextFormat("bold")} className="font-bold" />
+                  <FormatButton label="기울임" title="기울임" onApply={() => applyTextFormat("italic")} className="italic" />
+                  <FormatButton label="밑줄" title="밑줄" onApply={() => applyTextFormat("underline")} className="underline" />
+                  <FormatButton label="제언 화살표" title="→ 제언 문단 추가" onApply={insertArrowLine} />
+                </div>
+                <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button type="button" onClick={toolbarActions.copy} className="rounded border border-[#d7dce8] px-2.5 py-1.5 text-sm font-semibold text-[#315f9d] hover:bg-[#f2f7ff]">내용 전체 복사하기</button>
+                  <button type="button" onClick={toolbarActions.openCorrections} className="rounded border border-[#d7dce8] px-2.5 py-1.5 text-sm font-semibold text-[#315f9d] hover:bg-[#f2f7ff]">인용문 일괄 검토</button>
+                </div>
+                <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
+              </>
+            )}
             <span className={`hidden text-xs md:block ${saveError ? "text-[#b54747]" : "text-[#8a94a3]"}`}>{saveError ?? (savedAt ? `저장됨 · ${savedAt}` : "수정 내용을 저장할 수 있습니다")}</span>
             <div className="ml-auto flex items-center gap-2">
               <button type="button" onClick={resetWorkspaceDraft} className="rounded-lg px-3 py-2 text-xs font-semibold text-[#667085] hover:bg-white">초기화</button>
@@ -379,6 +399,7 @@ export function ReportStudio({
           onRetry={retryWorkspaceLoad}
           sourceFileUrl={sourceFileUrl}
           workspaceError={workspaceError}
+          onToolbarActionsChange={setToolbarActions}
         />
       ) : (
         // 발행 보고서: 별도 웹 SVG를 재현한 화면이 아니라, ReportDocument.tsx가 실제로 만든

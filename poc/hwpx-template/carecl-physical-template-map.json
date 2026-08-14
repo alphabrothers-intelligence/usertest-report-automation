@@ -1,0 +1,46 @@
+{
+  "scope": "local POC only; no service route, DB schema, or analysis pipeline change",
+  "source": "data/[알파브라더스] 케어클_사용성테스트_결과보고서_251028.hwpx",
+  "templateKind": "physical-product",
+  "canonicalFormat": "HWPX",
+  "sections": [
+    { "id": "overview", "title": "Ⅰ. 개요", "source": "Carecl" },
+    { "id": "profile", "title": "Ⅱ. 인적 사항 및 특성 조사", "source": "Carecl" },
+    { "id": "feature-analysis", "title": "Ⅲ. 기능별 고객 경험 평가", "source": "Carecl", "section": 1, "firstFeatureStartParagraph": 312 },
+    { "id": "journey", "title": "Ⅳ. 고객 여정 기반 경험 평가", "source": "Carecl" },
+    { "id": "purchase-factor", "title": "Ⅴ. 핵심 구매 요소", "source": "Carecl" },
+    { "id": "four-values", "title": "Ⅵ. 4대 가치 만족도", "source": "Carecl", "positiveNegativeTable": true },
+    { "id": "nps", "title": "Ⅶ. NPS 지수 및 종합 만족도", "source": "Carecl" },
+    { "id": "conclusion", "title": "Ⅷ. 결과 종합 및 제언", "source": "Carecl" }
+  ],
+  "firstFeaturePolarityBlocks": {
+    "positive": { "section": 1, "containerParagraph": 328, "title": 329 },
+    "negative": { "section": 1, "containerParagraph": 351, "title": 352 },
+    "neutral": { "section": 1, "containerParagraph": 394, "title": 395 }
+  },
+  "sharedPolarityModule": {
+    "placeBefore": "each feature/value polarity analysis",
+    "requiredParts": [
+      "donut chart: positive/negative/neutral",
+      "percentage and clause-count table",
+      "three short polarity summaries",
+      "repeatable polarity category block: category, original quotes, insight"
+    ],
+    "dataRule": {
+      "numerator": "sum(categories[].clauseCount) for each polarity",
+      "denominator": "sum of the three polarity counts",
+      "quoteRule": "use original DB quote text without truncation or AI rewording"
+    },
+    "styleRule": "Clone Carecl title/table/body style references for the physical template; do not import Rivalabs XML styles into Carecl.",
+    "overflowRule": "Clone the physical-template category block and continue on the next page when a category or quote does not fit."
+  },
+  "renderingRule": {
+    "webPreview": "PDF pages generated from the finalized HWPX",
+    "editing": "edit HWPX paragraph/cell/style-run mappings, then regenerate HWPX and PDF",
+    "forbidden": [
+      "independent HTML report layout as the export source",
+      "truncating original quotes to fit a fixed block",
+      "mixing SW Rivalabs style IDs into Carecl"
+    ]
+  }
+}

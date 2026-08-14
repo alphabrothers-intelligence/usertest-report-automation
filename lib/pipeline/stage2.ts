@@ -1,6 +1,6 @@
 // Stage 2 — 극성별 카테고리 클러스터링 + 대표인용 + 인사이트 초안 (PRD 6.3절).
 // label·quotes는 Tier 1(자동 확정), insight는 Tier 2(AI 초안 + 체크포인트 B 필수 편집, 7.2절).
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "@/lib/anthropic";
 import { Output } from "ai";
 import { z } from "zod";
 import type { Polarity } from "./stage1";

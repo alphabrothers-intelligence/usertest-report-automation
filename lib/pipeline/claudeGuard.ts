@@ -46,15 +46,16 @@ function wait(ms: number) {
 export async function withClaudeGuard<T>(
   label: string,
   operation: () => Promise<T>,
-  options: { onUsage?: (usage: ClaudeUsageRecord) => void } = {},
+  options: { onUsage?: (usage: ClaudeUsageRecord) => void; maxAttempts?: number } = {},
 ): Promise<T> {
+  const maxAttempts = Math.max(1, options.maxAttempts ?? MAX_ATTEMPTS);
   let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const startedAt = Date.now();
     try {
       const result = await operation();
       const elapsedMs = Date.now() - startedAt;
-      console.info(`[claude] ${label} succeeded in ${elapsedMs}ms (attempt ${attempt}/${MAX_ATTEMPTS})`);
+      console.info(`[claude] ${label} succeeded in ${elapsedMs}ms (attempt ${attempt}/${maxAttempts})`);
       const usage = usageFromResult(result);
       logClaudeUsage(label, usage, { elapsedMs, attempt });
       options.onUsage?.(toClaudeUsageRecord(label, usage, { elapsedMs, attempt }));
@@ -63,8 +64,8 @@ export async function withClaudeGuard<T>(
       lastError = error;
       const elapsedMs = Date.now() - startedAt;
       const retryable = shouldRetry(error);
-      console.error(`[claude] ${label} failed in ${elapsedMs}ms (attempt ${attempt}/${MAX_ATTEMPTS}, status ${statusOf(error) ?? "unknown"}, retryable ${retryable})`, error);
-      if (attempt === MAX_ATTEMPTS || !retryable) break;
+      console.error(`[claude] ${label} failed in ${elapsedMs}ms (attempt ${attempt}/${maxAttempts}, status ${statusOf(error) ?? "unknown"}, retryable ${retryable})`, error);
+      if (attempt === maxAttempts || !retryable) break;
       // 모든 작업이 동시에 재시도하며 다시 레이트리밋을 치지 않도록 jitter를 준다.
       const delayMs = 700 * 2 ** (attempt - 1) + Math.floor(Math.random() * 400);
       console.warn(`[claude] ${label} retrying in ${delayMs}ms`);

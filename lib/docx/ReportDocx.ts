@@ -548,12 +548,16 @@ async function sectionConclusion(
   if (featureRecommendations.length === 0) {
     blocks.push(placeholder("승인된 기능개선제안이 아직 없습니다."));
   } else {
-    for (const r of featureRecommendations) {
+    // FEATURE_IMPROVEMENT_SYSTEM(prompts.ts) 출력 첫 줄은 짧은 제목이다 — 원본 54쪽처럼
+    // "N. 제목"을 굵게 붙이고 raw 기능명은 노출하지 않는다(PDF/웹 렌더러와 형식 통일, 2026-08-13).
+    featureRecommendations.forEach((r, i) => {
+      const text = r.final ?? r.draft;
+      const [title, ...restLines] = text.split(/\r?\n/);
       blocks.push(
-        new Paragraph({ spacing: { before: 100, after: 20 }, children: [new TextRun({ text: `[${r.section.replace("feature_improvement:", "")}]`, bold: true })] }),
-        body(r.final ?? r.draft),
+        new Paragraph({ spacing: { before: 100, after: 20 }, children: [new TextRun({ text: `${i + 1}. ${title.trim()}`, bold: true })] }),
+        body(restLines.join("\n")),
       );
-    }
+    });
   }
   blocks.push(h2("3. 기능별 고객 제언 종합"));
   const customerFeatures = parseCustomerRecommendations(customerRecommendations);

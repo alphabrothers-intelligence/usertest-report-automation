@@ -9,9 +9,9 @@
 // **`lib/pipeline/sectionAnalysis.ts`가 만든 섹션 텍스트를 압축 재료로 받는다** — 새 해석을
 // 더하지 않고 이미 확정된 문장에서 핵심만 추린다. sectionAnalyses가 없는 오래된 report(구버전
 // 캐시 등)에 대비해 raw 정량+카테고리 fallback 경로도 유지한다.
-import { anthropic } from "@ai-sdk/anthropic";
-import { generateText } from "ai";
-import { logClaudeUsage, type ClaudeUsageLike } from "@/lib/claudeUsage";
+import { anthropic } from "@/lib/anthropic";
+import { streamPlainText, withClaudeGuard } from "./claudeGuard";
+import type { ClaudeUsageLike } from "@/lib/claudeUsage";
 import type { QuantStats } from "@/lib/quant/compute";
 import type { QuestionWithApprovedCategories, SectionAnalyses } from "@/lib/db/reports";
 import { detectProductType, type ProductType } from "@/lib/report/productType";
@@ -234,20 +234,28 @@ export async function runResultSummary(params: {
     ? buildResultSummaryInput(params.quantStats, params.qualitative ?? [], productType, params.sectionAnalyses)
     : buildFallbackInput(params.quantStats, params.qualitative ?? [], productType);
 
-  const result = await generateText({
+  // 다른 파이프라인 호출(stage1/stage2/sectionAnalysis 등)과 달리 여기만 raw generateText를
+  // 써서 타임아웃 가드가 없었다 — Anthropic 연결이 간헐적으로 멈추는 기존에 이미 겪은 버그
+  // (claudeGuard.ts 상단 주석 참고)가 재발해 이 호출 하나가 무한정 멈추면 job 전체가
+  // "N/14에서 몇 시간째 멈춤"으로 보였다(2026-08-13 실측 재현, 156분+). withClaudeGuard+
+  // streamPlainText로 다른 호출들과 동일한 hardTimeout 보호를 준다.
+  const { text, usage } = await withClaudeGuard("result-summary", () => streamPlainText({
     model: anthropic(SUMMARY_MODEL),
-    system: hasSectionAnalyses ? SUMMARY_SYSTEM_PROMPT : FALLBACK_SYSTEM_PROMPT,
+    instructions: {
+      role: "system",
+      content: hasSectionAnalyses ? SUMMARY_SYSTEM_PROMPT : FALLBACK_SYSTEM_PROMPT,
+    },
     prompt: JSON.stringify(input, null, 2),
     maxOutputTokens: 2000,
     reasoning: "none",
-  });
-  logClaudeUsage("result-summary", result.usage);
-  if (result.usage) params.onUsage?.(result.usage);
+    hardTimeoutMs: 120_000,
+  }, "result-summary"));
+  if (usage) params.onUsage?.(usage as ClaudeUsageLike);
 
   // 사용자 경험 품질·교차 분석 행은 LLM 압축 없이 앞장 종합해석을 그대로 붙인다(원본 52쪽 형식).
   // sectionAnalyses가 있을 때만 append하며, 없으면 fallback 프롬프트가 이미 전 항목을 생성한다.
-  if (!hasSectionAnalyses || productType !== "sw") return result.text;
-  const parts = [result.text.trim()];
+  if (!hasSectionAnalyses || productType !== "sw") return text;
+  const parts = [text.trim()];
   if (params.sectionAnalyses?.uxQuality) {
     parts.push(`## 사용자 경험 품질 평가\n${uxOverviewOnly(params.sectionAnalyses.uxQuality)}`);
   }

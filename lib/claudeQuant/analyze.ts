@@ -1,4 +1,4 @@
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "@/lib/anthropic";
 import { generateText, Output } from "ai";
 import { ClaudeQuantReportSchema, type ClaudeQuantReport } from "./schema";
 import { logClaudeUsage } from "@/lib/claudeUsage";

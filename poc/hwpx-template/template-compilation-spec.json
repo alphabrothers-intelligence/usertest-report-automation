@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "scope": "local HWPX/PDF/web-preview POC; existing service and qualitative pipeline excluded",
+  "canonicalArtifact": "HWPX",
+  "renderingChain": ["HWPX template clone", "structured slot fill", "Hancom PDF export", "web displays exported PDF pages"],
+  "variants": {
+    "sw": {
+      "reference": "Rivalabs original HWPX",
+      "keeps": ["feature importance/satisfaction analysis", "SW feature analysis", "NPS", "four-value analysis", "recommendations"],
+      "commonPolarityModule": true
+    },
+    "physical": {
+      "reference": "Carecl original HWPX",
+      "keeps": ["physical product feature analysis", "customer journey", "purchase factors", "four-value analysis", "NPS", "recommendations"],
+      "commonPolarityModule": true
+    },
+    "unified": {
+      "reference": "new local HWPX assembled from SW and physical block definitions; never merge rendered HTML",
+      "includes": ["SW-specific blocks", "physical-specific blocks", "common polarity module", "four-value analysis", "NPS", "recommendations"]
+    }
+  },
+  "requiredInput": {
+    "identity": ["companyName", "serviceOrProductName", "productType"],
+    "quantitative": ["question labels", "mean", "standardDeviation", "distribution", "importance where supplied"],
+    "qualitative": ["polarity", "category label", "original quotes", "insight", "clauseCount"],
+    "conclusion": ["result summary", "recommendations", "recommendation rationale"]
+  },
+  "commonPolarityModule": {
+    "order": ["donut", "polarity count table", "three polarity summaries", "repeatable category block"],
+    "countFormula": "polarity percentage = sum(clauseCount in polarity) / sum(clauseCount in all polarities) * 100",
+    "categoryBlock": ["category title", "one or more original quotes", "generated insight"],
+    "overflow": "clone the original-style category block and continue on the next page; never truncate or rewrite an original quote",
+    "style": "reuse the source template charPrIDRef, paraPrIDRef, borderFillIDRef and picture/table frames"
+  },
+  "qualityGates": [
+    "HWPX structural validation",
+    "namespace and line-layout cache finalization",
+    "page/structure guard against the selected template",
+    "content guard: no unwanted source-company or placeholder remnants",
+    "Hancom visual check of page breaks, tables, charts and fonts",
+    "PDF is exported only from the finalized HWPX",
+    "web preview uses the exported PDF pages"
+  ],
+  "editingContract": {
+    "webEditTarget": "HWPX paragraph, table-cell and style-run mappings",
+    "rebuild": "each saved change re-generates HWPX and PDF",
+    "notAllowed": ["HTML-only layout source", "lossy quote shortening", "exporting review-only highlights into HWPX/PDF"]
+  }
+}

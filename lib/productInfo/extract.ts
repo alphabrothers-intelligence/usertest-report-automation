@@ -1,6 +1,6 @@
 // 기업/제품 소개 문서 원문에서 PRD 5.0절 필드를 구조화 추출한다. 이 프롬프트는 PRD 6장
 // 소속이 아니라 v1.4 신규 기능이므로 "6장 프롬프트 불변" 원칙과 무관하게 자유롭게 작성한다.
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "@/lib/anthropic";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { logClaudeUsage } from "@/lib/claudeUsage";

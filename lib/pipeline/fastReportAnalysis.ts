@@ -6,7 +6,7 @@
  * 인용, 인사이트만 쓰이므로 이 경로는 그 결과만 한 번에 받는다. 원문 인용은 응답 원문과
  * 다시 대조해 통과한 값만 저장한다.
  */
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "@/lib/anthropic";
 import { Output } from "ai";
 import { z } from "zod";
 import type { QuestionSpec } from "./questions";
@@ -115,20 +115,19 @@ export async function runFastReportAnalysis(
       },
       prompt: `'${spec.label}' 문항의 원문 응답입니다.\n\n${JSON.stringify(spec.inputs)}`,
       output: Output.object({ schema: Stage2ImprovementOutputSchema }),
-      // **2026-07-28 90s→120s로 상향(실측 근거)**: 14문항 전체 실행을 두 번 실측한 결과
-      // (Codex 1차: 4/14 실패, 이번 재검증: 5/14 실패), 실패한 호출은 전부 정확히 90.0X초에서
-      // 끊겼고 — Anthropic 쪽 오류가 아니라 이 hardTimeoutMs 자체가 원인이었다. 재시도로 성공한
-      // 호출들도 74~87초가 걸려 90초 턱밑까지 갔다 — "정상 실측 45초"라는 예전 가정은 순차 실행
-      // 기준이었고, 동시 3개 처리 중 뒤쪽 문항일수록 누적 부하로 45초보다 훨씬 오래 걸렸다.
-      // 120초로 올리되 90×2=180초보다 크게 늘리지 않은 이유는, withClaudeGuard가 최대 2회
-      // 재시도하므로 한 번의 run-next 요청이 최악의 경우 120×2=240초까지 걸릴 수 있는데, Vercel
-      // 서버리스 함수 제한(maxDuration=300초, app/api/qualitative-jobs/[jobId]/run-next/route.ts)
-      // 안에 60초 여유를 두고 들어와야 하기 때문이다.
-      hardTimeoutMs: 120_000,
+      // **2026-08-12 120s×2회 → 200s×1회로 변경(실측 근거)**: 같은 날 커밋 2a08c66이 인용문마다
+      // quoteEvidence(reasonSpan) 필드를 추가로 생성하게 만들면서 출력량이 늘어, 120초 상한을
+      // 반복적으로 넘기는 사고가 실측됐다(job 하나가 19분+ 0/14 완료로 멈춤). withClaudeGuard의
+      // 내부 2회 재시도는 "같은 120초 창을 두 번 반복"일 뿐이라 늘어난 생성 시간엔 도움이 안 되고
+      // 비용만 두 배로 든다 — 한 번을 더 길게 주는 쪽이 낫다. 200초 단일 시도면 Vercel
+      // maxDuration=300초(run-next/route.ts) 안에 100초 여유가 남는다. 대신 클레임 단위
+      // job-item 재시도(최대 3회, lib/db/qualitativeJobs.ts MAX_ITEM_ATTEMPTS)가 안전망 역할을
+      // 그대로 맡는다.
+      hardTimeoutMs: 200_000,
       // 2단 구조 + 소분류당 인용 다수라 예전 평면 구조(6000)보다 출력이 크다 — 넉넉히 상향.
       maxOutputTokens: 12000,
       reasoning: "none",
-    }, traceLabel), { onUsage: options.onUsage });
+    }, traceLabel), { onUsage: options.onUsage, maxAttempts: 1 });
     assertImprovementCounts(output, traceLabel);
     return {
       id: spec.id,
@@ -148,12 +147,12 @@ export async function runFastReportAnalysis(
     },
     prompt: standardPrompt(spec),
     output: Output.object({ schema: Stage2CombinedOutputSchema }),
-    // 90s→120s로 상향한 근거는 위 개선아이디어 분기 주석 참고 — 표준 문항 쪽이 실패 사례
-    // 대부분(펫 레이싱·기능적/심미적/경제적/사회공공적 가치·유사서비스·전반적만족도)이었다.
-    hardTimeoutMs: 120_000,
+    // 200s×1회로 변경한 근거는 위 개선아이디어 분기 주석 참고 — 표준 문항 쪽이 이번 사고의
+    // 실패 사례 대부분(유사서비스·전반적만족도·사회공공적 가치)이었다.
+    hardTimeoutMs: 200_000,
     maxOutputTokens: 8000,
     reasoning: "none",
-  }, traceLabel), { onUsage: options.onUsage });
+  }, traceLabel), { onUsage: options.onUsage, maxAttempts: 1 });
 
   const stage2ByPolarity: Partial<Record<Polarity, Stage2Output>> = {};
   const seen = new Set<Polarity>();

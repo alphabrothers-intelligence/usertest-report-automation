@@ -1,0 +1,23 @@
+{
+  "templateVariant": "unified",
+  "source": "알파브라더스_기업명_사용성테스트_결과보고서_공양식.hwpx",
+  "implemented": [
+    "company/service/product identity",
+    "six functional-analysis blocks with positive/negative/neutral evidence",
+    "four-value, purchase-factor, and NPS source slots retained",
+    "strategy task table populated from stored DB recommendations",
+    "three improvement task blocks populated from stored DB recommendations"
+  ],
+  "requiredBeforeFinalUnifiedTemplate": [
+    "map and clone a physical-product customer-journey block using only unified-template style references",
+    "map and clone a physical-product use-context block using only unified-template style references",
+    "provide a physical-product DB export to verify values and page overflow with real physical-product data",
+    "export finalized HWPX through Hancom and use its PDF pages as web preview"
+  ],
+  "integrity": {
+    "doesNotCallAI": true,
+    "doesNotModifyDatabase": true,
+    "doesNotModifyExistingService": true,
+    "doesNotRepresentSWDataAsPhysicalData": true
+  }
+}

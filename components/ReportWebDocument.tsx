@@ -50,6 +50,9 @@ type Props = {
   onRetry: () => void;
   /** 저장된 보고서를 찾는 키. 없으면 데모이므로 AI 요약 호출은 숨긴다. */
   sourceFileUrl?: string | null;
+  /** 텍스트 서식·전체 복사·인용문 검토 버튼을 스튜디오 상단 고정 헤더(ReportStudio.tsx)에서
+   * 그릴 수 있도록, 이 문서 컴포넌트 내부 핸들러를 위로 노출한다. */
+  onToolbarActionsChange?: (actions: { copy: () => void; openCorrections: () => void }) => void;
 };
 
 type QuoteSourceResult = {
@@ -80,7 +83,7 @@ const ANALYSIS_EVIDENCE_BY_BLOCK: Record<string, AnalysisReference> = {
   "conclusion-feature-summary-table": { title: "기능별 고객 경험 종합 결과", kind: "종합 결과", bullets: ["기능별 중요도와 만족도를 교차해 우선·차우선·비우선 개선 영역을 분류했습니다.", "각 기능의 긍정·부정·중립 의견에서 반복 빈도가 높은 요지를 연결했습니다.", "점수와 원문이 같은 방향을 가리키는지 확인한 뒤 최종 기능별 결과로 요약했습니다."] },
   "conclusion-feature-summary-bullets": { title: "기능별 고객 경험 결과 요약", kind: "종합 결과", bullets: ["앞선 기능별 정량 순위와 만족도 결과를 다시 사용했습니다.", "기능별 정성 분석에서 반복된 강점·불편·개선 요구를 한 문장으로 압축했습니다.", "근거가 엇갈리는 기능은 확정 평가 대신 추가 검토 항목으로 남겼습니다."] },
   "conclusion-evidence-table": { title: "사용성테스트 결과 종합", kind: "종합 결과", bullets: ["정량 근거: 기능, 가치, UX 품질, 종합 만족도와 NPS 결과를 종합했습니다.", "정성 근거: 긍정·부정·중립 의견의 반복 카테고리와 대표 인용문을 사용했습니다.", "종합 방식: 여러 섹션에서 동시에 확인되는 문제와 강점을 우선해 최종 결과를 구성했습니다."] },
-  "conclusion-strategy-table": { title: "개선 전략 제언", kind: "제언", bullets: ["중요도가 높고 만족도가 낮은 문제를 가장 먼저 검토했습니다.", "여러 기능에서 반복되거나 핵심 이용 흐름을 막는 문제에 더 높은 우선순위를 부여했습니다.", "사용자 원문에서 제시된 개선 요구와 실제 구현 가능 범위를 연결해 단기·중기 방향으로 정리했습니다."] },
+  "conclusion-strategy-table": { title: "개선 전략 제언", kind: "제언", bullets: ["중요도가 높고 만족도가 낮은 문제를 가장 먼저 검토했습니다.", "여러 기능에서 반복되거나 핵심 이용 흐름을 막는 문제에 더 높은 우선순위를 부여했습니다.", "기능 개선 제안(As-is/To-be)은 해당 기능의 부정 의견뿐 아니라, 응답자가 별도 '개선 아이디어 제안' 문항에 직접 서술한 요청 중 그 기능과 관련된 내용을 함께 근거로 사용했습니다.", "사용자 원문에서 제시된 개선 요구와 실제 구현 가능 범위를 연결해 단기·중기 방향으로 정리했습니다."] },
   "conclusion-feature-customer-table": { title: "기능별 고객 제언 종합", kind: "제언", bullets: ["기능별 부정 의견과 사용자가 직접 제안한 개선 아이디어를 모았습니다.", "서로 비슷한 요구는 하나의 실행 과제로 묶고 반복 응답이 많은 요구를 앞에 배치했습니다.", "정량 결과와 충돌하는 제언은 확정 과제가 아니라 추가 검증이 필요한 가설로 구분했습니다."] },
 };
 
@@ -388,11 +391,11 @@ function TableOfContents({
  * `execCommand`는 대상 contentEditable에 네이티브 "input" 이벤트를 발생시키므로, 그 블록의
  * RichReportEditor가 이미 붙여둔 onInput(emitChange)이 그대로 반응해 상태에 반영된다.
  */
-function applyTextFormat(command: "bold" | "italic" | "underline") {
+export function applyTextFormat(command: "bold" | "italic" | "underline") {
   document.execCommand(command);
 }
 
-function insertArrowLine() {
+export function insertArrowLine() {
   const active = document.activeElement as HTMLElement | null;
   if (!active || active.getAttribute("contenteditable") !== "true") return;
   const line = document.createElement("p");
@@ -408,7 +411,7 @@ function insertArrowLine() {
   active.dispatchEvent(new InputEvent("input", { bubbles: true }));
 }
 
-function FormatButton({ label, title, onApply, className }: { label: string; title: string; onApply: () => void; className?: string }) {
+export function FormatButton({ label, title, onApply, className }: { label: string; title: string; onApply: () => void; className?: string }) {
   return (
     <button
       type="button"
@@ -423,8 +426,11 @@ function FormatButton({ label, title, onApply, className }: { label: string; tit
 }
 
 /** 우측 액션 패널 — 현재 스크롤스파이로 활성화된 섹션 하나에 대해 동작한다(2026-07-25 신규,
- * 예전엔 같은 동작이 섹션 카드 하단에 인라인 버튼으로 있었다). */
-function ActionPanel({ activeTitle, onCopy, onDownload, onOpenCorrections, selectedBlock, onBlockChange }: { activeTitle: string; onCopy: () => void; onDownload: () => void; onOpenCorrections: () => void; selectedBlock: ReportBlock | null; onBlockChange: (next: ReportBlock) => void }) {
+ * 예전엔 같은 동작이 섹션 카드 하단에 인라인 버튼으로 있었다). 텍스트 서식·전체 복사·인용문
+ * 검토는 2026-08-12에 스튜디오 상단 고정 헤더(`ReportStudio.tsx`)로 옮겨서, 여기는 섹션 단위
+ * 동작(차트 저장)과 선택 요소 편집만 남는다 — 본문 위에 떠서 스크롤 시 내용을 가리던 별도
+ * 플로팅 툴바(`ReportToolbar`)는 삭제했다(사용자 실측 신고: "상단바가 보고서 내용을 침해"). */
+function ActionPanel({ activeTitle, onDownload, selectedBlock, onBlockChange }: { activeTitle: string; onDownload: () => void; selectedBlock: ReportBlock | null; onBlockChange: (next: ReportBlock) => void }) {
   return (
     // "선택 요소 편집"(예: 비교 집단이 많은 그룹 막대그래프)이 길어지면 sticky 패널 자체 높이가
     // 뷰포트를 넘어서는데, sticky는 top 위치에 고정된 뒤로는 페이지 스크롤을 따라가지 않으므로
@@ -436,39 +442,13 @@ function ActionPanel({ activeTitle, onCopy, onDownload, onOpenCorrections, selec
           없음 — 참고 이미지의 카드형 우측 패널에서 헤더 구획감을 참고했다). */}
       <div className="border-b border-[#e3e8ef] px-5 py-4"><p className="text-xs font-semibold text-[#8a94a3]">보고서 작업</p><p className="mt-1 text-base font-bold text-[#263449]">{activeTitle}</p></div>
       <div className="lg:min-h-0 lg:overflow-y-auto">
-      {/* 본문 텍스트를 클릭해 커서를 두면(또는 일부 선택하면) 여기 버튼으로 서식을 적용한다
-          (2026-07-28 — 문단마다 있던 개별 도구모음을 없앤 대신 이 패널로 모았다). */}
-      <div className="space-y-2 border-b border-[#e3e8ef] p-5">
-        <p className="text-sm font-bold text-[#263449]">텍스트 서식</p>
-        <p className="text-xs text-[#70675e]">본문에서 서식을 넣을 위치를 클릭(또는 드래그로 선택)한 뒤 눌러주세요.</p>
-        <div className="flex flex-wrap gap-1.5">
-          <FormatButton label="굵게" title="굵게" onApply={() => applyTextFormat("bold")} className="font-bold" />
-          <FormatButton label="기울임" title="기울임" onApply={() => applyTextFormat("italic")} className="italic" />
-          <FormatButton label="밑줄" title="밑줄" onApply={() => applyTextFormat("underline")} className="underline" />
-          <FormatButton label="제언 화살표" title="→ 제언 문단 추가" onApply={insertArrowLine} />
-        </div>
-      </div>
       <div className="space-y-2 p-5">
-      <button
-        type="button"
-        onClick={onCopy}
-        className="block w-full rounded-lg border border-[#b9cbe3] px-3 py-2.5 text-left text-sm font-semibold text-[#315f9d] hover:bg-[#f2f7ff]"
-      >
-        내용 전체 복사하기
-      </button>
       <button
         type="button"
         onClick={onDownload}
         className="block w-full rounded-lg bg-[#1473e6] px-3 py-2.5 text-left text-sm font-semibold text-white hover:bg-[#0f65cf]"
       >
         현재 섹션 차트 이미지 저장
-      </button>
-      <button
-        type="button"
-        onClick={onOpenCorrections}
-        className="block w-full rounded-lg border border-[#b9cbe3] px-3 py-2.5 text-left text-sm font-semibold text-[#315f9d] hover:bg-[#f2f7ff]"
-      >
-        인용문 일괄 검토
       </button>
       </div>
       <div className="border-t border-[#e3e8ef] p-5">
@@ -579,7 +559,7 @@ export function BlockView({
   );
 }
 
-export function ReportWebDocument({ sections, setSections, checkpoint, reportData, activeSection, onActiveSectionChange, workspaceStatus, workspaceError, onRetry, sourceFileUrl }: Props) {
+export function ReportWebDocument({ sections, setSections, checkpoint, reportData, activeSection, onActiveSectionChange, workspaceStatus, workspaceError, onRetry, sourceFileUrl, onToolbarActionsChange }: Props) {
   const documentContainerRef = useRef<HTMLDivElement>(null);
   const sectionElementsRef = useRef<Map<string, HTMLElement>>(new Map());
   const [selectedBlockRef, setSelectedBlockRef] = useState<{ numeral: string; id: string } | null>(null);
@@ -988,6 +968,13 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     await downloadSectionExportsAsZip(el, `${label}_차트.zip`);
   }
 
+  // 복사/인용검토 버튼을 스튜디오 상단 고정 헤더에서 그리려면, 이 컴포넌트 내부에서만
+  // 만들 수 있는 핸들러(activeSection 클로저 포함)를 부모로 노출해야 한다.
+  useEffect(() => {
+    onToolbarActionsChange?.({ copy: () => void copyActiveSection(), openCorrections: () => setCorrectionsPanelOpen(true) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection, onToolbarActionsChange]);
+
   if (!reportData || sections.length === 0) {
     const isLoading = workspaceStatus === "loading";
     const isError = workspaceStatus === "error";
@@ -1015,9 +1002,20 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     // minmax(0,1fr) 대신 minmax(520px,1fr)를 쓴다 — 0 바닥이면 사이드 패널(특히 분석 근거
     // 430px)을 다 펼친 채로 화면 폭이 1300px 미만(흔한 노트북 해상도)이면 본문 열이 거의
     // 0으로 짜부라져 한글이 한 글자씩 세로로 줄바꿈되는(사실상 전체 문서가 깨져 보이는) 실측
-    // 버그가 있었다(2026-08-12). 본문은 최소 520px을 보장하고, 그래도 안 맞으면(화면이 아주
-    // 좁으면) 그리드 전체를 가로 스크롤하게 한다 — 글자가 세로로 뭉개지는 것보다 훨씬 낫다.
-    <div className={`mx-auto grid max-w-[2200px] gap-5 overflow-x-auto px-4 py-8 lg:px-7 ${quotePanelOpen ? "lg:grid-cols-[250px_430px_minmax(520px,1fr)_320px]" : "lg:grid-cols-[250px_52px_minmax(520px,1fr)_320px]"}`}>
+    // 버그가 있었다(2026-08-12). 본문은 최소 520px을 보장하고, 화면이 그보다 좁으면 그리드가
+    // 뷰포트보다 넓어지는데 — 이 div에 `overflow-x-auto`를 직접 주지 않는다. CSS 스펙상
+    // overflow-x가 visible이 아니면 overflow-y도 강제로 auto로 계산되는데, 그러면 페이지
+    // 전체 높이만큼(23000px+) 있는 이 div가 스스로 "스크롤 컨테이너"가 되어버려 (a) 안의
+    // TableOfContents/ActionPanel의 position:sticky가 window가 아니라 이 컨테이너 기준으로
+    // 계산되면서 전혀 안 붙어 있게 되고 (b) 마우스 휠 스크롤 자체가 죽어버리는(스크롤이 전혀
+    // 안 되는) 실측 버그가 있었다(2026-08-12, Chrome DevTools Protocol로 synthetic wheel
+    // 이벤트를 직접 쏴서 scrollY가 전혀 안 움직이는 것까지 재현 확인). overflow-x-auto 없이
+    // 그냥 두면 grid가 body보다 넓어졌을 때 브라우저가 기본으로 페이지 자체를 가로 스크롤
+    // 가능하게 만들어준다 — 별도 overflow 지정이 필요 없다.
+    // 왼쪽 "분석 근거" 탭(펼쳤을 때 430px)이 본문보다 과하게 넓다는 지적(2026-08-12)으로
+    // 320px로, 우측 패널은 텍스트 서식·복사·인용검토를 스튜디오 상단 고정 헤더로 옮기며 남는
+    // 항목이 줄어 320px→260px로 줄였다. 본문 최소폭도 520px→560px로 올려 그만큼 더 넓게 보이게 한다.
+    <div className={`mx-auto grid max-w-[2020px] gap-5 px-4 py-8 lg:px-7 ${quotePanelOpen ? "lg:grid-cols-[250px_320px_minmax(560px,1fr)_260px]" : "lg:grid-cols-[250px_52px_minmax(560px,1fr)_260px]"}`}>
       <TableOfContents sections={sections} activeSection={activeSection} onSelect={scrollToSection} onSelectSubitem={scrollToSubitem} />
       {!quotePanelOpen && (
         <button type="button" onClick={() => setQuotePanelOpen(true)} className="h-fit rounded-lg border border-[#c9daf2] bg-white px-2 py-4 text-xs font-bold text-[#315c9c] shadow-sm lg:sticky lg:top-28" style={{ writingMode: "vertical-rl" }}>분석 근거</button>
@@ -1103,8 +1101,10 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
             }}
             data-section-page={section.numeral}
             // scroll-mt-24: 목차 클릭 시 studio 헤더(sticky)에 섹션 상단이 가려지지 않게.
-            // max-w-[794px]: A4 폭 비율 — "실제 문서 크기처럼" 요청에 맞춘 페이지 카드 크기.
-            className="w-full max-w-[860px] scroll-mt-36 border border-[#dfe3e9] bg-white px-7 py-9 shadow-[0_12px_34px_rgba(28,39,55,.11)] sm:px-12 sm:py-12"
+            // max-w-[960px]: A4 폭 비율 — "실제 문서 크기처럼" 요청에 맞춘 페이지 카드 크기
+            // (860px→960px, 2026-08-12: 본문 열 최소폭을 560px로 넓힌 것과 함께 보고서가
+            // 커 보이게 해달라는 요청 반영).
+            className="w-full max-w-[960px] scroll-mt-36 border border-[#dfe3e9] bg-white px-7 py-9 shadow-[0_12px_34px_rgba(28,39,55,.11)] sm:px-12 sm:py-12"
           >
             <SectionBanner numeral={section.numeral} title={section.title} />
             {section.blocks.map((block) => (
@@ -1125,9 +1125,7 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
       </article>
       <ActionPanel
         activeTitle={sections.find((section) => section.numeral === activeSection)?.title ?? "보고서 편집"}
-        onCopy={() => void copyActiveSection()}
         onDownload={() => void downloadActiveSectionZip()}
-        onOpenCorrections={() => setCorrectionsPanelOpen(true)}
         selectedBlock={selectedBlock}
         onBlockChange={(next) => {
           if (selectedBlockRef) updateBlock(selectedBlockRef.numeral, selectedBlockRef.id, next);

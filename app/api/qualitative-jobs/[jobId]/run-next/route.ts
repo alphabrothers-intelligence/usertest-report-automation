@@ -10,7 +10,7 @@ import {
   failQualitativeSectionAnalysisRun,
   saveQualitativeJobUsage,
 } from "@/lib/db/qualitativeJobs";
-import { getReportById, getQuestionsWithAllCategories, saveQualitativeQuestionResult, saveRecommendation } from "@/lib/db/reports";
+import { getReportById, getQuestionsWithAllCategories, saveQualitativeQuestionResult, saveRecommendation, saveReportResultSummary } from "@/lib/db/reports";
 import { detectProductType } from "@/lib/report/productType";
 import { loadWallaFromUrl } from "@/lib/walla/loadFromUrl";
 import { normalizeWallaRows } from "@/lib/walla/normalize";
@@ -21,7 +21,9 @@ import {
   type QualitativeStage1Checkpoint,
 } from "@/lib/pipeline/orchestrate";
 import { runSectionAnalysesForReport } from "@/lib/pipeline/sectionAnalysis";
-import { runDevPriorityRecommendation, runAllFeatureImprovementRecommendations } from "@/lib/pipeline/recommendation";
+import { runResultSummary } from "@/lib/pipeline/summary";
+import { toClaudeUsageRecord } from "@/lib/claudeUsage";
+import { runDevPriorityRecommendation, runAllFeatureImprovementRecommendations, combineDevPriorityText } from "@/lib/pipeline/recommendation";
 import { runFeatureCustomerRecommendations } from "@/lib/pipeline/customerRecommendations";
 import { runPolaritySummariesForReport } from "@/lib/pipeline/generatePolaritySummaries";
 import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
@@ -130,6 +132,43 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
         const completed = requested.filter((key) => Boolean(generated[key]));
         const failed = requested.filter((key) => !generated[key]);
         sectionAnalyses = { status: failed.length === 0 ? "completed" : "partial", completed, failed };
+
+        // Ⅸ.1 결과요약(result_summary)은 예전엔 PDF/DOCX 내보내기 시점에만 지연 생성·저장됐다
+        // (lib/pdf/assemble.ts 등) — 그래서 내보내기 전 웹뷰는 report.result_summary가 null이라
+        // conclusionEvidenceTableHtml의 규칙 기반 fallback 문구(예: "연령·성별별 차이는 교차
+        // 분석의 정량 차트와 표를 함께 참조합니다")만 보였다. 섹션 분석 직후 여기서 같이
+        // 생성·저장해 웹뷰도 내보내기 전에 실제 해석 문구를 볼 수 있게 한다. 실패해도 이미 저장된
+        // 섹션 분석 상태(sectionAnalyses)는 되돌리지 않도록 별도 try/catch로 격리한다.
+        if (report?.quant_stats) {
+          try {
+            const qualitativeForSummary = await getQuestionsWithAllCategories(job.report_id);
+            const summaryUsages: ClaudeUsageRecord[] = [];
+            const summaryStartedAt = Date.now();
+            const resultSummary = await runResultSummary({
+              quantStats: report.quant_stats,
+              qualitative: qualitativeForSummary,
+              sectionAnalyses: generated,
+              productType: report.product_type ?? detectProductType(report.quant_stats),
+              onUsage: (usage) => summaryUsages.push(toClaudeUsageRecord("result-summary", usage, {
+                elapsedMs: Date.now() - summaryStartedAt,
+                attempt: 1,
+              })),
+            });
+            await saveReportResultSummary(job.report_id, resultSummary);
+            try {
+              await Promise.all(summaryUsages.map((usage) => saveQualitativeJobUsage({
+                jobId,
+                itemId: null,
+                phase: "section_analysis",
+                usage,
+              })));
+            } catch (usageError) {
+              console.error("[qualitative-job] 결과요약 사용량 저장 실패", usageError);
+            }
+          } catch (summaryError) {
+            console.error("[qualitative-job] Ⅸ.1 결과요약 자동 생성 실패", summaryError);
+          }
+        }
       } catch (sectionError) {
         console.error("[qualitative-job] 섹션 분석 후속 단계 실패", sectionError);
         sectionAnalyses = { status: "partial", completed: [], failed: ["section-analysis"] };
@@ -166,7 +205,15 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
           ]);
 
           if (devPriorityResult.status === "fulfilled") {
-            await saveRecommendation({ reportId: job.report_id, section: "dev_priority", draft: devPriorityResult.value });
+            const { devPriority, overallDirection } = devPriorityResult.value;
+            await Promise.all([
+              saveRecommendation({
+                reportId: job.report_id,
+                section: "dev_priority",
+                draft: combineDevPriorityText(overallDirection, devPriority),
+              }),
+              saveRecommendation({ reportId: job.report_id, section: "overall_direction", draft: overallDirection }),
+            ]);
           } else {
             console.error("[qualitative-job] Ⅸ.2 개발우선순위제언 생성 실패", devPriorityResult.reason);
           }

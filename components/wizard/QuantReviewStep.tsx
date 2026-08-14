@@ -6,38 +6,49 @@ import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
 import type { QuantStats } from "@/lib/quant/compute";
 import { flagQuantStatsForReview, type ReviewFlag } from "@/lib/quant/reviewFlags";
 
+// "nps"(원본 척도 안내 이미지)는 우리가 계산한 값이 아니라 고정 참고 자산이라 그래프 검토
+// 대상에서 뺀다 — 대신 실제 계산 결과가 들어있는 nps-reference-and-summary(rich-static, 계산
+// 표)를 NPS_TABLE_BLOCK_ID로 특별 취급해 검토 목록에 넣는다.
 const VISUAL_BLOCK_KINDS = new Set<ReportBlock["kind"]>([
   "chart", "rank-composition", "stacked-bar", "grouped-bar", "radar",
-  "nps", "quadrant", "polarity",
+  "quadrant", "polarity",
 ]);
+const NPS_TABLE_BLOCK_ID = "nps-reference-and-summary";
 
-function isVisualBlock(block: ReportBlock): block is Extract<ReportBlock, { title: string }> {
-  return VISUAL_BLOCK_KINDS.has(block.kind);
+function reviewTitle(block: ReportBlock): string | null {
+  if (block.id === NPS_TABLE_BLOCK_ID) return "NPS 지수 계산 결과";
+  if (VISUAL_BLOCK_KINDS.has(block.kind) && "title" in block) return block.title ?? null;
+  return null;
 }
 
-function graphGuide(block: Extract<ReportBlock, { title: string }>) {
+function isReviewableBlock(block: ReportBlock): boolean {
+  return reviewTitle(block) !== null;
+}
+
+function graphGuide(block: ReportBlock) {
+  if (block.id === NPS_TABLE_BLOCK_ID) {
+    return { isTable: true, description: "추천·중립·비추천 응답 비율과 NPS 계산 결과를 보여주는 표예요.", check: "추천자보다 비추천자가 많은지 확인하면, 낮은 NPS의 원인을 사용자 의견에서 더 찾아야 하는지 판단할 수 있어요." };
+  }
   switch (block.kind) {
     case "rank-composition":
-      return { description: "응답자가 각 항목을 몇 순위로 골랐는지 보여주는 그래프예요.", check: "순위별 비율과 가장 많이 선택된 항목이 원본 응답과 맞는지 봐주세요." };
+      return { isTable: false, description: "응답자가 각 항목을 몇 순위로 골랐는지 보여주는 그래프예요.", check: "순위별 비율과 가장 많이 선택된 항목이 원본 응답과 맞는지 봐주세요." };
     case "stacked-bar":
-      return { description: "응답 집단 안에서 각 답변이 얼마나 차지하는지 보여주는 그래프예요.", check: "각 막대의 합계와 가장 큰 응답 구간이 예상과 맞는지 봐주세요." };
+      return { isTable: false, description: "응답 집단 안에서 각 답변이 얼마나 차지하는지 보여주는 그래프예요.", check: "각 막대의 합계와 가장 큰 응답 구간이 예상과 맞는지 봐주세요." };
     case "grouped-bar":
-      return { description: "연령이나 성별처럼 여러 집단의 점수를 나란히 비교하는 그래프예요.", check: "그룹별 응답자 수가 충분한지 확인해야 ‘어느 그룹이 더 만족한다’고 보고서에 쓸 수 있어요." };
+      return { isTable: false, description: "연령이나 성별처럼 여러 집단의 점수를 나란히 비교하는 그래프예요.", check: "그룹별 응답자 수가 충분한지 확인해야 ‘어느 그룹이 더 만족한다’고 보고서에 쓸 수 있어요." };
     case "radar":
-      return { description: "여러 사용 경험 항목의 강점과 약점을 한 번에 비교하는 그래프예요.", check: "유난히 높거나 낮은 항목이 실제 응답 흐름과 맞는지 봐주세요." };
-    case "nps":
-      return { description: "추천·중립·비추천 응답 비율과 NPS 결과를 보여주는 그래프예요.", check: "추천자보다 비추천자가 많은지 확인하면, 낮은 NPS의 원인을 사용자 의견에서 더 찾아야 하는지 판단할 수 있어요." };
+      return { isTable: false, description: "여러 사용 경험 항목의 강점과 약점을 한 번에 비교하는 그래프예요.", check: "유난히 높거나 낮은 항목이 실제 응답 흐름과 맞는지 봐주세요." };
     case "quadrant":
-      return { description: "중요도와 만족도를 함께 놓고 먼저 개선할 기능을 찾는 그래프예요.", check: "‘중요하지만 만족도가 낮은’ 기능은 최우선 개선 과제로 제안되므로, 실제로 먼저 개선할 대상이 맞는지 확인해주세요." };
+      return { isTable: false, description: "중요도와 만족도를 함께 놓고 먼저 개선할 기능을 찾는 그래프예요.", check: "‘중요하지만 만족도가 낮은’ 기능은 최우선 개선 과제로 제안되므로, 실제로 먼저 개선할 대상이 맞는지 확인해주세요." };
     case "polarity":
-      return { description: "사용자 의견이 긍정·부정·중립 중 어디에 많이 모였는지 보여주는 그래프예요.", check: "분류 비율과 대표 의견의 분위기가 서로 어긋나지 않는지 봐주세요." };
+      return { isTable: false, description: "사용자 의견이 긍정·부정·중립 중 어디에 많이 모였는지 보여주는 그래프예요.", check: "분류 비율과 대표 의견의 분위기가 서로 어긋나지 않는지 봐주세요." };
     default:
-      return { description: "항목별 결과의 크기와 순서를 비교하는 그래프예요.", check: "가장 높은 기능과 가장 낮은 기능은 보고서의 강점·개선점으로 이어져요. 원본 응답에서 예상한 결과와 크게 다르지 않은지 확인해주세요." };
+      return { isTable: false, description: "항목별 결과의 크기와 순서를 비교하는 그래프예요.", check: "가장 높은 기능과 가장 낮은 기능은 보고서의 강점·개선점으로 이어져요. 원본 응답에서 예상한 결과와 크게 다르지 않은지 확인해주세요." };
   }
 }
 
-function calculationEvidence(block: Extract<ReportBlock, { title: string }>, stats: QuantStats) {
-  if (block.kind === "nps") return {
+function calculationEvidence(block: ReportBlock, stats: QuantStats) {
+  if (block.id === NPS_TABLE_BLOCK_ID) return {
     source: "원본의 0~10점 추천 의향 응답",
     calculation: "9~10점은 추천자, 7~8점은 중립자, 0~6점은 비추천자로 나눈 뒤 ‘추천자 비율 − 비추천자 비율’로 계산",
     included: `${stats.nps.n}명`,
@@ -81,7 +92,7 @@ function calculationEvidence(block: Extract<ReportBlock, { title: string }>, sta
   };
   const isFeature = block.id === "feature-satisfaction";
   return {
-    source: isFeature ? "원본의 기능별 0~10점 만족도 응답" : `원본에서 ‘${block.title}’에 연결된 응답`,
+    source: isFeature ? "원본의 기능별 0~10점 만족도 응답" : `원본에서 ‘${reviewTitle(block)}’에 연결된 응답`,
     calculation: block.kind === "chart" && block.unit === "%" ? "같은 답변의 수를 전체 유효 응답 수로 나누어 비율로 계산" : "항목별 유효 점수를 더한 뒤 해당 항목의 응답자 수로 나눈 평균",
     included: isFeature ? `기능별 유효 응답 수(n)는 각각 다를 수 있음` : `최대 ${stats.respondentCount}명`,
     verify: isFeature ? "기능 이름과 만족도 점수 열이 서로 바뀌지 않고 연결됐는지 확인이 필요합니다." : "원본 문항과 그래프 항목이 올바르게 연결됐는지 확인이 필요합니다.",
@@ -173,7 +184,7 @@ export function QuantReviewStep({
   const quantitativeSections = sections
     .map((section) => ({
       ...section,
-      blocks: section.blocks.filter(isVisualBlock),
+      blocks: section.blocks.filter(isReviewableBlock),
     }))
     .filter((section) => section.blocks.length > 0);
 
@@ -214,25 +225,38 @@ export function QuantReviewStep({
         </div>
         {quantitativeSections.map((section) => {
           const sectionFlags = flags.filter((flag) => flag.sectionNumeral === section.numeral);
+          // 접힌 상태에서도 어떤 그래프가 검토 대상인지 보이도록, 배지 아래에 대상 그래프 제목을
+          // 나열한다(중복 제거) — 예전엔 건수만 보여서 열어보기 전까진 어디가 문제인지 몰랐다.
+          const flaggedTitles = [...new Set(
+            sectionFlags.map((flag) => {
+              const target = section.blocks.find((b) => b.id === flag.targetBlockId);
+              return (target ? reviewTitle(target) : null) ?? flag.location.split(" > ")[0];
+            }),
+          )];
           return (
             <details key={section.numeral} className="group rounded-lg border border-[#dde5ef] bg-white px-4 py-3 open:border-[#bfcdf8]" open={section.numeral === "III" || section.numeral === "VIII"}>
-              <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-[#354158]">
-                <span className="text-[#94a0b2] transition-transform group-open:rotate-90">▶</span>
-                <span>{section.numeral}. {section.title}</span>
-                {sectionFlags.length > 0 && <span className="ml-auto rounded-full bg-[#fff1db] px-2.5 py-1 text-[11px] font-bold text-[#946313]">검토 필요 {sectionFlags.length}</span>}
+              <summary className="flex cursor-pointer list-none flex-col gap-1 text-sm font-semibold text-[#354158]">
+                <span className="flex items-center gap-2">
+                  <span className="text-[#94a0b2] transition-transform group-open:rotate-90">▶</span>
+                  <span>{section.numeral}. {section.title}</span>
+                  {sectionFlags.length > 0 && <span className="ml-auto rounded-full bg-[#fff1db] px-2.5 py-1 text-[11px] font-bold text-[#946313]">검토 필요 {sectionFlags.length}</span>}
+                </span>
+                {flaggedTitles.length > 0 && (
+                  <span className="pl-6 text-[11px] font-normal text-[#946313]">확인 필요: {flaggedTitles.join(", ")}</span>
+                )}
               </summary>
               <div className="mt-4 border-t border-[#e8edf3] pt-4">
               {section.blocks.map((block) => {
-                const visualBlock = isVisualBlock(block) ? block : null;
-                const visual = visualBlock !== null;
-                const guide = visualBlock ? graphGuide(visualBlock) : null;
-                const evidence = visualBlock && stats ? calculationEvidence(visualBlock, stats) : null;
+                const title = reviewTitle(block);
+                const visual = title !== null;
+                const guide = visual ? graphGuide(block) : null;
+                const evidence = visual && stats ? calculationEvidence(block, stats) : null;
                 return (
                 <div key={block.id} className={visual ? `mx-auto mb-7 rounded-xl border border-[#e1e7f0] bg-[#fbfcfe] p-4 sm:p-5 ${block.kind === "quadrant" ? "max-w-[920px]" : "max-w-[760px]"}` : ""}>
                   {guide && (
                     <div className="mb-4">
-                      <span className="inline-flex rounded-full bg-[#edf2ff] px-2.5 py-1 text-[11px] font-bold text-[#356df3]">그래프 안내</span>
-                      <h4 className="mt-2 text-base font-bold tracking-[-0.015em] text-[#263449]">{visualBlock?.title}</h4>
+                      <span className="inline-flex rounded-full bg-[#edf2ff] px-2.5 py-1 text-[11px] font-bold text-[#356df3]">{guide.isTable ? "표 안내" : "그래프 안내"}</span>
+                      <h4 className="mt-2 text-base font-bold tracking-[-0.015em] text-[#263449]">{title}</h4>
                       <p className="mt-1 text-sm leading-6 text-[#66758b]">{guide.description}</p>
                       <p className="mt-2 rounded-lg bg-white px-3 py-2.5 text-sm leading-6 text-[#526076] ring-1 ring-[#e1e7f0]">
                         <strong className="mr-1 text-[#263449]">보고서에 반영하기 전 확인할 내용:</strong>{guide.check}

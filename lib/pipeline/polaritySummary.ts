@@ -7,7 +7,7 @@
 // Stage2 프롬프트(6.3절, 불변) 자체를 건드리지 않고 그 출력을 재료로 삼는 방식으로 답했다 —
 // 결과적으로 Stage2 이후 곧바로 이어지는 가벼운 후처리 호출이라 사용자 입장에서는 "같은 흐름의
 // 일부"처럼 느껴지되, 프롬프트 불변 원칙은 지킨다.
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "@/lib/anthropic";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import type { Polarity } from "./stage1";

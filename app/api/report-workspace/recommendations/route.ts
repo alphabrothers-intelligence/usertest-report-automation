@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getAllRecommendations, getQuestionsWithAllCategories, getReportByFileUrl, saveRecommendation } from "@/lib/db/reports";
 import { runFeatureCustomerRecommendations } from "@/lib/pipeline/customerRecommendations";
-import { runAllFeatureImprovementRecommendations, runDevPriorityRecommendation } from "@/lib/pipeline/recommendation";
+import { combineDevPriorityText, runAllFeatureImprovementRecommendations, runDevPriorityRecommendation } from "@/lib/pipeline/recommendation";
 import { buildReportWorkspaceSeed } from "@/lib/report/workspace";
 import { detectProductType } from "@/lib/report/productType";
 
@@ -27,7 +27,14 @@ export async function POST(request: Request) {
         runDevPriorityRecommendation(report.quant_stats, qualitative, productType),
         runAllFeatureImprovementRecommendations(report.quant_stats, qualitative),
       ]);
-      await saveRecommendation({ reportId: report.id, section: "dev_priority", draft: priority });
+      await Promise.all([
+        saveRecommendation({
+          reportId: report.id,
+          section: "dev_priority",
+          draft: combineDevPriorityText(priority.overallDirection, priority.devPriority),
+        }),
+        saveRecommendation({ reportId: report.id, section: "overall_direction", draft: priority.overallDirection }),
+      ]);
       await Promise.all(features.map((feature) => saveRecommendation({
         reportId: report.id,
         section: `feature_improvement:${feature.featureName}`,

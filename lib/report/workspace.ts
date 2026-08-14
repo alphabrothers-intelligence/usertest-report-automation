@@ -7,6 +7,7 @@ import type { CategoryCount } from "@/lib/quant/basic";
 import type { QuestionWithApprovedCategories, CategoryRow, RecommendationRow, SectionAnalyses } from "@/lib/db/reports";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
 import { splitCrossAnalysisText, parseFourValueItemTexts } from "@/lib/pipeline/sectionAnalysis";
+import { splitOverallDirection } from "@/lib/pdf/sectionsQualitative";
 import { decodeImprovementLabel } from "@/lib/pipeline/stage2";
 import { donutSvg, satisfactionHistogramSvg } from "@/lib/report/chartSvg";
 import {
@@ -877,13 +878,49 @@ function buildFeatureAnalysisText(
 
 /** 원본 분석 페이지처럼 제목띠와 본문을 하나의 표형 패널로 묶는다.
  * 편집 가능한 본문·복사·내보내기가 동일한 HTML 구조를 공유한다. */
-function originalAnalysisPanelHtml(title: string, content: string): string {
+function originalAnalysisPanelHtml(title: string, content: string, actionHtml = ""): string {
   return [
     `<div style="margin:6pt 0 12pt;border:0.75pt solid #8ea7de;border-top:3pt solid #4fc8e8;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.8pt;line-height:1.75;color:#111827">`,
-    `<p style="margin:0;padding:7pt 10pt;text-align:center;background-color:#bdcbed;border-bottom:0.75pt solid #8ea7de;font-weight:700;color:#111827">[ ${escapeHtml(title)} ]</p>`,
+    `<p style="margin:0;padding:7pt 10pt;text-align:center;background-color:#bdcbed;border-bottom:0.75pt solid #8ea7de;font-weight:700;color:#111827">${actionHtml}[ ${escapeHtml(title)} ]</p>`,
     `<div style="padding:10pt 14pt">${content}</div>`,
     `</div>`,
   ].join("");
+}
+
+/** sectionAnalysis.ts가 생성하는 섹션 단위 종합 해석 4종의 제목·구성.
+ * 여기 없는 크로스분석(crossAnalysis)은 웹 문서에 별도 재생성 버튼을 아직 두지 않는다. */
+export type SectionAnalysisRegenKey = "featureExperience" | "corePurchaseFactor" | "fourValues" | "uxQuality";
+const SECTION_ANALYSIS_TITLES: Record<SectionAnalysisRegenKey, string> = {
+  featureExperience: "기능별 중요 순위 및 만족도 종합 해석",
+  corePurchaseFactor: "핵심구매요소 중요 순위 및 만족도 종합 해석",
+  fourValues: "4대 가치 만족도 종합 해석",
+  uxQuality: "사용자 경험 품질 평가 결과 분석",
+};
+
+/** "정성 분석 대기"였던 섹션 종합 해석(핵심구매요소·UX 품질)이나, 저장된 LLM 분석 없이 규칙
+ * 기반 폴백만 나오던 섹션(기능별·4대 가치)에 공통으로 붙이는 재생성 버튼. 클릭하면
+ * /api/report-section-analysis가 sectionAnalysis.ts를 다시 돌려 이 패널을 새로 채운다. */
+function sectionAiRegenerateButtonHtml(section: SectionAnalysisRegenKey): string {
+  return `<button type="button" data-copy-ignore contenteditable="false" data-ai-summary="${escapeHtml(section)}" style="float:right;border:1px solid #315c9c;border-radius:3pt;background:#ffffff;color:#315c9c;padding:3pt 7pt;font-size:9pt;font-weight:700;cursor:pointer">AI 분석 재생성</button>`;
+}
+
+/** sectionAnalysis.ts가 만든 텍스트(analysis)를 패널 HTML로 렌더링한다. 웹 문서 최초
+ * 렌더링과 재생성 버튼 응답(app/api/report-section-analysis/route.ts) 양쪽이 이 함수 하나를
+ * 공유해, 버튼으로 교체된 패널이 페이지를 새로고침했을 때 나오는 것과 항상 같은 모양이 되게 한다. */
+export function sectionAnalysisPanelHtml(section: SectionAnalysisRegenKey, analysis: string): string {
+  const button = sectionAiRegenerateButtonHtml(section);
+  if (section === "uxQuality") {
+    const splitIndex = analysis.indexOf("[세부 해석]");
+    const overview = splitIndex >= 0 ? analysis.slice(0, splitIndex).trim() : analysis;
+    const detail = splitIndex >= 0 ? analysis.slice(splitIndex).trim() : "";
+    return (
+      originalAnalysisPanelHtml("사용자 경험 품질 평가 종합 해석", richTextToHtml(overview), button) +
+      (detail ? originalAnalysisPanelHtml("사용자 경험 품질 세부 해석", richTextToHtml(detail)) : "")
+    );
+  }
+  const title = SECTION_ANALYSIS_TITLES[section];
+  const panel = originalAnalysisPanelHtml(title, richTextToHtml(analysis), button);
+  return section === "corePurchaseFactor" ? panel : analysisEvidenceHtml(title, panel);
 }
 
 function buildFeatureSection(stats: QuantStats, qual: QuestionWithApprovedCategories[], analysis?: string): ReportBlock[] {
@@ -938,15 +975,19 @@ function buildFeatureSection(stats: QuantStats, qual: QuestionWithApprovedCatego
     priorityReferenceBlock({ id: "feature-priority-reference", title: "영역별 참고 지표" }),
     // 원본 29쪽: "2 기능별 고객 경험 분석"은 종합 해석 텍스트만(문항별 상세는 위 "1"에 있다).
     headingBlock({ id: "feature-analysis-heading", variant: "numbered", number: "2", text: "기능별 고객 경험 분석" }),
-    textBlock({
+    richStaticBlock({
       id: "feature-analysis-summary",
-      label: "기능별 중요 순위 및 만족도 종합 해석",
-      // 저장된 LLM 섹션 분석이 있으면 그걸 쓰고(원본 서술과 동일 구조), 없으면 규칙 기반 fallback.
-      html: analysisEvidenceHtml("기능별 중요 순위 및 만족도 종합 해석", originalAnalysisPanelHtml(
-        "기능별 중요 순위 및 만족도 종합 해석",
-        analysis ? richTextToHtml(analysis) : buildFeatureAnalysisText(stats, rankedImportance, featureQual),
-      )),
-      styled: true,
+      // 저장된 LLM 섹션 분석이 있으면 그걸 쓰고(원본 서술과 동일 구조), 없으면 규칙 기반
+      // fallback을 보여주되 "AI 분석 재생성" 버튼으로 언제든 sectionAnalysis.ts를 돌려 채울 수 있다.
+      html: analysis
+        ? sectionAnalysisPanelHtml("featureExperience", analysis)
+        : analysisEvidenceHtml("기능별 중요 순위 및 만족도 종합 해석", originalAnalysisPanelHtml(
+          "기능별 중요 순위 및 만족도 종합 해석",
+          buildFeatureAnalysisText(stats, rankedImportance, featureQual),
+          sectionAiRegenerateButtonHtml("featureExperience"),
+        )),
+      summaryQuestionKey: "featureExperience",
+      summaryKind: "section",
     }),
   ];
 }
@@ -969,14 +1010,18 @@ function buildCorePurchaseFactorSection(stats: QuantStats, analysis?: string): R
     }),
     // 원본 31쪽 "2 핵심구매요소 분석" — 정성 카테고리를 재료로 LLM이 생성(sectionAnalysis.ts).
     headingBlock({ id: "core-analysis-heading", variant: "numbered", number: "2", text: "핵심구매요소 분석" }),
-    analysis
-      ? textBlock({
-        id: "core-analysis-summary",
-        label: "핵심구매요소 중요 순위 및 만족도 종합 해석",
-        html: originalAnalysisPanelHtml("핵심구매요소 중요 순위 및 만족도 종합 해석", richTextToHtml(analysis)),
-        styled: true,
-      })
-      : textBlock({ id: "core-analysis-summary", label: "핵심구매요소 분석", html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`, pending: true }),
+    richStaticBlock({
+      id: "core-analysis-summary",
+      html: analysis
+        ? sectionAnalysisPanelHtml("corePurchaseFactor", analysis)
+        : originalAnalysisPanelHtml(
+          "핵심구매요소 중요 순위 및 만족도 종합 해석",
+          `<p>${PENDING_QUALITATIVE_NOTICE}</p>`,
+          sectionAiRegenerateButtonHtml("corePurchaseFactor"),
+        ),
+      summaryQuestionKey: "corePurchaseFactor",
+      summaryKind: "section",
+    }),
   ];
 }
 
@@ -1024,14 +1069,17 @@ function buildFourValuesSection(stats: QuantStats, qual: QuestionWithApprovedCat
       headers: ["가치", "평균", "표준편차"],
       rows: rows.map((r) => [r.label, r.mean, r.sd]),
     }),
-    textBlock({
+    richStaticBlock({
       id: "four-values-analysis-summary",
-      label: "4대 가치 만족도 종합 해석",
-      html: analysisEvidenceHtml("4대 가치 만족도 종합 해석", originalAnalysisPanelHtml(
-        "4대 가치 만족도 종합 해석",
-        analysis ? richTextToHtml(analysis) : buildFourValuesAnalysisText(rows, qual),
-      )),
-      styled: true,
+      html: analysis
+        ? sectionAnalysisPanelHtml("fourValues", analysis)
+        : analysisEvidenceHtml("4대 가치 만족도 종합 해석", originalAnalysisPanelHtml(
+          "4대 가치 만족도 종합 해석",
+          buildFourValuesAnalysisText(rows, qual),
+          sectionAiRegenerateButtonHtml("fourValues"),
+        )),
+      summaryQuestionKey: "fourValues",
+      summaryKind: "section",
     }),
   ];
 }
@@ -1079,30 +1127,20 @@ function buildUxQualitySection(stats: QuantStats, analysis?: string): ReportBloc
     // 배너 박스 두 개다(2026-07-30 원본 재대조로 하나의 박스에서 두 개로 분리) — 프롬프트가
     // "[세부 해석]" 마커로 두 부분을 구분하므로 그 지점에서 잘라 각자 배너에 담는다.
     headingBlock({ id: "ux-analysis-heading", variant: "numbered", number: "2", text: "사용자 경험 품질 평가 결과 분석" }),
-    ...(analysis
-      ? (() => {
-          const splitIndex = analysis.indexOf("[세부 해석]");
-          const overview = splitIndex >= 0 ? analysis.slice(0, splitIndex).trim() : analysis;
-          const detail = splitIndex >= 0 ? analysis.slice(splitIndex).trim() : "";
-          const blocks: ReportBlock[] = [
-            textBlock({
-              id: "ux-analysis-summary",
-              label: "사용자 경험 품질 평가 종합 해석",
-              html: originalAnalysisPanelHtml("사용자 경험 품질 평가 종합 해석", richTextToHtml(overview)),
-              styled: true,
-            }),
-          ];
-          if (detail) {
-            blocks.push(textBlock({
-              id: "ux-analysis-detail",
-              label: "사용자 경험 품질 세부 해석",
-              html: originalAnalysisPanelHtml("사용자 경험 품질 세부 해석", richTextToHtml(detail)),
-              styled: true,
-            }));
-          }
-          return blocks;
-        })()
-      : [textBlock({ id: "ux-analysis-summary", label: "사용자 경험 품질 평가 결과 분석", html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`, pending: true })]),
+    // [종합 해석]/[세부 해석] 두 패널을 하나의 richStaticBlock에 담는다 — 재생성 버튼이
+    // 교체하는 대상이 블록 하나여야 클라이언트 쪽 추가 동기화 로직 없이 통째로 바뀔 수 있다.
+    richStaticBlock({
+      id: "ux-analysis-summary",
+      html: analysis
+        ? sectionAnalysisPanelHtml("uxQuality", analysis)
+        : originalAnalysisPanelHtml(
+          "사용자 경험 품질 평가 결과 분석",
+          `<p>${PENDING_QUALITATIVE_NOTICE}</p>`,
+          sectionAiRegenerateButtonHtml("uxQuality"),
+        ),
+      summaryQuestionKey: "uxQuality",
+      summaryKind: "section",
+    }),
   ];
 }
 
@@ -1457,14 +1495,27 @@ function conclusionStrategyTableHtml(stats: QuantStats, recommendations: Recomme
   const featureRecs = recommendations.filter((r) => r.section.startsWith("feature_improvement:"));
   const cell = "border:0.75pt solid #d4d4d8;padding:10pt 12pt;vertical-align:top";
   const label = "border:0.75pt solid #d4d4d8;padding:10pt 7pt;vertical-align:middle;text-align:center;background-color:#dfe7f6;font-weight:700;width:18%";
+  // devPriority.draft/final은 combineDevPriorityText(recommendation.ts)로 저장돼 맨 앞에
+  // "[전반적 방향성]" 블록이 붙어있다(PDF/DOCX 렌더러가 splitOverallDirection으로 다시 나눠
+  // 쓰는 하위호환 포맷) — rest만 써야 이 웹 표의 "개발 우선순위 제언" 칸에 전반적 방향성
+  // 내용이 중복으로 섞여 들어가지 않는다(2026-08-14 실측 버그 수정).
   const priority = devPriority
-    ? richTextToHtml(devPriority.final ?? devPriority.draft)
+    ? richTextToHtml(splitOverallDirection(devPriority.final ?? devPriority.draft).rest ?? devPriority.final ?? devPriority.draft)
     : `<p style="margin:0;color:#6b7280">개발 우선순위 제언은 정성 분석 승인 후 표시됩니다.</p>`;
   const overall = overallDirection
     ? richTextToHtml(overallDirection.final ?? overallDirection.draft)
     : `<p style="margin:0">핵심구매요소, 만족도·상대 중요도, NPS 지수를 함께 참조하여 우선 개선 항목을 검토할 필요가 있습니다. 현재 NPS 지수는 <strong>${stats.nps.npsScore}</strong>입니다.</p>`;
+  // FEATURE_IMPROVEMENT_SYSTEM(prompts.ts) 출력 첫 줄은 그 기능을 규정하는 짧은 제목이다 —
+  // 원본 54쪽처럼 "N. 제목"을 굵게 붙이고 raw 기능명은 노출하지 않는다(lib/pdf/sectionsQualitative.tsx의
+  // 같은 렌더링과 형식 통일, 2026-08-13).
   const features = featureRecs.length > 0
-    ? featureRecs.map((rec) => `<p style="margin:9pt 0 3pt;font-weight:700"><strong>[${escapeHtml(rec.section.replace("feature_improvement:", ""))}]</strong></p>${richTextToHtml(rec.final ?? rec.draft)}`).join("")
+    ? featureRecs
+        .map((rec, i) => {
+          const text = rec.final ?? rec.draft;
+          const [title, ...restLines] = text.split(/\r?\n/);
+          return `<p style="margin:9pt 0 3pt;font-weight:700"><strong>${i + 1}. ${escapeHtml(title.trim())}</strong></p>${richTextToHtml(restLines.join("\n"))}`;
+        })
+        .join("")
     : `<p style="margin:0;color:#6b7280">기능 개선 제언은 정성 분석 승인 후 표시됩니다.</p>`;
   return `<table style="border-collapse:collapse;width:100%;margin:0 0 12pt;table-layout:fixed;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.5pt;line-height:1.65"><tbody><tr><td style="${label}">전반적 방향성</td><td style="${cell}">${overall}</td></tr><tr><td style="${label}">개발 우선순위 제언</td><td style="${cell}">${priority}</td></tr><tr><td style="${label}">기능 개선 제안</td><td style="${cell}">${features}</td></tr></tbody></table>`;
 }

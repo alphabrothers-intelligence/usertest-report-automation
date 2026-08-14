@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "purpose": "DB 분석 결과·웹 편집 모델·원본 HWPX 슬롯을 연결하는 템플릿별 바인딩. 원본 파일을 수정하지 않는다.",
+  "families": {
+    "sw": {
+      "source": "리바랩스 원본 HWPX",
+      "identity": {
+        "companyName": "Contents/section0.xml:P26",
+        "companyProfile": "Contents/section1.xml:P47",
+        "serviceOrProductName": "Contents/section1.xml:P57"
+      },
+      "featurePrototype": {
+        "count": 6,
+        "featureBlocks": [
+          "Contents/section1.xml:P226-P331",
+          "Contents/section1.xml:P332-P427",
+          "Contents/section1.xml:P428-P507",
+          "Contents/section1.xml:P508-P614",
+          "Contents/section1.xml:P615-P706",
+          "Contents/section1.xml:P707-P819"
+        ],
+        "graphFrames": [
+          { "anchor": "Contents/section1.xml:P232", "binaryItems": ["image14", "image15"], "roles": ["score-distribution", "wordcloud"] },
+          { "anchor": "Contents/section1.xml:P338", "binaryItems": ["image17", "image18"], "roles": ["score-distribution", "wordcloud"] },
+          { "anchor": "Contents/section1.xml:P434", "binaryItems": ["image20", "image21"], "roles": ["score-distribution", "wordcloud"] },
+          { "anchor": "Contents/section1.xml:P514", "binaryItems": ["image23", "image24"], "roles": ["score-distribution", "wordcloud"] },
+          { "anchor": "Contents/section1.xml:P621", "binaryItems": ["image26", "image27"], "roles": ["score-distribution", "wordcloud"] },
+          { "anchor": "Contents/section1.xml:P713", "binaryItems": ["image29", "image30"], "roles": ["score-distribution", "wordcloud"] }
+        ],
+        "quantitative": ["question heading", "mean", "standardDeviation", "score distribution chart image"],
+        "polarity": ["positive/negative/neutral percentage and count", "wordcloud image", "three summaries", "repeatable evidence blocks"],
+        "overflow": "clone source polarity evidence table/paragraph block; never truncate original quotes"
+      },
+      "sections": {
+        "featureExperience": "Contents/section1.xml:P1646-P1707",
+        "purchaseFactor": "Contents/section1.xml:P899-P957",
+        "fourValues": "Contents/section1.xml:P1712-P1719",
+        "uxQuality": "Contents/section1.xml:P1720-P1727",
+        "crossAnalysis": "Contents/section1.xml:P1728-P1737",
+        "nps": "Contents/section1.xml:P1423-P1470",
+        "recommendations": "Contents/section1.xml:P1742-P1849"
+      }
+    },
+    "physical": {
+      "source": "케어클 원본 HWPX",
+      "identity": {
+        "companyName": "Contents/section0.xml:P26",
+        "companyProfile": "Contents/section1.xml:P35",
+        "serviceOrProductName": "Contents/section1.xml:P45"
+      },
+      "featurePrototype": {
+        "featureBlocks": [
+          "Contents/section1.xml:P315-P409",
+          "Contents/section1.xml:P410-P493",
+          "Contents/section1.xml:P494-P575",
+          "Contents/section1.xml:P576-P643",
+          "Contents/section1.xml:P644-P690",
+          "Contents/section1.xml:P691-P746",
+          "Contents/section1.xml:P747-P804",
+          "Contents/section1.xml:P805-P900"
+        ],
+        "graphFrames": [
+          { "anchor": "Contents/section1.xml:P321", "binaryItems": ["image14", "image15"], "roles": ["score-distribution", "wordcloud"] },
+          { "anchor": "Contents/section1.xml:P416", "binaryItems": ["image16", "image17"], "roles": ["score-distribution", "wordcloud"] },
+          { "anchor": "Contents/section1.xml:P500", "binaryItems": ["image18", "image19"], "roles": ["score-distribution", "wordcloud"] },
+          { "anchor": "Contents/section1.xml:P582", "binaryItems": ["image20", "image21"], "roles": ["score-distribution", "wordcloud"] },
+          { "anchor": "Contents/section1.xml:P650", "binaryItems": ["image22", "image23"], "roles": ["score-distribution", "wordcloud"] },
+          { "anchor": "Contents/section1.xml:P697", "binaryItems": ["image21", "image24"], "roles": ["score-distribution", "wordcloud"] },
+          { "anchor": "Contents/section1.xml:P753", "binaryItems": ["image25", "image26"], "roles": ["score-distribution", "wordcloud"] },
+          { "anchor": "Contents/section1.xml:P811", "binaryItems": ["image27", "image28"], "roles": ["score-distribution", "wordcloud"] }
+        ],
+        "firstFeature": {
+          "question": "Contents/section1.xml:P315-P320",
+          "commonPolarityModule": {
+            "donutFrame": "Contents/section1.xml:P321 existing chart frame",
+            "wordcloudFrame": "Contents/section1.xml:P321 existing wordcloud frame",
+            "positiveEvidence": "Contents/section1.xml:P328-P350",
+            "negativeEvidence": "Contents/section1.xml:P351-P393",
+            "neutralEvidence": "Contents/section1.xml:P394-P409"
+          }
+        },
+        "overflow": "clone Carecl source evidence block style and continue on the next page"
+      },
+      "sections": {
+        "featureSummary": "Contents/section1.xml:P901-P908",
+        "purchaseFactor": "Contents/section1.xml:P1003-P1048",
+        "journeyQuestions": "Contents/section1.xml:P915-P952",
+        "journeyAnalysis": "Contents/section1.xml:P957-P984",
+        "fourValues": "Contents/section1.xml:P1049-P1217",
+        "nps": "Contents/section1.xml:P1224-P1334",
+        "recommendations": ["Contents/section1.xml:P1338-P1392", "Contents/section2.xml:P75-P195"]
+      }
+    },
+    "unified": {
+      "source": "new canonical HWPX; no generic form is accepted as final source",
+      "requiredBlocks": [
+        "shared identity/overview",
+        "feature analysis with shared polarity module",
+        "four values",
+        "purchase factor",
+        "NPS and overall satisfaction",
+        "result summary and recommendations"
+      ],
+      "conditionalBlocks": {
+        "sw": ["importance-satisfaction interpretation", "UX quality", "cross analysis", "SW improvement strategy"],
+        "physical": ["customer journey", "physical ergonomics", "package/component/use-context"]
+      },
+      "selection": "enable a conditional block only when its matching source questions and analysis results exist"
+    }
+  },
+  "webEditingRule": {
+    "target": "document model block IDs resolve to the matching HWPX anchor above",
+    "save": "write only the target paragraph/cell/style run or clone the declared repeat prototype",
+    "pageReflow": "regenerate HWPX/PDF from the affected block onward before marking the preview as final",
+    "export": "the final HWPX and PDF share the exact document-model artifactVersion shown by the web preview"
+  }
+}

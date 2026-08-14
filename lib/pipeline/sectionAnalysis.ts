@@ -12,7 +12,7 @@
 // 공통 제약(사용자 확정): 주관적 판단·명령형("~해라", "~해야 함") 금지, 주관적 전망("~기대됨")
 // 금지. 결론은 객관적 제언 뉘앙스("~것을 제언함/추천함", "~할 필요가 있음", "~이 요구됨",
 // "~시급하다고 사료됨")로만. 정량 수치·정성 인사이트에 있는 내용만 사용(할루시네이션 금지).
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "@/lib/anthropic";
 import pLimit from "p-limit";
 import type { QuantStats } from "@/lib/quant/compute";
 import {

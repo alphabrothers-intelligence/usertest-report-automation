@@ -5,7 +5,7 @@
 // 저장돼 있다면) 새 LLM 호출 없이 재료가 다 있는 Ⅸ.1과 달리, 이 표는 "행동 문구로 다듬는" 얕은
 // 변환이 필요해 가벼운 구조화 LLM 호출 1회로 처리한다(전체 기능 한 번에, 문항 단위가 아니라
 // 리포트 단위).
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "@/lib/anthropic";
 import { Output } from "ai";
 import { z } from "zod";
 import type { QuantStats } from "@/lib/quant/compute";
