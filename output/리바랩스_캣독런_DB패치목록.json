@@ -1,0 +1,142 @@
+[
+  {
+    "sectionIndex": 0,
+    "paragraphIndex": 26,
+    "expectedText": "리바랩스",
+    "text": "리바랩스",
+    "source": "product-info"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 47,
+    "expectedText": "리바랩스",
+    "text": "리바랩스",
+    "source": "product-info"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 227,
+    "expectedText": "Q6. ‘펫과의 산책’ 기능의 만족도는 몇 점입니까?",
+    "text": "Q6. ‘펫과의 산책’ 기능의 만족도는 몇 점입니까?",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 229,
+    "expectedText": "만족도 점수 평균 : 6.35 / 10",
+    "text": "만족도 점수 평균 : 6.35 / 10",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 230,
+    "expectedText": "표준편차 : 2.54",
+    "text": "표준편차 : 2.54",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 333,
+    "expectedText": "Q7. ‘펫 성장 시스템’ 기능의 만족도는 몇 점입니까?",
+    "text": "Q7. ‘펫 성장 시스템’ 기능의 만족도는 몇 점입니까?",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 335,
+    "expectedText": "만족도 점수 평균 : 6.81 / 10",
+    "text": "만족도 점수 평균 : 6.81 / 10",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 336,
+    "expectedText": "표준편차 : 2.39",
+    "text": "표준편차 : 2.39",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 429,
+    "expectedText": "Q8. ‘펫 꾸미기’ 기능의 만족도는 몇 점입니까?",
+    "text": "Q8. ‘펫 꾸미기’ 기능의 만족도는 몇 점입니까?",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 431,
+    "expectedText": "만족도 점수 평균 : 7.2 / 10",
+    "text": "만족도 점수 평균 : 7.20 / 10",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 432,
+    "expectedText": "표준편차 : 2.29",
+    "text": "표준편차 : 2.29",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 509,
+    "expectedText": "Q9. ‘실시간 위치 기반 거점형 콘텐츠’ 기능의 만족도는 몇 점입니까?",
+    "text": "Q9. ‘실시간 위치 기반 거점형 콘텐츠’ 기능의 만족도는 몇 점입니까?",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 511,
+    "expectedText": "만족도 점수 평균 : 6.35 / 10",
+    "text": "만족도 점수 평균 : 6.35 / 10",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 512,
+    "expectedText": "표준편차 : 2.46",
+    "text": "표준편차 : 2.46",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 616,
+    "expectedText": "Q10. ‘펫 교배’ 기능의 만족도는 몇 점입니까?",
+    "text": "Q10. ‘펫 교배’ 기능의 만족도는 몇 점입니까?",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 618,
+    "expectedText": "만족도 점수 평균 : 5.85 / 10",
+    "text": "만족도 점수 평균 : 5.85 / 10",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 619,
+    "expectedText": "표준편차 : 2.77",
+    "text": "표준편차 : 2.77",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 708,
+    "expectedText": "Q11. ‘펫 레이싱’ 기능의 만족도는 몇 점입니까?",
+    "text": "Q11. ‘펫 레이싱’ 기능의 만족도는 몇 점입니까?",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 710,
+    "expectedText": "만족도 점수 평균 : 6.04 / 10",
+    "text": "만족도 점수 평균 : 6.04 / 10",
+    "source": "quantitative"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 711,
+    "expectedText": "표준편차 : 2.86",
+    "text": "표준편차 : 2.86",
+    "source": "quantitative"
+  }
+]

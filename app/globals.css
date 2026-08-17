@@ -26,6 +26,158 @@ body {
   font-family: "맑은 고딕", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
 }
 
+/* /hwpx-preview 전용: 한글 원본의 A4 비율·여백·표 계열을 검증하는 독립 POC.
+   기존 /viewer의 문서/편집 스타일에는 영향을 주지 않는다. */
+.hwpx-sheet {
+  position: relative;
+  width: min(100%, 210mm);
+  min-height: 297mm;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(33, 49, 75, 0.16);
+  font-family: "맑은 고딕", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+}
+
+/* 리바랩스 원본 HWPX(section1.xml)의 표 비율·색상값을 그대로 기준으로 한 /hwpx-preview 전용 규칙 */
+.rivalabs-reference-page {
+  font-family: "맑은 고딕", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  font-size: 11.5pt;
+  line-height: 1.68;
+}
+.rivalabs-cover {
+  font-family: "맑은 고딕", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  background:
+    linear-gradient(90deg, transparent 0 14%, rgba(44, 89, 154, .045) 14% 15%, transparent 15% 85%, rgba(44, 89, 154, .035) 85% 86%, transparent 86%),
+    #fff;
+}
+.rivalabs-cover-title { text-align: center; }
+.rivalabs-cover-title > p:first-child { margin: 0; color: #1f5ea7; font-size: 18pt; font-weight: 700; }
+.rivalabs-cover-title h2 { margin: 3mm 0 0; color: #172239; font-size: 34pt; font-weight: 800; letter-spacing: -.09em; }
+.rivalabs-chapter-heading {
+  display: grid;
+  grid-template-columns: 15mm 1fr;
+  min-height: 17mm;
+  border: 1px solid #6685d8;
+}
+.rivalabs-chapter-number {
+  display: grid;
+  place-items: center;
+  border-right: 1px solid #6685d8;
+  background: #dfe8f8;
+  font-size: 20pt;
+  font-weight: 500;
+}
+.rivalabs-chapter-heading h2 {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 9mm;
+  color: #111827;
+  font-size: 21pt;
+  font-weight: 700;
+  letter-spacing: -0.08em;
+}
+.rivalabs-section-heading {
+  display: grid;
+  grid-template-columns: 13mm 1fr;
+  min-height: 12mm;
+  border: 1px solid #6d89d9;
+  border-top: 0;
+  background: #b9c8ed;
+  color: #101827;
+  font-size: 15pt;
+  font-weight: 700;
+}
+.rivalabs-section-heading > * { display: flex; align-items: center; justify-content: center; }
+.rivalabs-section-heading span { border-right: 1px solid #6d89d9; }
+.rivalabs-feature-frame { color: #0f172a; }
+.rivalabs-feature-frame h3 {
+  margin: 0 0 4mm;
+  padding: 0 1mm 2mm;
+  border-bottom: 2px solid #43bddf;
+  font-size: 14pt;
+  font-weight: 700;
+}
+.rivalabs-score-strip {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  border-top: 1px solid #6b87d6;
+  border-bottom: 1px solid #6b87d6;
+  background: #dfe6f7;
+  text-align: center;
+  font-size: 12pt;
+}
+.rivalabs-score-strip > * { display: grid; place-content: center; min-height: 13mm; padding: 2mm; }
+.rivalabs-score-strip > span { border-left: 1px solid #6b87d6; }
+.rivalabs-score-strip small { margin-top: 1mm; font-size: 8.5pt; font-style: italic; font-weight: 400; text-align: right; }
+.rivalabs-two-column { display: grid; grid-template-columns: 2fr 1fr; border: 1px solid #6b87d6; }
+.rivalabs-cell + .rivalabs-cell { border-left: 1px solid #6b87d6; }
+.rivalabs-cell-title { margin: 0; padding: 2.3mm 2mm; border-bottom: 1px solid #6b87d6; background: #bdcbed; text-align: center; font-size: 14pt; font-weight: 700; }
+.rivalabs-chart-slot { min-height: 59mm; overflow: hidden; padding: 3mm; }
+.rivalabs-chart-slot > table { width: 100% !important; margin: 0 !important; }
+.rivalabs-chart-slot > table td { border: 0 !important; padding: 0 !important; }
+.rivalabs-chart-slot svg { width: 100%; height: 53mm; }
+.rivalabs-keyword-slot { display: flex; min-height: 59mm; align-content: center; align-items: center; justify-content: center; gap: 2mm; flex-wrap: wrap; padding: 6mm; text-align: center; outline: none; }
+.rivalabs-keyword-slot span { display: inline-block; color: #315c9c; font-weight: 700; line-height: 1.25; }
+.rivalabs-keyword-slot .keyword-0 { font-size: 17pt; color: #315c9c; }
+.rivalabs-keyword-slot .keyword-1 { font-size: 13pt; color: #4d70a9; }
+.rivalabs-keyword-slot .keyword-2 { font-size: 11pt; color: #657993; }
+.rivalabs-keyword-slot .keyword-3 { font-size: 10pt; color: #8c99a9; }
+.rivalabs-emotion-frame { margin: 0; }
+.rivalabs-emotion-frame > table { width: 100% !important; margin: 0 !important; }
+.rivalabs-emotion-frame td { vertical-align: top; }
+.rivalabs-emotion-frame p { font-family: inherit !important; }
+.rivalabs-emotion-frame svg { max-width: 100%; height: auto; }
+.rivalabs-opinion-detail { outline: none; }
+.rivalabs-opinion-detail > div > p:first-child { margin-top: 0; }
+.rivalabs-opinion-detail p { font-family: inherit !important; }
+.rivalabs-conclusion-table { display: grid; grid-template-columns: 33mm 1fr; border: 1px solid #6b87d6; }
+.rivalabs-conclusion-label, .rivalabs-conclusion-head, .rivalabs-conclusion-body { border-right: 1px solid #6b87d6; border-bottom: 1px solid #6b87d6; }
+.rivalabs-conclusion-label { display: grid; place-items: center; padding: 4mm 2mm; background: #dfe6f7; text-align: center; font-weight: 700; }
+.rivalabs-conclusion-head { padding: 4mm; background: #bdcbed; text-align: center; font-weight: 700; }
+.rivalabs-conclusion-body { min-width: 0; padding: 5mm; }
+.rivalabs-conclusion-table > :nth-last-child(-n+2) { border-bottom: 0; }
+.rivalabs-conclusion-table > :nth-child(2n) { border-right: 0; }
+.rivalabs-conclusion-body table { width: 100% !important; max-width: 100%; font-size: 9.5pt !important; }
+.rivalabs-quadrant { position: relative; height: 70mm; border: 1px solid #64748b; background: linear-gradient(90deg, transparent 49.75%, #94a3b8 49.75% 50.25%, transparent 50.25%), linear-gradient(0deg, transparent 49.75%, #94a3b8 49.75% 50.25%, transparent 50.25%); }
+.rivalabs-quadrant i { position: absolute; display: grid; width: 6mm; height: 6mm; place-items: center; transform: translate(-50%, 50%); border-radius: 999px; background: #315c9c; color: #fff; font-size: 8pt; font-style: normal; font-weight: 700; }
+.rivalabs-quadrant .quad-y { position: absolute; top: 50%; left: -9mm; transform: rotate(-90deg); font-size: 8pt; color: #475569; }
+.rivalabs-quadrant .quad-x { position: absolute; right: 2mm; bottom: -6mm; font-size: 8pt; color: #475569; }
+.rivalabs-section-content { margin-top: 9mm; }
+.rivalabs-section-content > * { break-inside: avoid; }
+.rivalabs-question { margin: 7mm 0 4mm; padding: 0 1mm 2mm; border-bottom: 2px solid #43bddf; font-size: 13pt; font-weight: 700; }
+.rivalabs-subheading { margin: 8mm 0 4mm; font-size: 14pt; font-weight: 700; }
+.rivalabs-generic-rich { margin: 4mm 0 7mm; outline: none; }
+.rivalabs-generic-rich table { width: 100% !important; max-width: 100%; font-family: inherit !important; }
+.rivalabs-generic-rich p { font-family: inherit !important; }
+.rivalabs-data-table, .rivalabs-data-chart, .rivalabs-nps, .rivalabs-polarity { margin: 5mm 0 8mm; border: 1px solid #6b87d6; }
+.rivalabs-data-table > p, .rivalabs-data-chart > p, .rivalabs-nps > p, .rivalabs-polarity > p { margin: 0; padding: 2.4mm; background: #bdcbed; text-align: center; font-weight: 700; }
+.rivalabs-data-table table { width: 100%; border-collapse: collapse; }
+.rivalabs-data-table th { background: #dfe6f7; font-weight: 700; }
+.rivalabs-data-table th, .rivalabs-data-table td { border: 1px solid #a5b4d8; padding: 2.5mm; text-align: center; }
+.rivalabs-bars { display: flex; align-items: end; gap: 3mm; min-height: 60mm; padding: 7mm 5mm 5mm; border-top: 1px solid #a5b4d8; }
+.rivalabs-bars > div { display: grid; min-width: 0; flex: 1; grid-template-rows: 1fr auto auto; align-items: end; gap: 1mm; text-align: center; }
+.rivalabs-bars i { display: block; width: 100%; min-height: 2mm; }
+.rivalabs-bars span { overflow: hidden; font-size: 8pt; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.rivalabs-bars b { font-size: 8pt; color: #315c9c; }
+.rivalabs-nps { display: grid; grid-template-columns: 1fr auto; align-items: center; }
+.rivalabs-nps > p { grid-column: 1 / -1; }
+.rivalabs-nps strong { padding: 7mm; color: #315c9c; font-size: 22pt; }
+.rivalabs-nps span { padding: 7mm; color: #475569; font-size: 10pt; }
+.rivalabs-polarity > div { display: flex; height: 15mm; overflow: hidden; }
+.rivalabs-polarity i { display: block; min-width: 0; }
+.rivalabs-polarity small { display: block; padding: 2mm 3mm; text-align: center; }
+.rivalabs-chart-placeholder { display: grid; min-height: 55mm; place-items: center; color: #64748b; font-size: 10pt; }
+.rivalabs-priority-grid { display: grid; min-height: 55mm; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); }
+.rivalabs-priority-grid b { display: grid; place-items: center; border-right: 1px solid #a5b4d8; border-bottom: 1px solid #a5b4d8; font-size: 9pt; }
+.rivalabs-priority-grid b:nth-child(1) { background: #dfe6f7; }.rivalabs-priority-grid b:nth-child(2) { background: #f8e8d9; }.rivalabs-priority-grid b:nth-child(3) { background: #f6caa8; }.rivalabs-priority-grid b:nth-child(4) { background: #f7f7f8; }.rivalabs-priority-grid b:nth-child(5) { background: #fef4ec; }.rivalabs-priority-grid b:nth-child(6) { background: #e5ebf7; }
+
+@media (max-width: 720px) {
+  .hwpx-sheet {
+    min-height: auto;
+  }
+}
+
 /* 원본 보고서의 개선 제언 행: 색으로 강조하지 않고 검정·굵게·기울임과 화살표로 구분한다. */
 .report-rich-editor [data-report-kind="arrow"] {
   margin: 0.45rem 0;
@@ -52,6 +204,24 @@ body {
 }
 
 @media print {
+  @page { size: A4 portrait; margin: 0; }
+  html, body { width: 210mm; background: #fff !important; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  [data-hwpx-preview] { background: #fff !important; }
+  .hwpx-preview-toolbar, .hwpx-preview-nav { display: none !important; }
+  [data-hwpx-preview] > div { display: block !important; max-width: none !important; padding: 0 !important; }
+  [data-hwpx-preview] > div > section { display: block !important; }
+  [data-hwpx-print-page] {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    break-after: page;
+    page-break-after: always;
+  }
+  [data-hwpx-print-page] table, [data-hwpx-print-page] tr, [data-hwpx-print-page] .rivalabs-data-chart,
+  [data-hwpx-print-page] .rivalabs-data-table, [data-hwpx-print-page] .rivalabs-polarity,
+  [data-hwpx-print-page] .rivalabs-nps { break-inside: avoid; page-break-inside: avoid; }
   .report-rich-editor [data-quote-ending-token="true"],
   .report-rich-static [data-quote-ending-token="true"] {
     background: transparent !important;

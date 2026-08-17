@@ -1,0 +1,163 @@
+[
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 278,
+    "expectedText": "2. 부정 의견 (71.3%)",
+    "text": "2. 부정 의견 (45.7%)",
+    "source": "qualitative-db-negative-title"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 279,
+    "expectedText": "[GPS 및 걸음 수 측정 부정확성 문제]",
+    "text": "[GPS·걸음 수 측정 부정확성]",
+    "source": "qualitative-db-category"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 281,
+    "expectedText": "\"경로가 지도상 도로를 따라 찍히지 않고 건물을 뚫고 찍히거나 가끔 아예 다른 길로 표시되어 아쉬웠다.\"",
+    "text": "“걸음수와 거리가 전혀 측정되지 않습니다”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 282,
+    "expectedText": "\"걸음 수가 정말 중요한 게임인데, 실제 걸음 수와 게임에서 측정하는 걸음 수에 많은 차이가 있었다.\"",
+    "text": "“실제 걸음 수와 게임에서 측정하는 걸음 수에 많은 차이가 있었다”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 284,
+    "expectedText": "→ GPS 정확도 및 걸음 수 측정 정확도 개선 필요",
+    "text": "→ 위치 및 걸음 수 측정 정확도 개선이 가장 시급한 핵심 불편 요소로 확인됨",
+    "source": "qualitative-db-insight"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 286,
+    "expectedText": "[지도 조작 및 시각화 불편]",
+    "text": "[지도 조작감 불편]",
+    "source": "qualitative-db-category"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 288,
+    "expectedText": "\"살짝만 이동하거나 돌리고 싶은데도 맵의 시점이 휙휙 바뀌니 조금 피로하다고 느꼈습니다.\"",
+    "text": "“맵이 확대는 되지만 축소가 안돼서 멀리까지 보기가 힘들다.”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 289,
+    "expectedText": "→ 지도 조작/화면 전환에서의 조작성 개선 필요",
+    "text": "→ 지도 줌·회전 민감도 조정 및 시점 고정 기능 도입 필요",
+    "source": "qualitative-db-insight"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 291,
+    "expectedText": "[보상 시스템 불만 및 개선 요구]",
+    "text": "[보물상자 획득 범위 불명확]",
+    "source": "qualitative-db-category"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 292,
+    "expectedText": "“상자가 하루에 1개씩만 깔 수 있다보니 오는 길에는 재미가 없다.”",
+    "text": "“상자를 먹을 때 어느정도까지 가까이 가야 먹을 수 있는지 확실하지 않다.”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 293,
+    "expectedText": "“얻을 수 있는 아이템 및 재화가 부족합니다”",
+    "text": "“얻으려는 상자또는 무언가가 ??M내에 있는지 설명이 없거나”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 295,
+    "expectedText": "→ 지속적인 흥미 유발을 위한 보상 체계 매력도 개선 필요",
+    "text": "→ 획득 가능 범위 시각화 가이드라인 제공으로 사용자 혼란 해소 필요",
+    "source": "qualitative-db-insight"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 297,
+    "expectedText": "[상호작용 범위/표시 불명확]",
+    "text": "[산책 시작 수동 조작 불편]",
+    "source": "qualitative-db-category"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 300,
+    "expectedText": "→ 보상 수령 가능 거리·범위 표시에 대한 니즈 확인",
+    "text": "→ 자동 감지 기반 산책 시작 기능 도입으로 사용성 개선 필요",
+    "source": "qualitative-db-insight"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 302,
+    "expectedText": "[앱 안정성 및 성능 문제]",
+    "text": "[보상·콘텐츠 매력 부족]",
+    "source": "qualitative-db-category"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 303,
+    "expectedText": "\"발열이 너무 심합니다. 켜지 않아도 백그라운드 실행이 되거나, 절전모드가 있으면 좋겠습니다.\"",
+    "text": "“산책 모드를 플레이 하면서 직접 이동하여 보상을 얻는 시스템이 플레이어에게 성취감을 주지 못합니다”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 304,
+    "expectedText": "\"처음 시작할 때 분명 위치 권한을 설정했는데 자꾸 위치 설정을 해달라는 창이 떠서 불편했어요..\"",
+    "text": "“얻을 수 있는 아이템 및 재화가 부족합니다”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 305,
+    "expectedText": "→ 렉/발열/권한 팝업 반복 등 기본 안정화 필요.",
+    "text": "→ 보상 체계 다양화 및 성취감 강화로 지속 사용 유인 확보 필요",
+    "source": "qualitative-db-insight"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 327,
+    "expectedText": "3. 중립 의견 (3.0%)",
+    "text": "3. 중립 의견 (21.7%)",
+    "source": "qualitative-db-neutral-title"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 328,
+    "expectedText": "[산책 기능 조건]",
+    "text": "[지도 정보 표시 개선 요청]",
+    "source": "qualitative-db-category"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 329,
+    "expectedText": "\"제한 속도가 어느정도인진 모르겠으나, 타겜에 비해 좀 느슨한 편인 거 같다.\"",
+    "text": "“지도에 건물이나 도로 이름이 안나와서 세부적인 지역을 파악하기는 힘들었습니다.”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 330,
+    "expectedText": "\"버스나 지하철을 타고 가면서도 보상 획득이 가능합니다.“",
+    "text": "“지도가 좀더 넓기 볼수 있으면 좋을거 같다”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 331,
+    "expectedText": "→ 산책 컨셉에 맞게 걸어서 갈 수 있는 지역 범위와 속도로 제한",
+    "text": "→ 지도 상세 정보 및 랜드마크 표기 추가로 탐색 편의성 강화 필요",
+    "source": "qualitative-db-insight"
+  }
+]

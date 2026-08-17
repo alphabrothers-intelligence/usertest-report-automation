@@ -1,0 +1,121 @@
+[
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 256,
+    "expectedText": "1. 긍정 의견 (28.7%)",
+    "text": "1. 긍정 의견 (32.6%)",
+    "source": "qualitative-db-positive-title"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 257,
+    "expectedText": "[운동 동기 부여 및 건강 증진]",
+    "text": "[산책 동기부여 및 운동 효과]",
+    "source": "qualitative-db-category"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 258,
+    "expectedText": "\"뭔가 보상이 있다는 점에서 걷는 것에 동기 부여가 되어 좋았다.\"",
+    "text": "“나를 운동하게 만들어준다..”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 259,
+    "expectedText": "\"평소에 걷기에 흥미가 없었는데 이런 앱을 알고나서 더 자주 걷는거같다\"",
+    "text": "“게임으로 인해 산책을 유도하는것이 매우 신선했습니다”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 260,
+    "expectedText": "\"원래는 산책을 안하는데 이 어플로 인해서 산책도 하고 운동도 하고 건강해지는 느낌입니다 감사합니다“",
+    "text": "“원래는 산책을 안하는데 이 어플로 인해서 산책도 하고 운동도 하고 건강해지는 느낌입니다”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 262,
+    "expectedText": "[펫 동반 경험 및 대리 만족]",
+    "text": "[보상 시스템 흥미 유발]",
+    "source": "qualitative-db-category"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 263,
+    "expectedText": "\"실제 강아지가 노견이라 산책을 자주 못하는데 어플에서 대리만족 가능이에요\"",
+    "text": "“뭔가 보상이 있다는 점에서 걷는 것에 동기 부여가 되어 좋았다.”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 264,
+    "expectedText": "\"펫이없는 사람이라서 함께 산책한다는 컨셉이 좋았다.\"",
+    "text": "“산책하면서 럭키박스 열고 장소 차지하는 점이 좋아요.”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 265,
+    "expectedText": "\"실제 강아지와 산책하고 싶은 로망이 있는데 이렇게 디지털 펫과 같이 산책하고 경로, 걸음 수가 찍히는 것을 보니 대리만족이 된다\"",
+    "text": "“그냥 걷는 것 뿐만 아니라 보상도 있어서 일석이조마냥 재미있게 걸었습니다.”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 267,
+    "expectedText": "[보상 시스템의 재미]",
+    "text": "[펫 동반 산책의 정서적 만족]",
+    "source": "qualitative-db-category"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 268,
+    "expectedText": "\"산책하면서 럭키박스 열고 장소 차지하는 점이 좋아요.\"",
+    "text": "“펫과 함께 걸음으로서 경험치를 획득할수 있어 좋았어요”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 269,
+    "expectedText": "\"중간 중간에 박스 여는 재미가 있었습니다ㅎㅎ\"",
+    "text": "“휴대폰 속 펫과 같이 걷는 기분이라 훨씬 힘이 나고 힘들지 않았다”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 270,
+    "expectedText": "\"보물상자를 획득하기위해 점 더 걷게됨.\"",
+    "text": "※ 대표 인용문 2건 선정",
+    "source": "qualitative-db-quote-note"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 272,
+    "expectedText": "[UI/기능 편의성 및 정확성]",
+    "text": "[경로·기록 표시 기능 만족]",
+    "source": "qualitative-db-category"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 273,
+    "expectedText": "\"걸음 수 집계도 누락없이 되는 점이 만족스러웠습니다.\"",
+    "text": "“지도를 기반으로 내가 움직인 경로를 알 수 있고, 그냥 걷는것보다 느낌이 달랐다.”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 274,
+    "expectedText": "\"걸어간 길을 표시해주고 얼마나 걸었는지 한눈에 알아볼수 있어서 평소 나의 산책코스가 잘 표시가 되서 좋았어요\"",
+    "text": "“걸어간 길을 표시해주고 얼마나 걸었는지 한눈에 알아볼수 있어서 평소 나의 산책코스가 잘 표시가 되서 좋았어요”",
+    "source": "qualitative-db-quote"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 275,
+    "expectedText": "\"gps기능이 잘 작동해서 현재 위치가 정확하게 잡힌다\"",
+    "text": "※ 대표 인용문 2건 선정",
+    "source": "qualitative-db-quote-note"
+  }
+]

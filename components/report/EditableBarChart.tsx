@@ -49,6 +49,37 @@ function placeBarLabel(barHeight: number, avgPx: number): number {
   return Math.max(barHeight, avgPx) + 12; // 최후 수단 — 막대 안 어디에도 안 겹치는 자리가 없음
 }
 
+// x축 항목 라벨이 raw data 문구 그대로라 길이가 들쭉날쭉하다(예: "성취 및 보상 요소 (걸음 수
+// 보상, 미션 보상 등)"). 슬롯 폭에 안 맞으면 옆 라벨과 겹쳐 보이던 문제(2026-08-13 실측) —
+// 폰트 크기를 슬롯 폭에 맞게 단계적으로 줄여가며 최대 3줄까지 word-wrap한다.
+// ponytail: 한글 글자폭을 fontSize*0.95로 근사하는 휴리스틱이라 극단적으로 긴 단일 단어는
+// 여전히 넘칠 수 있음 — 실제로 넘치는 사례가 나오면 그때 정밀 측정(canvas measureText 등)으로 교체.
+const CHAR_WIDTH_FACTOR = 0.95;
+function layoutChartLabel(label: string, slotWidth: number): { lines: string[]; fontSize: number } {
+  const words = label.split(/\s+/).filter(Boolean);
+  const maxWidth = slotWidth * 0.95;
+  const wrap = (fontSize: number): string[] => {
+    const lines: string[] = [];
+    let current = "";
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (current && candidate.length * fontSize * CHAR_WIDTH_FACTOR > maxWidth) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = candidate;
+      }
+    }
+    if (current) lines.push(current);
+    return lines;
+  };
+  for (const fontSize of [9, 8, 7, 6]) {
+    const lines = wrap(fontSize);
+    if (lines.length <= 3) return { lines, fontSize };
+  }
+  return { lines: wrap(6).slice(0, 3), fontSize: 6 };
+}
+
 function mixHex(base: string, target: string, amount: number): string {
   const parse = (hex: string) => {
     const normalized = hex.replace("#", "");
@@ -151,12 +182,13 @@ export function EditableBarChart({ block }: { block: ReportChartBlock }) {
             const barHeight = Math.max(0, ((item.value - block.axisMin) / range) * plotHeight);
             const x = left + index * slot + (slot - barWidth) / 2;
             const y = top + plotHeight - barHeight;
+            const { lines, fontSize } = layoutChartLabel(item.label, slot);
             return (
               <g key={item.id}>
                 <rect x={x} y={y} width={barWidth} height={barHeight} fill={barColors.get(item.id) ?? block.color} />
-                <text x={x + barWidth / 2} y={top + plotHeight + 18} textAnchor="middle" fontSize="9" fill="#334155">
-                  {item.label.split("\n").map((line, lineIndex) => (
-                    <tspan key={line} x={x + barWidth / 2} dy={lineIndex === 0 ? 0 : 10}>{line}</tspan>
+                <text x={x + barWidth / 2} y={top + plotHeight + 18} textAnchor="middle" fontSize={fontSize} fill="#334155">
+                  {lines.map((line, lineIndex) => (
+                    <tspan key={line} x={x + barWidth / 2} dy={lineIndex === 0 ? 0 : fontSize + 2}>{line}</tspan>
                   ))}
                 </text>
               </g>

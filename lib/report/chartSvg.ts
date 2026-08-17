@@ -14,6 +14,21 @@ function escapeAttribute(value: string) {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/** 세로형 막대그래프 공통 색상 규칙(components/report/EditableBarChart.tsx와 동일 취지,
+ * 2026-08-13): 최댓값=가장 진한 색, 중간값=그보다 옅은 색, 나머지=회색. */
+function mixHex(base: string, target: string, amount: number): string {
+  const parse = (hex: string) => {
+    const normalized = hex.replace("#", "");
+    return [0, 2, 4].map((index) => Number.parseInt(normalized.slice(index, index + 2), 16));
+  };
+  const [br, bg, bb] = parse(base);
+  const [tr, tg, tb] = parse(target);
+  return `#${[br, bg, bb].map((value, index) => {
+    const targetValue = [tr, tg, tb][index];
+    return Math.round(value + (targetValue - value) * amount).toString(16).padStart(2, "0");
+  }).join("")}`;
+}
+
 function polarXY(cx: number, cy: number, r: number, deg: number): [number, number] {
   const rad = (deg * Math.PI) / 180;
   return [cx + r * Math.cos(rad), cy - r * Math.sin(rad)];
@@ -93,6 +108,14 @@ export function satisfactionHistogramSvg(distribution: number[], options: Histog
   const yLabel = options.yLabel ?? "응답자 수";
   const barColor = options.barColor ?? "#2ed6a4";
   const peakColor = options.peakColor ?? "#078c44";
+  // 최댓값=peakColor(가장 진함), 그 다음 유니크값=barColor, 그 다음=더 옅게, 나머지=회색.
+  const rankedValues = [...new Set(values.filter((v) => v > 0))].sort((a, b) => b - a);
+  const emphasisColors = [peakColor, barColor, mixHex(barColor, "#ffffff", 0.4), "#c9cfd3"];
+  const colorFor = (count: number) => {
+    if (count <= 0) return barColor;
+    const rank = rankedValues.indexOf(count);
+    return emphasisColors[Math.min(rank, emphasisColors.length - 1)];
+  };
   const grid: string[] = [];
   for (let index = 0; index <= tickCount; index += 1) {
     const tick = (yMax * index) / tickCount;
@@ -104,7 +127,7 @@ export function satisfactionHistogramSvg(distribution: number[], options: Histog
     const h = (count / yMax) * plotH;
     const y = baseY - h;
     const valueLabel = count > 0 ? `<text x="${cx.toFixed(1)}" y="${(y - 5).toFixed(1)}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="11" font-weight="700" text-anchor="middle" fill="#4b5563">${count}</text>` : "";
-    return `<rect x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" fill="${count === maxCount && count > 0 ? peakColor : barColor}"/>${valueLabel}<text x="${cx.toFixed(1)}" y="${(baseY + 18).toFixed(1)}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="11" text-anchor="middle" fill="#4b5563">${i}</text>`;
+    return `<rect x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" fill="${colorFor(count)}"/>${valueLabel}<text x="${cx.toFixed(1)}" y="${(baseY + 18).toFixed(1)}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="11" text-anchor="middle" fill="#4b5563">${i}</text>`;
   });
   return `<svg data-report-chart="satisfaction-histogram" data-distribution="${values.join(",")}" data-x-label="${escapeAttribute(xLabel)}" data-y-label="${escapeAttribute(yLabel)}" data-bar-color="${barColor}" data-peak-color="${peakColor}" data-y-max="${yMax}" data-tick-count="${tickCount}" viewBox="0 0 ${width} ${height}" width="100%" style="max-width:${width}px" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${escapeAttribute(options.ariaLabel ?? "만족도 점수별 응답자 수 분포")}">${grid.join("")}<line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${baseY}" stroke="#9ca3af"/><line x1="${margin.left}" y1="${baseY}" x2="${width - margin.right}" y2="${baseY}" stroke="#9ca3af"/>${parts.join("")}<text x="${width / 2}" y="${height - 8}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="12" text-anchor="middle" fill="#4b5563">${xLabel}</text><text x="16" y="${height / 2}" font-family="'맑은 고딕','Malgun Gothic',sans-serif" font-size="12" text-anchor="middle" fill="#4b5563" transform="rotate(-90 16 ${height / 2})">${yLabel}</text></svg>`;
 }

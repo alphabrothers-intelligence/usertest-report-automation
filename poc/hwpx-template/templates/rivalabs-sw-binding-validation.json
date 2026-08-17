@@ -1,0 +1,416 @@
+{
+  "readOnly": true,
+  "source": "data/[알파브라더스] 리바랩스_사용성테스트_결과보고서_0904_상연.hwpx",
+  "family": "sw",
+  "summary": {
+    "checked": 22,
+    "valid": 22,
+    "invalid": 0
+  },
+  "checks": [
+    {
+      "path": "identity.companyName",
+      "declared": "Contents/section0.xml:P26",
+      "status": "valid",
+      "section": "Contents/section0.xml",
+      "paragraphRange": [
+        26,
+        26
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 26,
+          "text": "리바랩스"
+        }
+      ]
+    },
+    {
+      "path": "identity.companyProfile",
+      "declared": "Contents/section1.xml:P47",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        47,
+        47
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 47,
+          "text": "리바랩스"
+        }
+      ]
+    },
+    {
+      "path": "identity.serviceOrProductName",
+      "declared": "Contents/section1.xml:P57",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        57,
+        57
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 57,
+          "text": "캣독런"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[0]",
+      "declared": "Contents/section1.xml:P226-P331",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        226,
+        331
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 226,
+          "text": "Q6. ‘펫과의 산책’ 기능의 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 331,
+          "text": "→ 산책 컨셉에 맞게 걸어서 갈 수 있는 지역 범위와 속도로 제한"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[1]",
+      "declared": "Contents/section1.xml:P332-P427",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        332,
+        427
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 332,
+          "text": "Q7. ‘펫 성장 시스템’ 기능의 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 427,
+          "text": "\"연동이 안되서 이용이 아쉬웠지만 시스템만 최적화된다면 만족한기능같음\""
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[2]",
+      "declared": "Contents/section1.xml:P428-P507",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        428,
+        507
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 428,
+          "text": "Q8. ‘펫 꾸미기’ 기능의 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 507,
+          "text": "\"화려한 그래픽이나 인상깊은 디자인이 아니면 꾸미기 요소에 평소 큰 관심이 없습니다.\""
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[3]",
+      "declared": "Contents/section1.xml:P508-P614",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        508,
+        614
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 508,
+          "text": "Q9. ‘실시간 위치 기반 거점형 콘텐츠’ 기능의 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 614,
+          "text": "→ 경쟁 기호/생활반경/소셜 연계 선호에 따라 만족도 체감 차이 큼."
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[4]",
+      "declared": "Contents/section1.xml:P615-P706",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        615,
+        706
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 615,
+          "text": "Q10. ‘펫 교배’ 기능의 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 706,
+          "text": "→ 재화·시간·매칭 조건 때문에 체험이 제한되어 평가 보류가 다수"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[5]",
+      "declared": "Contents/section1.xml:P707-P819",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        707,
+        819
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 707,
+          "text": "Q11. ‘펫 레이싱’ 기능의 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 819,
+          "text": ""
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[0].anchor",
+      "declared": "Contents/section1.xml:P232",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        232,
+        232
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 232,
+          "text": "만족도 분포도주요 키워드 도출"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[1].anchor",
+      "declared": "Contents/section1.xml:P338",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        338,
+        338
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 338,
+          "text": "만족도 분포도주요 키워드 도출"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[2].anchor",
+      "declared": "Contents/section1.xml:P434",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        434,
+        434
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 434,
+          "text": "만족도 분포도주요 키워드 도출"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[3].anchor",
+      "declared": "Contents/section1.xml:P514",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        514,
+        514
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 514,
+          "text": "만족도 분포도주요 키워드 도출"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[4].anchor",
+      "declared": "Contents/section1.xml:P621",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        621,
+        621
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 621,
+          "text": "만족도 분포도주요 키워드 도출"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[5].anchor",
+      "declared": "Contents/section1.xml:P713",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        713,
+        713
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 713,
+          "text": "만족도 분포도주요 키워드 도출"
+        }
+      ]
+    },
+    {
+      "path": "sections.featureExperience",
+      "declared": "Contents/section1.xml:P1646-P1707",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        1646,
+        1707
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 1646,
+          "text": "항목주요 의견기능별고객 경험 평가기능명평균 만족도(점)상대 중요도긍정 비율(%)중립 비율(%)부정 의견(%)펫과의 산책6.352.9626.63.070.4펫 성장 시스템6.811.3742.44.253.4펫 꾸미기7.200.2333.325.441.2실시간 위치 기반 거점형 콘텐츠6.350.2626.019.554.5펫 교배5."
+        },
+        {
+          "paragraphIndex": 1707,
+          "text": "[펫 꾸미기] 낮은 상대 중요도와 높은 만족도를 가지므로 보완적 차우선 개선 필요.→ ‘경제적 부담 완화’, ‘아이템 다양화’, ‘능력치 반영 여부 검토’를 통해 충성도를 강화하는 방향성 제안"
+        }
+      ]
+    },
+    {
+      "path": "sections.purchaseFactor",
+      "declared": "Contents/section1.xml:P899-P957",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        899,
+        957
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 899,
+          "text": "핵심구매요소"
+        },
+        {
+          "paragraphIndex": 957,
+          "text": "4대 가치 만족도 조사 결과"
+        }
+      ]
+    },
+    {
+      "path": "sections.fourValues",
+      "declared": "Contents/section1.xml:P1712-P1719",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        1712,
+        1719
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 1712,
+          "text": "4대 가치 만족도"
+        },
+        {
+          "paragraphIndex": 1719,
+          "text": "[사회·공공적 가치]걷기 기반 구조로 건강 증진에 기여한다는 긍정적인 평가, 그러나 기존 앱 대비 차별성 부족과 보행 중 안전 문제 우려가 지적됨."
+        }
+      ]
+    },
+    {
+      "path": "sections.uxQuality",
+      "declared": "Contents/section1.xml:P1720-P1727",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        1720,
+        1727
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 1720,
+          "text": "사용자 경험품질 평가이번 사용성 경험 품질 평가는 UI 설계와 규칙 전달은 강점, 반면 조작 편의성과 차별성 확보는 약점으로 나타났습니다. 실용성(평균 5.58)화면·메뉴 설계 품질(6.17)과 규칙 이해 용이성(5.86)은 높게 평가되었으나, 조작 편의성(4.84)은 가장 낮은 점수로 터치·반응 속도·조작 직관성 개선이"
+        },
+        {
+          "paragraphIndex": 1727,
+          "text": "즐거움(평균 5.37)기본적인 재미(5.58)는 확보되었으나, 차별성·독창성(5.21)이 부족해 유사 게임 대비 뚜렷한 개성 부족이 지적되었습니다. 몰입도(5.24) 역시 다소 낮아, 장기적 이용 동기는 약합니다."
+        }
+      ]
+    },
+    {
+      "path": "sections.crossAnalysis",
+      "declared": "Contents/section1.xml:P1728-P1737",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        1728,
+        1737
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 1728,
+          "text": "교차 분석"
+        },
+        {
+          "paragraphIndex": 1737,
+          "text": "남성: 모든 항목에서 낮은 평가, 특히 경제적 효용과 사회적 가치에 대한 인식 부족. 게임적 재미(몰입도·차별성)와 기능적 편의성에서도 불만족."
+        }
+      ]
+    },
+    {
+      "path": "sections.nps",
+      "declared": "Contents/section1.xml:P1423-P1470",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        1423,
+        1470
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 1423,
+          "text": "평균 구매 의향"
+        },
+        {
+          "paragraphIndex": 1470,
+          "text": "하지만 이들을 곧바로 만족 고객으로 바꾸기는 어렵기 때문에, 단기간에는 중립 고객을 긍정 고객으로 우선 개선 대상으로 삼는 것이 전체 만족도 향상에 더 효과적일 수 있음."
+        }
+      ]
+    },
+    {
+      "path": "sections.recommendations",
+      "declared": "Contents/section1.xml:P1742-P1849",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        1742,
+        1849
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 1742,
+          "text": "2개선 전략 제언전반적 방향성[고객 구매·이용 결정의 핵심: 신뢰성 높은 걸음 데이터와 편리한 사용 경험]핵심구매요소 조사에서 ‘성취 및 보상 요소’가 1위(34%), ‘시각적 디자인’이 2위(25%), ‘앱 안정성’이 3위(18%)로 도출됨에 따라, 서비스 이용 결정에서 보상 체계의 매력, 시각적 완성도, 안정성 확보가"
+        },
+        {
+          "paragraphIndex": 1849,
+          "text": "‘교배’라는 용어·세계관을 대체할 수 있는 새로운 콘셉트 기획"
+        }
+      ]
+    }
+  ]
+}

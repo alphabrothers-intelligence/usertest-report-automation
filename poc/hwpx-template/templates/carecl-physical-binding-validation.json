@@ -1,0 +1,620 @@
+{
+  "readOnly": true,
+  "source": "data/[알파브라더스] 케어클_사용성테스트_결과보고서_251028.hwpx",
+  "family": "physical",
+  "summary": {
+    "checked": 33,
+    "valid": 33,
+    "invalid": 0
+  },
+  "checks": [
+    {
+      "path": "identity.companyName",
+      "declared": "Contents/section0.xml:P26",
+      "status": "valid",
+      "section": "Contents/section0.xml",
+      "paragraphRange": [
+        26,
+        26
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 26,
+          "text": "케어클"
+        }
+      ]
+    },
+    {
+      "path": "identity.companyProfile",
+      "declared": "Contents/section1.xml:P35",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        35,
+        35
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 35,
+          "text": "주식회사 케어클"
+        }
+      ]
+    },
+    {
+      "path": "identity.serviceOrProductName",
+      "declared": "Contents/section1.xml:P45",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        45,
+        45
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 45,
+          "text": "케어클 테크핏(CareCL Techfit)"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[0]",
+      "declared": "Contents/section1.xml:P315-P409",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        315,
+        409
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 315,
+          "text": "Q10. ‘SHOT(FACE, EYE, BODY)’ 기능의 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 409,
+          "text": "➜ 구체적인 시각적 가이드(영상·튜토리얼) 제공 필요"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[1]",
+      "declared": "Contents/section1.xml:P410-P493",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        410,
+        493
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 410,
+          "text": "Q11. ‘GLOW’ 기능의 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 493,
+          "text": ""
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[2]",
+      "declared": "Contents/section1.xml:P494-P575",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        494,
+        575
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 494,
+          "text": "Q12. ‘EMS’ 기능의 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 575,
+          "text": "➜ 기기의 작동 피드백(효과음, 자극 세기, 접촉 구조 등)에 대한 신뢰성과 이해도를 높이는 개선이 요구됨"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[3]",
+      "declared": "Contents/section1.xml:P576-P643",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        576,
+        643
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 576,
+          "text": "Q13. ‘모드 전환’ 기능의 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 643,
+          "text": "\" 버튼의 위치를 재배치하면 조작이 더 편리할 것 같습니다. \""
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[4]",
+      "declared": "Contents/section1.xml:P644-P690",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        644,
+        690
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 644,
+          "text": "Q14. ‘강도(단계) 조절’ 기능의 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 690,
+          "text": "➜  초기 사용 단계에서 핵심 정보를 직관적으로 인지할 수 있도록, 온보딩 화면 또는 인터랙티브 튜토리얼을 통한 안내 강화 필요"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[5]",
+      "declared": "Contents/section1.xml:P691-P746",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        691,
+        746
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 691,
+          "text": "Q15. ‘LED 컬러 변경’ 기능에 대해 체감하는 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 746,
+          "text": "➜ 정밀 강도 조절 기능 니즈 확인"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[6]",
+      "declared": "Contents/section1.xml:P747-P804",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        747,
+        804
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 747,
+          "text": "Q16. 제품 중앙에 위치한 ‘인터페이스’에 대해 체감하는 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 804,
+          "text": "➜ 정확한 사용 가이드 부재"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.featureBlocks[7]",
+      "declared": "Contents/section1.xml:P805-P900",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        805,
+        900
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 805,
+          "text": "Q17. 모드 전환이나 강도 변경 시 제공되는 ‘보이스 알림’ 기능에 대한 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 900,
+          "text": "6.56"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[0].anchor",
+      "declared": "Contents/section1.xml:P321",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        321,
+        321
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 321,
+          "text": "키워드 도출 및 비율주요 키워드 도출[ 만족도 분포도 ][ 중요 키워드 빈도 활동 클라우드 ]"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[1].anchor",
+      "declared": "Contents/section1.xml:P416",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        416,
+        416
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 416,
+          "text": "키워드 도출 및 비율주요 키워드 도출[ 만족도 분포도 ][ 중요 키워드 빈도 활동 클라우드 ]"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[2].anchor",
+      "declared": "Contents/section1.xml:P500",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        500,
+        500
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 500,
+          "text": "키워드 도출 및 비율주요 키워드 도출[ 만족도 분포도 ][ 중요 키워드 빈도 활동 클라우드 ]1. 긍정 의견 (36%)[ 얼굴 라인 정리 효과 ]\" 전체적으로 찌릿한 전류가 흘러 처음에 약간 불편했지만, 사용 후 얼굴 라인이 정돈된 느낌이 들어 만족했습니다. \"\" 자극감 외에는 얼굴 라인이 정리되는 느낌이 있어서 좋았습니"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[3].anchor",
+      "declared": "Contents/section1.xml:P582",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        582,
+        582
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 582,
+          "text": "키워드 도출 및 비율주요 키워드 도출[ 만족도 분포도 ][ 중요 키워드 빈도 활동 클라우드 ]"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[4].anchor",
+      "declared": "Contents/section1.xml:P650",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        650,
+        650
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 650,
+          "text": "키워드 도출 및 비율주요 키워드 도출[ 만족도 분포도 ][ 중요 키워드 빈도 활동 클라우드 ]"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[5].anchor",
+      "declared": "Contents/section1.xml:P697",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        697,
+        697
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 697,
+          "text": "키워드 도출 및 비율주요 키워드 도출[ 만족도 분포도 ][ 중요 키워드 빈도 활동 클라우드 ]"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[6].anchor",
+      "declared": "Contents/section1.xml:P753",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        753,
+        753
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 753,
+          "text": "키워드 도출 및 비율주요 키워드 도출[ 만족도 분포도 ][ 중요 키워드 빈도 활동 클라우드 ]"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.graphFrames[7].anchor",
+      "declared": "Contents/section1.xml:P811",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        811,
+        811
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 811,
+          "text": "키워드 도출 및 비율주요 키워드 도출[ 만족도 분포도 ][ 중요 키워드 빈도 활동 클라우드 ]"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.firstFeature.question",
+      "declared": "Contents/section1.xml:P315-P320",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        315,
+        320
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 315,
+          "text": "Q10. ‘SHOT(FACE, EYE, BODY)’ 기능의 만족도는 몇 점입니까?"
+        },
+        {
+          "paragraphIndex": 320,
+          "text": "*평균에서의 흩어진 정도"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.firstFeature.commonPolarityModule.donutFrame",
+      "declared": "Contents/section1.xml:P321 existing chart frame",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        321,
+        321
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 321,
+          "text": "키워드 도출 및 비율주요 키워드 도출[ 만족도 분포도 ][ 중요 키워드 빈도 활동 클라우드 ]"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.firstFeature.commonPolarityModule.wordcloudFrame",
+      "declared": "Contents/section1.xml:P321 existing wordcloud frame",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        321,
+        321
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 321,
+          "text": "키워드 도출 및 비율주요 키워드 도출[ 만족도 분포도 ][ 중요 키워드 빈도 활동 클라우드 ]"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.firstFeature.commonPolarityModule.positiveEvidence",
+      "declared": "Contents/section1.xml:P328-P350",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        328,
+        350
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 328,
+          "text": "1. 긍정 의견 (38%)[ 즉각적인 피부 개선 효과 ]“ 샷 기능을 하고 나면 다음날 촉촉함이 오랫동안 유지되어서 기능적인 부분은 좋았습니다. ”“ 볼살 쳐짐 /팔자 주름 /피부 탄력에 대한 고민이 있는데 팔자 주름이 살짝 탱탱해진 듯한 효과가 있었습니다. “” 사용하고 다음날 피부가 쫀쫀해지는 느낌이 들고 효과가 바로"
+        },
+        {
+          "paragraphIndex": 350,
+          "text": "” 해당 디바이스 사용하면서 가장 만족도가 높았던 기능입니다. “"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.firstFeature.commonPolarityModule.negativeEvidence",
+      "declared": "Contents/section1.xml:P351-P393",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        351,
+        393
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 351,
+          "text": "2. 부정 의견 (22%)[ 기기 형태로 인한 신체 부위별 적용 제약 ]” 기기가 길어서 팔에 사용하기가 조금 어렵습니다. “” 기기가 살짝 묵직한 편이라 한 손으로 스탬핑할 때 계속 들고 있으면 팔이 조금 피로하다는 느낌을 받았습니다. “” 그립감 개선과 샷을 누를 때 각도가 어긋나거나 맞지 않을 때 다시 눌러야한다는 "
+        },
+        {
+          "paragraphIndex": 393,
+          "text": "\" 얼굴과 달리 바디의 경우, 특히 팔과 복부 부위에서는 자극이 잘 전달되지 않는 것인지 자극이 약하게 느껴져서 그런 것인지 명확하지 않아 케어를 올바르게 하고 있는지 잘 모르겠습니다. ”"
+        }
+      ]
+    },
+    {
+      "path": "featurePrototype.firstFeature.commonPolarityModule.neutralEvidence",
+      "declared": "Contents/section1.xml:P394-P409",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        394,
+        409
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 394,
+          "text": "3. 중립 의견 (40%)[ 작동 시간 설정 제약 ]\" 페이스도 일시 정지 없이 계속 작동하면 좋겠다고 느꼈습니다. 내가 원하는 부위에 조금 더 집중하고 싶을 때마다 모드를 다시 설정해야 해서 불편했습니다. \"\" 초 단위를 조정할 수 있다면 더 편리할 것 같습니다. \"\" 5초 제한이 불편했고, 피부 접촉이 없을 때는 출력"
+        },
+        {
+          "paragraphIndex": 409,
+          "text": "➜ 구체적인 시각적 가이드(영상·튜토리얼) 제공 필요"
+        }
+      ]
+    },
+    {
+      "path": "sections.featureSummary",
+      "declared": "Contents/section1.xml:P901-P908",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        901,
+        908
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 901,
+          "text": "기능별 만족도 결과 분석▶ 전체 평균 만족도 7.46점- 전반적으로 긍정적이지만, 기능별 체감 편차가 뚜렷한 양상을 보임- 직관적 조작성과 피드백 가시성이 높은 기능(인터페이스, 강도 조절)은 상대적으로 높은 평가를 받았으나, 체감 효과나 기술적 신뢰성을 요구하는 기능(EMS, GLOW, SHOT) 은 만족도가 낮게 나타"
+        },
+        {
+          "paragraphIndex": 908,
+          "text": "➜ 사용자별 설정 세분화(커스터마이징 기능)에 대한 사용자 니즈가 다수 확인되어 사용자 개별 니즈에 대응할 수 있는 맞춤형 제어 기능 강화가 필요할 것으로 사료됨"
+        }
+      ]
+    },
+    {
+      "path": "sections.purchaseFactor",
+      "declared": "Contents/section1.xml:P1003-P1048",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        1003,
+        1048
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 1003,
+          "text": "Q25. ‘케어클 테크핏’ 제품 이용에 있어서 가장 영향을 미칠 수 있는 핵심 요인은 무엇이라고 생각하십니까? 가장 중요하다고 생각되는 순위를 1위부터 8위까지 순서대로 작성해주세요."
+        },
+        {
+          "paragraphIndex": 1048,
+          "text": "▶ 하위권 요인으로는 ‘브랜드 신뢰성(5.7%)’, ‘제품 디자인(7.2%)’, ‘휴대성/보관 편의성(10.6%)’이 꼽힘➜ 세 항목 모두 7~8위 응답 비중이 30% 이상으로, 기능적 가치나 효과 체감에 비해 구매 결정 영향력 이 낮은 보조 요인으로 평가됨➜ 특히 ‘브랜드 신뢰성’은 7~8위만 72%를 차지하며, 현 제"
+        }
+      ]
+    },
+    {
+      "path": "sections.journeyQuestions",
+      "declared": "Contents/section1.xml:P915-P952",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        915,
+        952
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 915,
+          "text": "Q18. ‘테크핏’을 어느 정도 주기로 사용하셨나요?"
+        },
+        {
+          "paragraphIndex": 952,
+          "text": "[ 응답 결과 ]"
+        }
+      ]
+    },
+    {
+      "path": "sections.journeyAnalysis",
+      "declared": "Contents/section1.xml:P957-P984",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        957,
+        984
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 957,
+          "text": "고객 여정 만족도 평가단계박스 첫 인상박스 개봉첫 사용1주 사용 후2주 사용 후최종 만족도평균만족도9.089.08(-)7.16(-21.15%)7.20(+0.56%)7.56(+5%)7.24(-4.23%)"
+        },
+        {
+          "paragraphIndex": 984,
+          "text": "고객 여정 기반 경험 결과 분석▶ 주요 변곡 구간- ‘박스 개봉’ 단계의 평균 만족도는 9.08점으로 매우 긍정적인 평가를 받았으나, ‘첫 사용’ 단계에서 7.16점으로 -1.92점 하락하며 만족도가 급격히 떨어지는 변곡 구간이 발생함- 이는 제품의 외형과 패키징 등 시각적 기대치는 높았으나, 실제 사용 단계에서 조작의 "
+        }
+      ]
+    },
+    {
+      "path": "sections.fourValues",
+      "declared": "Contents/section1.xml:P1049-P1217",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        1049,
+        1217
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 1049,
+          "text": "Ⅵ4대 가치 만족도"
+        },
+        {
+          "paragraphIndex": 1217,
+          "text": "자가 관리 문화 확산 및 고령층의 홈케어 접근성 향상 측면에서 제한적이지만 긍정적인 사회적 가치를 부여함"
+        }
+      ]
+    },
+    {
+      "path": "sections.nps",
+      "declared": "Contents/section1.xml:P1224-P1334",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        1224,
+        1334
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 1224,
+          "text": "NPS 지수 (Net Promoter Score : 순수 고객추천/구매 지수)추천/구매하고 싶지 않다추천/구매하고 싶다012345678910비구매/비추천 고객Detractors중립 고객Passives추천/구매 고객Promoters=-NPS(Net Promoter Score) 추천고객 비율Promoters (%) 비추천 고"
+        },
+        {
+          "paragraphIndex": 1334,
+          "text": "▶ 따라서, 제품 개선을 통해 중립 고객을 긍정 고객으로 전환시 만족도를 크게 개선할 수 있을 것으로 예상됨"
+        }
+      ]
+    },
+    {
+      "path": "sections.recommendations[0]",
+      "declared": "Contents/section1.xml:P1338-P1392",
+      "status": "valid",
+      "section": "Contents/section1.xml",
+      "paragraphRange": [
+        1338,
+        1392
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 1338,
+          "text": "Q37. 테크핏을 사용해 본 경험을 바탕으로 어떤 부분에서 개선이 필요하다고 느끼셨나요?"
+        },
+        {
+          "paragraphIndex": 1392,
+          "text": ""
+        }
+      ]
+    },
+    {
+      "path": "sections.recommendations[1]",
+      "declared": "Contents/section2.xml:P75-P195",
+      "status": "valid",
+      "section": "Contents/section2.xml",
+      "paragraphRange": [
+        75,
+        195
+      ],
+      "samples": [
+        {
+          "paragraphIndex": 75,
+          "text": "2. 종합 전략 제언"
+        },
+        {
+          "paragraphIndex": 195,
+          "text": "고객 제언 4"
+        }
+      ]
+    }
+  ]
+}

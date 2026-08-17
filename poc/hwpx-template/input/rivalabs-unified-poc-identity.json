@@ -1,0 +1,7 @@
+{
+  "companyName": "리바랩스",
+  "serviceOrProductName": "캣독런",
+  "productType": "sw",
+  "templateVariant": "unified",
+  "source": "local POC only; validates unified-template input selection without changing the existing report"
+}

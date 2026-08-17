@@ -1,0 +1,345 @@
+[
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1793,
+    "expectedText": "[기능 1] 펫과의 산책",
+    "text": "[기능] 펫과의 산책",
+    "source": "stored-db-feature-name"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1795,
+    "expectedText": "고객 제언 1",
+    "text": "고객 제언 1",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1796,
+    "expectedText": "GPS 오차 최소화를 위한 위치 정확도 개선",
+    "text": "GPS 오차 최소화를 위한 위치 정확도 개선",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1797,
+    "expectedText": "고객 제언 2",
+    "text": "고객 제언 2",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1798,
+    "expectedText": "산책 시작 시 자동 실행 기능 제공",
+    "text": "보물상자·영역 획득 범위 표시 명확화",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1799,
+    "expectedText": "고객 제언 3",
+    "text": "고객 제언 3",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1800,
+    "expectedText": "보상 아이템의 다양화 및 난이도별 차등 보상 체계 구축",
+    "text": "보상 아이템의 다양화 및 콘텐츠 매력 강화",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1801,
+    "expectedText": "고객 제언 4",
+    "text": "고객 제언 4",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1802,
+    "expectedText": "산책 중 상호작용 범위(상자, 거점 등) 시각적 표시 강화",
+    "text": "산책 시작 시 자동 실행 기능 제공",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1804,
+    "expectedText": "[기능 2] 펫 성장 시스템",
+    "text": "[기능] 펫 성장 시스템",
+    "source": "stored-db-feature-name"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1806,
+    "expectedText": "고객 제언 1",
+    "text": "고객 제언 1",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1807,
+    "expectedText": "성장 속도 조정 및 성취감 강화 설계",
+    "text": "UI 구성 및 조작 편의성 개선",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1808,
+    "expectedText": "고객 제언 2",
+    "text": "고객 제언 2",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1809,
+    "expectedText": "진화·변신 등 시각적 보상 효과 확대",
+    "text": "보상·경험치 체계 균형 재조정",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1810,
+    "expectedText": "고객 제언 3",
+    "text": "고객 제언 3",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1811,
+    "expectedText": "알 부화 콘셉트 재검토 및 대체 기획 마련",
+    "text": "부화 및 성장 소요 시간 단축",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1812,
+    "expectedText": "고객 제언 4",
+    "text": "고객 제언 4",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1813,
+    "expectedText": "튜토리얼 직관화 및 성장 단계별 가이드 강화",
+    "text": "성장 단계별 설명 및 튜토리얼 제공",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1815,
+    "expectedText": "[기능 3] 실시간 거점형 콘텐츠",
+    "text": "[기능] 실시간 위치 기반 거점형 콘텐츠",
+    "source": "stored-db-feature-name"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1817,
+    "expectedText": "고객 제언 1",
+    "text": "고객 제언 1",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1818,
+    "expectedText": "보상 메리트 강화(아이템·재화 차별화)",
+    "text": "점령 보상 및 이득 체계 명확화",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1819,
+    "expectedText": "고객 제언 2",
+    "text": "고객 제언 2",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1820,
+    "expectedText": "위험 지역을 제외한 안전 위치 기반 배치 규칙 마련",
+    "text": "위치 인식 오류 개선 및 시스템 안정화",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1821,
+    "expectedText": "고객 제언 3",
+    "text": "고객 제언 3",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1822,
+    "expectedText": "펫 배치 및 관리 편의성을 높이는 원클릭 기능 도입",
+    "text": "점령 비용 대비 보상 효율성 조정",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1823,
+    "expectedText": "고객 제언 4",
+    "text": "고객 제언 4",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1824,
+    "expectedText": "지역별 유저 밀도에 따른 거점 난이도·보상 차등 설계",
+    "text": "지역별 유저 밀도 불균형 해소 방안 마련",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1825,
+    "expectedText": "[기능 4] 펫 꾸미기",
+    "text": "[기능] 펫 꾸미기",
+    "source": "stored-db-feature-name"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1827,
+    "expectedText": "고객 제언 1",
+    "text": "고객 제언 1",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1828,
+    "expectedText": "아이템 가격 체계 조정으로 경제적 부담 완화",
+    "text": "아이템 능력치 반영 체계 도입",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1829,
+    "expectedText": "고객 제언 2",
+    "text": "고객 제언 2",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1830,
+    "expectedText": "시즌·테마별 신규 아이템 및 꾸미기 콘텐츠 확장",
+    "text": "착용 및 적용 관련 버그 개선",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1831,
+    "expectedText": "고객 제언 3",
+    "text": "고객 제언 3",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1832,
+    "expectedText": "꾸미기 아이템의 일부 능력치 반영 검토",
+    "text": "아이템 재화·가격 부담 완화",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1833,
+    "expectedText": "[기능 5] 펫 레이싱",
+    "text": "[기능] 펫 레이싱",
+    "source": "stored-db-feature-name"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1835,
+    "expectedText": "고객 제언 1",
+    "text": "고객 제언 1",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1836,
+    "expectedText": "자동 진행 구조에서 벗어난 직접 조작 참여 요소 추가",
+    "text": "경기 정보 및 UI 표시 개선",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1837,
+    "expectedText": "고객 제언 2",
+    "text": "고객 제언 2",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1838,
+    "expectedText": "유사 레벨 매칭 시스템 도입으로 공정성 확보",
+    "text": "레이싱 규칙 설명 및 이해 지원 강화",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1839,
+    "expectedText": "고객 제언 3",
+    "text": "고객 제언 3",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1840,
+    "expectedText": "난이도 단계화 및 보상 체계 재설계",
+    "text": "매칭 밸런스 조정 체계 도입",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1841,
+    "expectedText": "고객 제언 4",
+    "text": "고객 제언 4",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1842,
+    "expectedText": "경기 연출·스토리 강화로 몰입감 증대",
+    "text": "콘텐츠 정체성 및 재미 요소 강화",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1844,
+    "expectedText": "고객 제언 1",
+    "text": "고객 제언 1",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1845,
+    "expectedText": "자동 매칭·개인 진행 옵션 제공",
+    "text": "강제적 협동 구조 완화 및 선택권 확대",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1846,
+    "expectedText": "고객 제언 2",
+    "text": "고객 제언 2",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1847,
+    "expectedText": "교배 과정 소요 시간 단축 및 접근성 개선",
+    "text": "교배 실패 시 재화 보전 방안 마련",
+    "source": "stored-db-recommendation-action"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1848,
+    "expectedText": "고객 제언 3",
+    "text": "고객 제언 3",
+    "source": "stored-db-recommendation-label"
+  },
+  {
+    "sectionIndex": 1,
+    "paragraphIndex": 1849,
+    "expectedText": "‘교배’라는 용어·세계관을 대체할 수 있는 새로운 콘셉트 기획",
+    "text": "교배 진행 오류 및 버그 개선",
+    "source": "stored-db-recommendation-action"
+  }
+]

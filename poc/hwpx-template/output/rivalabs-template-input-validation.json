@@ -1,0 +1,11 @@
+{
+  "valid": true,
+  "variant": "sw",
+  "productType": "sw",
+  "reference": "Rivalabs original HWPX",
+  "featureCount": 6,
+  "recommendationCount": 8,
+  "errors": [],
+  "warnings": [],
+  "next": "선택된 HWPX 템플릿의 슬롯/반복 블록에 컴파일할 수 있습니다."
+}

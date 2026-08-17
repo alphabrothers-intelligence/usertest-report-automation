@@ -1,0 +1,11 @@
+{
+  "valid": true,
+  "variant": "unified",
+  "productType": "sw",
+  "reference": "new local HWPX assembled from SW and physical block definitions; never merge rendered HTML",
+  "featureCount": 6,
+  "recommendationCount": 8,
+  "errors": [],
+  "warnings": [],
+  "next": "통합 템플릿의 공통·SW·실제품 블록 매핑을 모두 확인한 뒤 컴파일합니다."
+}

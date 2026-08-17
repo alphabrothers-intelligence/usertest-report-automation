@@ -1,0 +1,536 @@
+{
+  "version": 1,
+  "purpose": "HWPX 제언 섹션과 DB 분석 근거를 안전하게 연결하는 읽기 전용 로컬 manifest",
+  "report": {
+    "id": "777788c3-7552-47cc-8d97-57c74a815db9",
+    "name": "리바랩스 8/3 재검증본"
+  },
+  "recommendations": [
+    {
+      "id": "recommendation-1",
+      "documentSection": "종합 결과 및 제언",
+      "featureName": null,
+      "recommendationText": "# Ⅸ장. 종합 결과 및 제언 ## 2. 개선 전략 제언 [전반적 방향성] 핵심구매요소 조사 결과, \"성취 및 보상 요소(걸음 수 보상, 미션 보상 등)\"가 34%로 1위, \"시각적 디자인(UI/그래픽, 캐릭터, 화면 구성 등)\"이 25%로 2위, \"앱 안정성(버그, 오류, 실행 속도 등)\"이 18%로 3위로 나타났습니다. 그러나 기능별 평가에서는 상대중요도 1위 기능인 '펫과의 산책'(상대중요도 2.96)의 만족도가 6.35점, 2위 기능인 '펫 성장 시스템'(상대중요도 1.38)의 만족도가 6.81점으로 확인되어, 중요도 대비 만족도 격차가 존재하는 것으로 나타났습니다. 이와 함께 NPS는 -41점(추천 고객 12%, 중립 고객 35%, 비추천 고객 53%)으로 확인되었으며, 전반적 만족도는 평균 5.79점(SD 2.57)으로 나타났습니다. → __중요도가 높으면서 만족도가 상대적으로 낮게 확인된 '펫과의 산책'과 '펫 성장 시스템'을 우선 개선 대상으로 선정하여 개발 자원을 집중할 것을 제언함.__ [핵심 기능 '펫과의 산책' 개선] '펫과의 산책'은 기능 중요도에서 1위(상대중요도 2.96)로 가장 높게 평가되었으나, 만족도는 6.35점으로 중요도 대비 낮은 수준으로 확인되었습니다. 이는 GPS 및 걸음 수 측정의 부정확성, 보물상자·영역 획득 범위의 불명확성 등 핵심 이용 과정에서의 불편이 반복적으로 언급된 데 따른 것으로 해석됩니다. → 산책 측정의 정확성 및 보상·콘텐츠 구조를 우선 개선할 것을 제언함. ※ 펫과의 산책 관련 주요 insight • GPS 및 걸음 수 측정 부정확성 • 보물상자·영역 획득 범위 불명확 • 보상 및 콘텐츠 매력 부족 • 산책 시작 수동 조작의 번거로움 • 지도 확대·축소 및 조작감 불편 [핵심 기능 '펫 성장 시스템' 개선] '펫 성장 시스템'은 기능 중요도에서 2위(상대중요도 1.38)로 다소 높게 평가되었으나, 만족도는 6.81점으로 확인되었습니다. 이는 부화·성장 속도 및 소요 시간에 대한 불만과 함께, 설명·튜토리얼 부족으로 인한 이해 어려움이 반복적으로 언급된 데 따른 것으로 해석됩니다. → 성장 체감을 높이는 시각적 변화 및 보상·경험치 체계, 안내 콘텐츠를 보완할 것을 제언함. ※ 펫 성장 시스템 관련 주요 insight • UI·조작 편의성 문제 • 보상·경험치 체계 불만 • 부화·성장 속도 및 시간 소요 불만 • 설명·튜토리얼 부족으로 인한 이해 어려움 [차우선 기능: '실시간 위치 기반 거점형 콘텐츠' 및 '펫 꾸미기' 개선] '실시간 위치 기반 거점형 콘텐츠'는 상대중요도 0.26, 만족도 6.35점으로 확인되었으며, 보상 및 이득 불명확·부족, 위치 인식 및 시스템 오류 등이 언급되었습니다 → 보상 체계의 명확화 및 위치 인식 오류 개선을 제언함. '펫 꾸미기'는 상대중요도 0.23, 만족도 7.2점으로 확인되었으며, 능력치 미반영에 대한 실효성 의문과 재화·가격 부담이 언급되었습니다 → 구매·재화 부담 완화 및 획득 경로 안내 보완이 요구됨.",
+      "source": {
+        "type": "stored_db_recommendation",
+        "section": "dev_priority"
+      },
+      "evidence": {
+        "quantitative": [
+          {
+            "feature": "펫과의 산책",
+            "mean": 6.35,
+            "sd": 2.54
+          },
+          {
+            "feature": "펫 성장 시스템",
+            "mean": 6.81,
+            "sd": 2.39
+          },
+          {
+            "feature": "펫 꾸미기",
+            "mean": 7.2,
+            "sd": 2.29
+          },
+          {
+            "feature": "실시간 위치 기반 거점형 콘텐츠",
+            "mean": 6.35,
+            "sd": 2.46
+          },
+          {
+            "feature": "펫 교배",
+            "mean": 5.85,
+            "sd": 2.77
+          },
+          {
+            "feature": "펫 레이싱",
+            "mean": 6.04,
+            "sd": 2.86
+          }
+        ],
+        "sectionAnalysisKeys": [
+          "uxQuality",
+          "fourValues",
+          "crossAnalysis",
+          "fourValueItems",
+          "featureExperience",
+          "corePurchaseFactor"
+        ]
+      },
+      "note": "종합 제언은 단일 인용문이 아니라 저장된 정량 결과와 종합 분석을 바탕으로 생성된 내용입니다. 문서 UI에서는 이 목록을 '분석 근거'로 표시할 수 있습니다."
+    },
+    {
+      "id": "recommendation-2",
+      "documentSection": "기능별 고객 제언",
+      "featureName": null,
+      "recommendationText": "{\"features\":[{\"featureName\":\"펫과의 산책\",\"actions\":[\"GPS 오차 최소화를 위한 위치 정확도 개선\",\"보물상자·영역 획득 범위 표시 명확화\",\"보상 아이템의 다양화 및 콘텐츠 매력 강화\",\"산책 시작 시 자동 실행 기능 제공\",\"지도 확대·축소 조작감 개선\"]},{\"featureName\":\"펫 성장 시스템\",\"actions\":[\"UI 구성 및 조작 편의성 개선\",\"보상·경험치 체계 균형 재조정\",\"부화 및 성장 소요 시간 단축\",\"성장 단계별 설명 및 튜토리얼 제공\",\"성장 체감을 위한 시각적 변화 강화\",\"알에서 부화하는 컨셉을 대체할 새로운 설정 검토\"]},{\"featureName\":\"실시간 위치 기반 거점형 콘텐츠\",\"actions\":[\"점령 보상 및 이득 체계 명확화\",\"위치 인식 오류 개선 및 시스템 안정화\",\"점령 비용 대비 보상 효율성 조정\",\"지역별 유저 밀도 불균형 해소 방안 마련\",\"콘텐츠 이용 안내 및 튜토리얼 제공\",\"펫 배치 제약 완화 및 편의성 개선\"]},{\"featureName\":\"펫 꾸미기\",\"actions\":[\"아이템 능력치 반영 체계 도입\",\"착용 및 적용 관련 버그 개선\",\"아이템 재화·가격 부담 완화\",\"착용감 및 디자인 완성도 개선\",\"펫별 개별 구매에 따른 중복 지출 부담 완화\",\"아이템 획득 경로 안내 및 튜토리얼 강화\"]},{\"featureName\":\"펫 레이싱\",\"actions\":[\"경기 정보 및 UI 표시 개선\",\"레이싱 규칙 설명 및 이해 지원 강화\",\"매칭 밸런스 조정 체계 도입\",\"콘텐츠 정체성 및 재미 요소 강화\",\"플레이어 개입 요소 도입을 통한 자동진행 불만 해소\"]},{\"featureName\":\"펫 교배\",\"actions\":[\"강제적 협동 구조 완화 및 선택권 확대\",\"교배 실패 시 재화 보전 방안 마련\",\"교배 진행 오류 및 버그 개선\",\"교배 컨셉을 대체할 수 있는 새로운 콘셉트 기획\",\"매칭 지연 해소 및 제한 시간 부담 완화\",\"교배 사용법 안내 및 튜토리얼 강화\"]}]}",
+      "source": {
+        "type": "stored_db_recommendation",
+        "section": "feature_customer_recommendations"
+      },
+      "evidence": {
+        "quantitative": [
+          {
+            "feature": "펫과의 산책",
+            "mean": 6.35,
+            "sd": 2.54
+          },
+          {
+            "feature": "펫 성장 시스템",
+            "mean": 6.81,
+            "sd": 2.39
+          },
+          {
+            "feature": "펫 꾸미기",
+            "mean": 7.2,
+            "sd": 2.29
+          },
+          {
+            "feature": "실시간 위치 기반 거점형 콘텐츠",
+            "mean": 6.35,
+            "sd": 2.46
+          },
+          {
+            "feature": "펫 교배",
+            "mean": 5.85,
+            "sd": 2.77
+          },
+          {
+            "feature": "펫 레이싱",
+            "mean": 6.04,
+            "sd": 2.86
+          }
+        ],
+        "sectionAnalysisKeys": [
+          "uxQuality",
+          "fourValues",
+          "crossAnalysis",
+          "fourValueItems",
+          "featureExperience",
+          "corePurchaseFactor"
+        ]
+      },
+      "note": "종합 제언은 단일 인용문이 아니라 저장된 정량 결과와 종합 분석을 바탕으로 생성된 내용입니다. 문서 UI에서는 이 목록을 '분석 근거'로 표시할 수 있습니다."
+    },
+    {
+      "id": "recommendation-3",
+      "documentSection": "기능별 개선 제언",
+      "featureName": "펫과의 산책",
+      "recommendationText": "산책 트래킹 정확도 및 조작 편의성 개선 • As-is: **GPS 및 걸음 수 측정 부정확성**, **보물상자·영역 획득 범위 불명확**, **보상 및 콘텐츠 매력 부족**, **산책 시작 수동 조작의 번거로움**, **지도 확대·축소 및 조작감 불편**. • To-be: '**위치·걸음 수 측정 정확도 개선**', '**획득 가능 범위 시각화 가이드라인**', '**자동 감지 기반 산책 시작 기능**', '**지도 줌·회전 민감도 조정 및 시점 고정 기능**' 도입/강화/제공/마련. → **측정 정확도**와 **조작 편의성**을 동시에 개선하여 핵심 불편 요소를 해소하고, **보상 체계 다양화**를 통해 지속 사용 유인을 확보할 것을 제언함.",
+      "source": {
+        "type": "stored_db_recommendation",
+        "section": "feature_improvement:펫과의 산책"
+      },
+      "evidence": {
+        "quantitative": {
+          "mean": 6.35,
+          "sd": 2.54
+        },
+        "qualitativeCategories": [
+          {
+            "type": "qualitative_category",
+            "label": "GPS 및 걸음 수 측정 부정확성 문제",
+            "polarity": "negative",
+            "responseCount": 15,
+            "quoteSamples": [
+              "위치 정확도가 다른 앱에 비해 높지 않습니다 제가 가는 방향의 위치와 캐릭터가 이동하는 위치가 다른 경우가 많습니다",
+              "걸음수와 거리가 전혀 측정되지 않습니다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "지도 확대·축소 및 조작감 불편",
+            "polarity": "negative",
+            "responseCount": 12,
+            "quoteSamples": [
+              "지도를 확대 및 축소하는 등의 상호작용의 조작감이 매우 불편합니다 전체적으로 너무 확 돌아가고 따라서 정확한 조작이 어렵습니다",
+              "맵이 확대는 되지만 축소가 안돼서 멀리까지 보기가 힘들다."
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "펫과 함께하는 산책 경험의 정서적 만족",
+            "polarity": "positive",
+            "responseCount": 10,
+            "quoteSamples": [
+              "펫과 함께 걸음으로서 경험치를 획득할수 있어 좋았어요",
+              "휴대폰 속 펫과 같이 걷는 기분이라 훨씬 힘이 나고 힘들지 않았다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "보물상자·영역 획득 범위 불명확",
+            "polarity": "negative",
+            "responseCount": 8,
+            "quoteSamples": [
+              "상자를 먹을 때 어느정도까지 가까이 가야 먹을 수 있는지 확실하지 않다.",
+              "얻으려는 상자또는 무언가가 ??M내에 있는지 설명이 없거나"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "산책 동기부여 및 운동 효과",
+            "polarity": "positive",
+            "responseCount": 8,
+            "quoteSamples": [
+              "나를 운동하게 만들어준다..",
+              "게임으로 인해 산책을 유도하는것이 매우 신선했습니다"
+            ]
+          }
+        ]
+      },
+      "note": "AI를 다시 호출하거나 근거를 새로 추론하지 않았습니다. 저장된 제언과 해당 기능의 저장된 정량·정성 결과를 함께 배치하기 위한 추적 정보입니다."
+    },
+    {
+      "id": "recommendation-4",
+      "documentSection": "기능별 개선 제언",
+      "featureName": "실시간 위치 기반 거점형 콘텐츠",
+      "recommendationText": "거점 점령 콘텐츠 신뢰도·보상 체계 개선 • As-is: **점령 보상의 체감 가치 부족**, **GPS 정확도 및 안정성 결함**, **코인 획득량과 점령 비용 간 밸런스** 문제, **비수도권·저밀도 지역 사용자의 콘텐츠 소외**, **온보딩 설계 부족**, **펫 자원 관리 제약**으로 인한 활용성 저해. • To-be: '점령 보상 체감 가치 강화', 'GPS 정확도 및 시스템 안정성 개선', '점령 비용 대비 코인 획득량 밸런스 조정', '저밀도 지역 참여 유인 및 온보딩 가이드' 마련. → **만족도 6.35점**과 **상대중요도 0.26**을 고려할 때, 보상·시스템 신뢰도와 지역 형평성을 동시에 개선하여 지속 참여를 유도할 필요가 있음.",
+      "source": {
+        "type": "stored_db_recommendation",
+        "section": "feature_improvement:실시간 위치 기반 거점형 콘텐츠"
+      },
+      "evidence": {
+        "quantitative": {
+          "mean": 6.35,
+          "sd": 2.46
+        },
+        "qualitativeCategories": [
+          {
+            "type": "qualitative_category",
+            "label": "보상 및 이득 불명확·부족",
+            "polarity": "negative",
+            "responseCount": 16,
+            "quoteSamples": [
+              "거점을 점령 함으로써 얻을 수 있는 메리트가 생각보다 좋지 않습니다",
+              "영역을 차지했을 때의 이득이 와닿지 않는다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "경쟁 및 영역 점령의 재미와 성취감",
+            "polarity": "positive",
+            "responseCount": 13,
+            "quoteSamples": [
+              "경쟁적이라서 재미있고 성취감있었음",
+              "영역이 있으니 나만의 영역을 크게 만들면서 경쟁심과 성취감을 불러 일으킨다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "지역별 유저 밀도 불균형",
+            "polarity": "negative",
+            "responseCount": 11,
+            "quoteSamples": [
+              "시골에서는 거점을 발견하기가 어려웠어요",
+              "지방일수록 그 효과는 크지 않다고 생각합니다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "점령 비용 대비 비효율성",
+            "polarity": "negative",
+            "responseCount": 9,
+            "quoteSamples": [
+              "차지비용은 10k코인, 영역회복비용은 50k코인으로 압도적으로 비효율적입니다",
+              "영역 차지에 코인이 무려 10k이나 필요하다고 해서"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "산책 및 걷기 동기부여",
+            "polarity": "positive",
+            "responseCount": 9,
+            "quoteSamples": [
+              "다른 gps 기반 게임처럼 이동할 동기를 줘서 좋았다",
+              "이 기능 덕분에 산책을 자주 하고 싶어지고 많이 걸고 싶은 마음이 들어서 재밌었어요"
+            ]
+          }
+        ]
+      },
+      "note": "AI를 다시 호출하거나 근거를 새로 추론하지 않았습니다. 저장된 제언과 해당 기능의 저장된 정량·정성 결과를 함께 배치하기 위한 추적 정보입니다."
+    },
+    {
+      "id": "recommendation-5",
+      "documentSection": "기능별 개선 제언",
+      "featureName": "펫 꾸미기",
+      "recommendationText": "펫 꾸미기 실효성 및 경제성 개선 • As-is: **능력치 미반영**으로 인한 실효성 의문, **저장·복사 버그**, **재화 대비 아이템 가격 격차**, **스티커식 부착 방식·모자 크기** 등 디테일 완성도 부족, **펫별 개별 구매**로 인한 중복 지출 부담, **튜토리얼 부재**로 인한 기능 인지 실패. • To-be: '외형 외 부가 효과' 도입, '저장·복사 버그 수정' 및 '재화 대비 가격 구조 조정' 강화, '부착 방식·사이즈 디테일 개선', '다펫 통합 구매 옵션'과 '기능 안내 튜토리얼' 마련. → **실효성**과 **경제적 부담** 문제를 함께 해소하여 만족도(**평균 7.2점**) 대비 낮은 실사용 효용감을 개선할 필요가 있음.",
+      "source": {
+        "type": "stored_db_recommendation",
+        "section": "feature_improvement:펫 꾸미기"
+      },
+      "evidence": {
+        "quantitative": {
+          "mean": 7.2,
+          "sd": 2.29
+        },
+        "qualitativeCategories": [
+          {
+            "type": "qualitative_category",
+            "label": "재화·가격 부담",
+            "polarity": "negative",
+            "responseCount": 22,
+            "quoteSamples": [
+              "귀여운 템들은 많은데 너무 비싸요 ㅠㅠ",
+              "재화가 매우 부족. 얻는 시스템이 더 필요함."
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "펫 꾸미기 귀여움 및 심미적 만족",
+            "polarity": "positive",
+            "responseCount": 22,
+            "quoteSamples": [
+              "펫이 너무 귀여워 좋았어요!",
+              "아기자기하고 귀엽다."
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "아이템 다양성 확대 요청",
+            "polarity": "neutral",
+            "responseCount": 13,
+            "quoteSamples": [
+              "종류만 꾸준히 늘려주면 될 것 같다.",
+              "좀더 다양한 컨셉에 맞는 테마가 있으면 좋겠습니다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "개성 표현 및 커스터마이징 가치",
+            "polarity": "positive",
+            "responseCount": 13,
+            "quoteSamples": [
+              "다른 사람들의 반려동물과의 구분을 위해서라도 필요한 요소라고 생각합니다",
+              "여러 꾸미기 아이템이 있고 개성을 살릴 수 있어서 좋다고 생각한다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "획득 경로 안내 부족 및 튜토리얼 미흡",
+            "polarity": "negative",
+            "responseCount": 9,
+            "quoteSamples": [
+              "튜토리얼을 못해서 꾸미기템얻는 방법을 몰라서 대답하기 어려움",
+              "꾸밀 수 있는 아이템을 획득하지 못 하였어요. 투토리얼을 건너뛰어서 인지 어떻게 획득해야하는지 이해할 수 었었어요"
+            ]
+          }
+        ]
+      },
+      "note": "AI를 다시 호출하거나 근거를 새로 추론하지 않았습니다. 저장된 제언과 해당 기능의 저장된 정량·정성 결과를 함께 배치하기 위한 추적 정보입니다."
+    },
+    {
+      "id": "recommendation-6",
+      "documentSection": "기능별 개선 제언",
+      "featureName": "펫 성장 시스템",
+      "recommendationText": "펫 성장 시스템 보상·체감 구조 개선 • As-is: **모바일 환경에 맞지 않는 조작 방식**으로 상호작용 진입장벽 발생, **낮은 경험치·능력치 상승폭**으로 보상 체감 부족, **긴 부화·성장 소요 시간**으로 흥미 저하 및 이탈 위험, **핵심 메커니즘 안내 부재**로 초기 이해도 저하, **레벨업 시 외형·이펙트 변화 부재**로 성취감 결여, **알 부화 설정과 반려동물 소재 간 이질감**으로 몰입 저해. • To-be: '모바일 친화형 조작 방식', '보상 체감형 경험치·성장 속도 밸런싱', '핵심 메커니즘 튜토리얼', '레벨업 시각 효과' 도입/강화. → **조작 편의성**과 **보상·성장 체감**을 동시에 높여 초기 이해도와 지속 몰입도를 개선할 필요가 있음.",
+      "source": {
+        "type": "stored_db_recommendation",
+        "section": "feature_improvement:펫 성장 시스템"
+      },
+      "evidence": {
+        "quantitative": {
+          "mean": 6.81,
+          "sd": 2.39
+        },
+        "qualitativeCategories": [
+          {
+            "type": "qualitative_category",
+            "label": "펫 성장 및 부화 재미와 기대감",
+            "polarity": "positive",
+            "responseCount": 16,
+            "quoteSamples": [
+              "뭐가 나올지 기대도 되고 정말 좋았어요!",
+              "알을 까서 새로운 펫을 랜덤하게 얻었었는데 기분이 좋았다!"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "설명·튜토리얼 부족으로 인한 이해 어려움",
+            "polarity": "negative",
+            "responseCount": 15,
+            "quoteSamples": [
+              "튜토리얼 오류로 인해 정상적으로 해당 시스템을 익히지 못하여",
+              "펫 성장 시스템에 대한 설명이 없는듯..?"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "부화·성장 속도 및 시간 소요 불만",
+            "polarity": "negative",
+            "responseCount": 12,
+            "quoteSamples": [
+              "알 부화, 교배 등에 시간이 너무 오래 걸려 실제 테스트 기간 내에 확인이 제대로 되지 않을",
+              "너무 많은시간이 소요되서 아쉬움"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "성장 체감 및 시각적 변화 부족",
+            "polarity": "negative",
+            "responseCount": 11,
+            "quoteSamples": [
+              "펫 성장 자체 역시 밋밋하게 진행됩니다",
+              "육성을 해도 모습이 바뀌지 않는점은 아쉬웠다."
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "펫 다양성과 귀여움",
+            "polarity": "positive",
+            "responseCount": 10,
+            "quoteSamples": [
+              "펫들이 다양하고 귀여워서 좋아요",
+              "다양한 펫들이 귀여웠고, 도감 시스템도 수집욕을 불러일으킵니다."
+            ]
+          }
+        ]
+      },
+      "note": "AI를 다시 호출하거나 근거를 새로 추론하지 않았습니다. 저장된 제언과 해당 기능의 저장된 정량·정성 결과를 함께 배치하기 위한 추적 정보입니다."
+    },
+    {
+      "id": "recommendation-7",
+      "documentSection": "기능별 개선 제언",
+      "featureName": "펫 교배",
+      "recommendationText": "펫 교배 참여 장벽 완화 • As-is: **협동 강제 구조**로 인한 개인 플레이 이용자 진입장벽, **교배 실패 시 재화·시간 손실**로 인한 재도전 의욕 저하, **터치 반응 불량과 진행 정지 버그**, 반려동물 육성 정체성과 배치되는 **교배 컨셉 자체에 대한 거부감**, **매칭 대기 지연 및 3일 제한 시간**의 체감 부담, **튜토리얼·안내 부족**으로 인한 이해도 저하. • To-be: '개인 플레이 대안 경로', '실패 보상 및 재화 환급 장치', '교배 화면 반응성·안정성 개선', '매칭 대기·제한 시간 완화', '단계별 튜토리얼 안내' 도입/강화/마련. → **낮은 만족도(평균 5.85)**와 **최하위권 상대중요도(-2.58)**를 보이는 만큼, 구조적 진입장벽과 기술적 오류를 우선 해소하여 기능에 대한 근본적 거부감을 완화할 필요가 있음.",
+      "source": {
+        "type": "stored_db_recommendation",
+        "section": "feature_improvement:펫 교배"
+      },
+      "evidence": {
+        "quantitative": {
+          "mean": 5.85,
+          "sd": 2.77
+        },
+        "qualitativeCategories": [
+          {
+            "type": "qualitative_category",
+            "label": "교배 진행 오류 및 버그",
+            "polarity": "negative",
+            "responseCount": 22,
+            "quoteSamples": [
+              "펫을 넣으면 갑자기 화면이 멈춘 것처럼 되고, +버튼을 다시 눌러도 먹통입니다",
+              "버튼 클릭도 잘 안되고 실행을 안함"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "매칭 지연 및 3일 제한 시간 부담",
+            "polarity": "negative",
+            "responseCount": 16,
+            "quoteSamples": [
+              "매칭이 이루어지는 데 시간이 다소 길게 걸려 기다림이 발생하는 점이 아쉬웠습니다",
+              "상대가 3일안에 만걸음을 걷지 않으면 아예 아무것도 얻을 수 없다는 점이 조금 슬픕니다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "미체험으로 판단 보류",
+            "polarity": "neutral",
+            "responseCount": 15,
+            "quoteSamples": [
+              "교배는 해보지 못했어요.",
+              "아직 교배를 해보진 못했습니다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "강제적 협동 구조에 대한 거부감",
+            "polarity": "negative",
+            "responseCount": 14,
+            "quoteSamples": [
+              "너무 과도하게 다른 플레이어와의 교류를 요구하는 것 같고",
+              "다른 유저랑 협력해야된다는 점이 좀 별로였습니다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "사용법·튜토리얼 안내 부족으로 인한 혼란",
+            "polarity": "negative",
+            "responseCount": 14,
+            "quoteSamples": [
+              "튜토리얼이 안되서 건너뛰어서 플레이할 수 밖에 없었는데",
+              "교배기능을 사용하려고 했는데 맨위칸에 한마리만 선택이 되고 두번째 칸에 선택이 안되서 사용방법을 모르겠더라고요"
+            ]
+          }
+        ]
+      },
+      "note": "AI를 다시 호출하거나 근거를 새로 추론하지 않았습니다. 저장된 제언과 해당 기능의 저장된 정량·정성 결과를 함께 배치하기 위한 추적 정보입니다."
+    },
+    {
+      "id": "recommendation-8",
+      "documentSection": "기능별 개선 제언",
+      "featureName": "펫 레이싱",
+      "recommendationText": "펫 레이싱 콘텐츠 정체성 및 조작 몰입도 개선 • As-is: **정보 노출 부족**과 **표시 오류**, **튜토리얼·안내 부족**으로 인한 게임 메커니즘 이해도 저하, **매칭 시스템의 스펙 격차** 문제 반복 제기, **레이스 명칭과 실제 배틀형 콘텐츠 간 정체성 불일치**, **직접 조작 요소 부재**로 인한 몰입도 저하. • To-be: '정보 표시 개선 및 오류 수정', '튜토리얼·안내 강화', '매칭 밸런스 조정', '콘텐츠 명칭 및 정체성 재정립', '플레이어 직접 개입 요소' 도입/강화/제공/마련. → **매칭 불균형**과 **자동진행 위주 구조**로 인한 몰입도 저하를 해소하기 위해 조작 개입 요소와 콘텐츠 정체성을 함께 재설계할 필요가 있음.",
+      "source": {
+        "type": "stored_db_recommendation",
+        "section": "feature_improvement:펫 레이싱"
+      },
+      "evidence": {
+        "quantitative": {
+          "mean": 6.04,
+          "sd": 2.86
+        },
+        "qualitativeCategories": [
+          {
+            "type": "qualitative_category",
+            "label": "규칙 및 시스템 이해 부족",
+            "polarity": "negative",
+            "responseCount": 15,
+            "quoteSamples": [
+              "일반레이스에서 1등이 가능은 한 건지 잘 모르겠습니다 어떻게 해도 2등밖에 안되던데",
+              "제가 무슨 조작을 하는건지 안하는건지 모르겠습니다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "플레이어 개입 부재 및 자동진행 불만",
+            "polarity": "negative",
+            "responseCount": 14,
+            "quoteSamples": [
+              "따로 컨트롤을 하는 부분 보다는 그냥 운에 의한 등수 산정의 느낌이 크디 보니 딱히 재미있다는 생각은 안듭니다",
+              "레이싱은 따로 조작할 수 있는 부분 없이 펫 스텟에 맞춰서 자동으로 되는 것 같아서 좀 아쉬웠습니다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "매칭 불균형 문제",
+            "polarity": "negative",
+            "responseCount": 13,
+            "quoteSamples": [
+              "강한 사람 만나는 경우가 많습니다",
+              "디펜스 레이스에서 매칭될 때 전투력 차이가 너무 크게 나는 상대와 자주 붙게 되어 게임의 균형감이 떨어지는 점이 아쉬웠습니다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "콘텐츠 정체성 및 재미 부족",
+            "polarity": "negative",
+            "responseCount": 10,
+            "quoteSamples": [
+              "별 의미 없는 콘텐츠로 느껴졌다",
+              "이건 진짜 필요가 없는 컨텐츠라고 생각합니다"
+            ]
+          },
+          {
+            "type": "qualitative_category",
+            "label": "경쟁 및 승부욕 자극",
+            "polarity": "positive",
+            "responseCount": 10,
+            "quoteSamples": [
+              "다른 사용자와 경쟁하는 시스템을 레이싱으로 표션해 어색함이 없었고 한 개의 부분이 아니라 여러 개의 종류가 있어서 재미를 느낄 수 있었다",
+              "경쟁심을 자극하여 플레이시간을 늘리기 좋음"
+            ]
+          }
+        ]
+      },
+      "note": "AI를 다시 호출하거나 근거를 새로 추론하지 않았습니다. 저장된 제언과 해당 기능의 저장된 정량·정성 결과를 함께 배치하기 위한 추적 정보입니다."
+    }
+  ],
+  "integrity": {
+    "regeneratesAnalysis": false,
+    "callsAI": false,
+    "modifiesDatabase": false,
+    "requiresHumanReviewBeforeExport": true
+  }
+}
