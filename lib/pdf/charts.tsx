@@ -1839,8 +1839,7 @@ export function PdfPolarityDonut({
     );
     a = a1;
   }
-  const legend = POLARITY_ORDER_PDF.map((pol, index) => {
-    const y = 55 + index * 21;
+  const legend = POLARITY_ORDER_PDF.map((pol) => {
     return (
       <View key={pol} style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
         <View style={{ width: 8, height: 8, backgroundColor: POLARITY_COLOR_PDF[pol], marginRight: 5 }} />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BlockView } from "@/components/ReportWebDocument";
+import { BlockView } from "@/components/report-web-document/ReportBlockView";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
 import type { QuantStats } from "@/lib/quant/compute";
 import { flagQuantStatsForReview, type ReviewFlag } from "@/lib/quant/reviewFlags";

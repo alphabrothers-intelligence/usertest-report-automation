@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import { withDefaultQuadrantZones, type ReportSectionContent } from "@/lib/report/sections";
 import { ReportWebWorkspace } from "@/components/ReportWebWorkspace";
-import { applyTextFormat, insertArrowLine, FormatButton } from "@/components/ReportWebDocument";
+import { applyTextFormat, insertArrowLine, FormatButton } from "@/components/report-web-document/ReportBlockView";
 
 const STORAGE_KEY = "usertest-report-studio-v3";
 

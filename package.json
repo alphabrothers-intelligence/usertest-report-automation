@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "check:golden": "tsx scripts/check-golden-sample.ts",
+    "check:workspace-characterization": "tsx scripts/check-workspace-characterization.ts",
     "check:sentence-fragment": "tsx scripts/check-sentence-fragment.ts",
     "check:review-flags": "tsx scripts/check-review-flags.ts",
     "render:quant-preview": "tsx scripts/render-quant-preview.ts",

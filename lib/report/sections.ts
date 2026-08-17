@@ -174,8 +174,10 @@ export type ReportRichStaticBlock = {
   html: string;
   /** 이 블록의 AI 요약을 필요할 때만 갱신할 때 쓰는 DB 문항 키. */
   summaryQuestionKey?: string;
-  /** Ⅲ장의 짧은 극성 총평과 Ⅴ장의 가치 종합 요약은 문체 규칙이 다르다. */
-  summaryKind?: "polarity" | "value";
+  /** Ⅲ장의 짧은 극성 총평·Ⅴ장의 가치 종합 요약·섹션 단위(sectionAnalysis.ts) 종합 해석은
+   * 문체 규칙이 다르다. "section"일 때 summaryQuestionKey는 문항 키가 아니라
+   * SectionAnalysisKey(featureExperience/corePurchaseFactor/fourValues/uxQuality)다. */
+  summaryKind?: "polarity" | "value" | "section";
 };
 
 export type ReportBlock = ReportChartBlock | ReportRankCompositionBlock | ReportStackedBarBlock | ReportGroupedBarBlock | ReportRadarBlock | ReportNpsBlock | ReportQuadrantBlock | ReportPriorityReferenceBlock | ReportPolarityBlock | ReportHeadingBlock | ReportTableBlock | ReportTextBlock | ReportRichStaticBlock;
@@ -371,7 +373,7 @@ export function textBlock(params: { id: string; label: string; html: string; pen
   return { id: params.id, kind: "text", label: params.label, html: params.html, pending: params.pending, styled: params.styled };
 }
 
-export function richStaticBlock(params: { id: string; html: string; summaryQuestionKey?: string; summaryKind?: "polarity" | "value" }): ReportRichStaticBlock {
+export function richStaticBlock(params: { id: string; html: string; summaryQuestionKey?: string; summaryKind?: "polarity" | "value" | "section" }): ReportRichStaticBlock {
   return { id: params.id, kind: "rich-static", html: params.html, summaryQuestionKey: params.summaryQuestionKey, summaryKind: params.summaryKind };
 }
 

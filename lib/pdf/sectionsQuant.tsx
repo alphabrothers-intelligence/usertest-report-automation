@@ -292,7 +292,9 @@ function SurveyQuestionTable({
   stages: { stage: string; questions: string[] }[];
   totalCount: number;
 }) {
-  let qno = 0;
+  const stageQuestionOffsets = stages.map((_, stageIndex) =>
+    stages.slice(0, stageIndex).reduce((total, stage) => total + stage.questions.length, 0),
+  );
   return (
     // 표 전체를 wrap={false}로 묶지 않는다(2026-07-23) — 그러면 한 페이지에 다 못 들어갈 때
     // 표 통째로 다음 페이지로 밀려 앞 페이지에 소제목만 남는 어색한 빈 공간이 생긴다. 대신
@@ -323,7 +325,7 @@ function SurveyQuestionTable({
           연속임을 시각적으로 유지) 페이지가 낭비되지 않는다. */}
       {stages.flatMap((stage, si) =>
         stage.questions.map((q, qi) => {
-          qno += 1;
+          const questionNumber = stageQuestionOffsets[si] + qi + 1;
           const isStageLast = qi === stage.questions.length - 1;
           const isVeryLast = si === stages.length - 1 && isStageLast;
           return (
@@ -360,7 +362,7 @@ function SurveyQuestionTable({
                     생기던 문제). 문항이 훨씬 많은 raw data는 여전히 문항 단위로 자연스럽게
                     다음 페이지로 이어진다. */}
                 <Text style={{ width: 34, fontSize: 7.5, fontWeight: "bold", textAlign: "center", paddingVertical: 3, paddingHorizontal: 5, borderRightWidth: 1, borderRightColor: colors.border }}>
-                  Q{qno}
+                  Q{questionNumber}
                 </Text>
                 <Text style={{ flex: 1, fontSize: 7.5, paddingVertical: 3, paddingHorizontal: 5, lineHeight: 1.3 }}>{q}</Text>
               </View>
