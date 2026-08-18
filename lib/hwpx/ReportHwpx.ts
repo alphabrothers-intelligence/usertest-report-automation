@@ -7,9 +7,13 @@
  * 분리해 두었으므로 기존 Claude Code 렌더링 파일에는 영향을 주지 않는다.
  */
 import JSZip from "jszip";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import type { QuantStats } from "@/lib/quant/compute";
 import type { ProductInfo } from "@/lib/productInfo/types";
 import { parseRichRuns, parseRichText, type RichTextRun } from "@/lib/report/richText";
+import type { ReportBlock, ReportHeadingBlock, ReportSectionContent } from "@/lib/report/sections";
+import { SECTION_BANNER, SUBSECTION_BANNER, sectionRomanGlyph } from "@/lib/report/sectionStyle";
 
 const NS = {
   hpf: "http://www.hancom.co.kr/hwpml/2011/hpf",
@@ -45,9 +49,13 @@ function paragraph(text: string, style: "title" | "section" | "heading" | "body"
     return `<hp:run charPrIDRef="${richCharPr}"><hp:t>${xml(run.text)}</hp:t></hp:run>`;
   }).join("");
   // 빈 줄도 p로 유지해야 한글에서 문단/줄 간격을 편집할 수 있다.
-  return `<hp:p id="0" paraPrIDRef="${paraPrIDRef}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+  return `<hp:p id="__REPORT_PARAGRAPH_ID__" paraPrIDRef="${paraPrIDRef}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
     ${runs}
   </hp:p>`;
+}
+
+function pageBreakParagraph(text = "", style: "title" | "section" | "heading" | "body" = "body"): string {
+  return paragraph(text, style).replace('pageBreak="0"', 'pageBreak="1"');
 }
 
 /** rich-text 공통 모델을 HWPX 문단용 입력으로 다시 직렬화한다. */
@@ -69,14 +77,15 @@ function runsToMarkup(runs: RichTextRun[]): string {
 function richParagraphs(value: string): string[] {
   return parseRichText(value).map((block) => {
     const content = runsToMarkup(block.runs);
-    if (block.kind === "heading") return paragraph(content, "heading");
+    // `[제목]`의 대괄호는 원본에서 실제로 보이는 글자다(richText.ts의 bracketed 주석 참고).
+    if (block.kind === "heading") return paragraph(block.bracketed ? `[${content}]` : content, "heading");
     if (block.kind === "bullet") return paragraph(`• ${content}`);
     if (block.kind === "arrow") return paragraph(`→ ${content}`);
     return paragraph(content);
   });
 }
 
-function sectionXml(paragraphs: string[]): string {
+function sectionXml(paragraphs: string[], templateSection?: string): string {
   // secPr/colPr는 첫 문단의 첫 run 안에 둔다. 이것이 section0.xml을 일반 XML이 아니라
   // OWPML 섹션으로 식별하게 하는 핵심 구조다.
   const first = `<hp:p id="0" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
@@ -96,8 +105,14 @@ function sectionXml(paragraphs: string[]): string {
       <hp:t></hp:t>
     </hp:run>
   </hp:p>`;
+  const templateFirstParagraph = templateSection?.match(/<hp:p\b[\s\S]*?<\/hp:p>/)?.[0];
+  let paragraphId = 1000000001;
+  let tableId = 2000000001;
+  const body = paragraphs.join("\n")
+    .replaceAll("__REPORT_PARAGRAPH_ID__", () => String(paragraphId++))
+    .replaceAll("__REPORT_TABLE_ID__", () => String(tableId++));
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-  <hs:sec xmlns:hp="${NS.hp}" xmlns:hs="${NS.hs}">${first}${paragraphs.join("\n")}</hs:sec>`;
+  <hs:sec xmlns:hp="${NS.hp}" xmlns:hs="${NS.hs}">${templateFirstParagraph ?? first}${body}</hs:sec>`;
 }
 
 function headerXml(): string {
@@ -130,9 +145,108 @@ export interface HwpxReportInput {
   quantStats: QuantStats;
   resultSummary: string;
   productInfo?: ProductInfo;
+  /** /viewer에서 사용자가 수정한 현재 문서. 있으면 DB 원본 재조립보다 이 스냅샷을 우선한다. */
+  sections?: ReportSectionContent[];
+}
+
+function htmlToText(value: string): string {
+  return value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|tr|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .split("\n").map((line) => line.trim()).filter(Boolean).join("\n");
+}
+
+function blockLines(block: ReportBlock): string[] {
+  switch (block.kind) {
+    case "heading": return [`${block.number ? `${block.number}. ` : ""}${block.text}`];
+    case "text": return htmlToText(block.html).split("\n");
+    case "rich-static": return htmlToText(block.html).split("\n");
+    case "table": return [block.title ?? "", block.headers.join(" | "), ...block.rows.map((row) => row.join(" | "))].filter(Boolean);
+    case "chart": return [block.title, ...block.items.map((item) => `${item.label}: ${item.value}${block.unit}`)];
+    case "rank-composition": return [block.title, ...block.rows.map((row) => `${row.rank}순위: ${row.segments.map((item) => `${item.name} ${item.percentage}%`).join(" · ")}`)];
+    case "stacked-bar": return [block.title, ...block.rows.map((row) => `${row.label}: ${row.segments.map((item) => `${item.name} ${item.value}${block.unit}`).join(" · ")}`)];
+    case "grouped-bar": return [block.title, ...block.categories.map((item) => `${item.label}: ${item.values.map((value) => `${value.series} ${value.value}${block.unit}`).join(" · ")}`)];
+    case "radar": return [block.title, ...block.indicators.map((label, index) => `${label}: ${block.series.map((series) => `${series.name} ${series.values[index] ?? "-"}`).join(" · ")}`)];
+    case "nps": return [block.title, `평균 ${block.mean} · NPS ${block.npsScore} · 추천 ${block.promoterPct}% · 중립 ${block.passivePct}% · 비추천 ${block.detractorPct}%`];
+    case "quadrant": return [block.title, ...block.items.map((item) => `${item.name}: 중요도 ${item.importance} · 만족도 ${item.satisfaction}`), ...block.zones.map((zone) => `${zone.title}: ${zone.description}`)];
+    case "priority-reference": return [block.title];
+    case "polarity": return [block.title, `긍정 ${block.positive}% · 부정 ${block.negative}% · 중립 ${block.neutral}%`];
+    case "row-group": return [block.headers?.join(" | ") ?? "", ...block.rows.flatMap((row) => [row.label, ...row.blocks.flatMap(blockLines)])].filter(Boolean);
+  }
+}
+
+/** 원본 HWPX의 장 제목 2셀 표를 실측값 그대로 재현한다(27.17pt + 198.86pt, 높이 33.10pt). */
+function sectionBannerTable(numeral: string, title: string, pageBreak: boolean): string {
+  return `<hp:p id="__REPORT_PARAGRAPH_ID__" paraPrIDRef="0" styleIDRef="0" pageBreak="${pageBreak ? 1 : 0}" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:tbl id="__REPORT_TABLE_ID__" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="0" rowCnt="1" colCnt="2" cellSpacing="0" borderFillIDRef="3" noAdjust="0">
+      <hp:sz width="22603" widthRelTo="ABSOLUTE" height="3310" heightRelTo="ABSOLUTE" protect="0"/>
+      <hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="PARA" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>
+      <hp:outMargin left="0" right="0" top="0" bottom="1152"/><hp:inMargin left="0" right="0" top="0" bottom="0"/>
+      <hp:tr>
+        <hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="1" borderFillIDRef="7"><hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0"><hp:p id="__REPORT_PARAGRAPH_ID__" paraPrIDRef="28" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="16"><hp:t>${xml(sectionRomanGlyph(numeral))}</hp:t></hp:run></hp:p></hp:subList><hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="2717" height="3310"/><hp:cellMargin left="0" right="0" top="0" bottom="0"/></hp:tc>
+        <hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="1" borderFillIDRef="8"><hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0"><hp:p id="__REPORT_PARAGRAPH_ID__" paraPrIDRef="28" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="17"><hp:t>${xml(title)}</hp:t></hp:run></hp:p></hp:subList><hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="19886" height="3310"/><hp:cellMargin left="0" right="0" top="0" bottom="0"/></hp:tc>
+      </hp:tr>
+    </hp:tbl></hp:run>
+  </hp:p>`;
+}
+
+/** 원본의 `1 | 제품 소개` 2셀 절 제목 표(37.44pt, 전체 본문 폭, 높이 30pt). */
+function subsectionBannerTable(number: string, title: string): string {
+  return `<hp:p id="__REPORT_PARAGRAPH_ID__" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+    <hp:run charPrIDRef="0"><hp:tbl id="__REPORT_TABLE_ID__" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="0" rowCnt="1" colCnt="2" cellSpacing="0" borderFillIDRef="9" noAdjust="0">
+      <hp:sz width="42520" widthRelTo="ABSOLUTE" height="3000" heightRelTo="ABSOLUTE" protect="0"/>
+      <hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="PARA" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>
+      <hp:outMargin left="0" right="0" top="0" bottom="1164"/><hp:inMargin left="0" right="0" top="0" bottom="0"/>
+      <hp:tr>
+        <hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="1" borderFillIDRef="10"><hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0"><hp:p id="__REPORT_PARAGRAPH_ID__" paraPrIDRef="28" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="18"><hp:t>${xml(number)}</hp:t></hp:run></hp:p></hp:subList><hp:cellAddr colAddr="0" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="3744" height="3000"/><hp:cellMargin left="0" right="0" top="0" bottom="0"/></hp:tc>
+        <hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="1" borderFillIDRef="9"><hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0"><hp:p id="__REPORT_PARAGRAPH_ID__" paraPrIDRef="29" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="18"><hp:t>${xml(title)}</hp:t></hp:run></hp:p></hp:subList><hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="1" rowSpan="1"/><hp:cellSz width="38776" height="3000"/><hp:cellMargin left="1296" right="0" top="0" bottom="0"/></hp:tc>
+      </hp:tr>
+    </hp:tbl></hp:run>
+  </hp:p>`;
+}
+
+function workspaceParagraphs(sections: ReportSectionContent[]): string[] {
+  return sections.flatMap((section) => [
+    sectionBannerTable(section.numeral, section.title, true),
+    ...section.blocks.flatMap((block) => block.kind === "heading" && block.variant === "numbered"
+      ? [subsectionBannerTable(block.number ?? "", block.text)]
+      : blockLines(block).filter(Boolean).map((line, index) => paragraph(line, block.kind === "heading" || index === 0 && !["text", "rich-static"].includes(block.kind) ? "heading" : "body"))),
+  ]);
+}
+
+function frontMatterParagraphs(input: HwpxReportInput, sections: ReportSectionContent[]): string[] {
+  const company = input.productInfo?.companyName?.trim() || "기업명 입력";
+  const service = input.productInfo?.serviceName?.trim() || "서비스·제품명 입력";
+  const date = input.productInfo?.coverDate?.trim() || input.generatedAt.replaceAll("-", ".");
+  const cover = [
+    paragraph("사용성 테스트\n결과보고서", "title"),
+    paragraph(company, "title"),
+    paragraph(`Usability Test Proposal for ‘${service}’`, "heading"),
+    paragraph(date),
+    paragraph("- 1 -"),
+  ];
+  const toc = sections.flatMap((section, sectionIndex) => {
+    const sectionPage = section.tocPageOverride || section.tocPageNumber || "";
+    const headings = section.blocks.filter((block): block is ReportHeadingBlock => block.kind === "heading" && block.variant === "numbered");
+    return [
+      sectionIndex === 0
+        ? pageBreakParagraph(`${sectionRomanGlyph(section.numeral)}. ${section.title}  ·········································  ${sectionPage}`, "heading")
+        : paragraph(`${sectionRomanGlyph(section.numeral)}. ${section.title}  ·········································  ${sectionPage}`, "heading"),
+      ...headings.map((heading) => paragraph(`${heading.number || ""}. ${heading.text}  ·································  ${heading.tocPageOverride || heading.tocPageNumber || sectionPage}`)),
+    ];
+  });
+  return [...cover, ...toc, paragraph("- 2 -")];
 }
 
 function reportParagraphs(input: HwpxReportInput): string[] {
+  if (input.sections?.length) return [...frontMatterParagraphs(input, input.sections), ...workspaceParagraphs(input.sections)];
   const q = input.quantStats;
   const product = input.productInfo?.serviceName ?? input.fileName?.replace(/\.[^.]+$/, "") ?? "사용성 테스트";
   const company = input.productInfo?.companyName ?? "입력 필요";
@@ -179,14 +293,35 @@ function reportParagraphs(input: HwpxReportInput): string[] {
   return p;
 }
 
+function enhanceTemplateHeader(header: string): string {
+  const borderFill = (id: number, color: string, border = "NONE") => `<hh:borderFill id="${id}" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0"><hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/><hh:leftBorder type="${border}" width="0.20 mm" color="${SUBSECTION_BANNER.borderColor}"/><hh:rightBorder type="${border}" width="0.20 mm" color="${SUBSECTION_BANNER.borderColor}"/><hh:topBorder type="${border}" width="0.20 mm" color="${SUBSECTION_BANNER.borderColor}"/><hh:bottomBorder type="${border}" width="0.20 mm" color="${SUBSECTION_BANNER.borderColor}"/><hh:diagonal type="NONE" width="0.1 mm" color="#000000"/><hc:fillBrush><hc:winBrush faceColor="${color}" hatchColor="#000000" alpha="0"/></hc:fillBrush></hh:borderFill>`;
+  const charPr = (id: number, height: number, color: string, spacing: number) => `<hh:charPr id="${id}" height="${height}" textColor="${color}" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2"><hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/><hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/><hh:spacing hangul="${spacing}" latin="${spacing}" hanja="${spacing}" japanese="${spacing}" other="${spacing}" symbol="${spacing}" user="${spacing}"/><hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/><hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/><hh:bold/><hh:underline type="NONE" shape="SOLID" color="#000000"/><hh:strikeout shape="NONE" color="#000000"/><hh:outline type="NONE"/><hh:shadow type="NONE" color="#C0C0C0" offsetX="10" offsetY="10"/></hh:charPr>`;
+  const centerPara = `<hh:paraPr id="28" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="1" suppressLineNumbers="0" checked="0" textDir="LTR"><hh:align horizontal="CENTER" vertical="BASELINE"/><hh:heading type="NONE" idRef="0" level="0"/><hh:breakSetting breakLatinWord="KEEP_WORD" breakNonLatinWord="BREAK_WORD" widowOrphan="0" keepWithNext="0" keepLines="1" pageBreakBefore="0" lineWrap="BREAK"/><hh:autoSpacing eAsianEng="0" eAsianNum="0"/><hp:switch><hp:case hp:required-namespace="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar"><hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="0" unit="HWPUNIT"/><hc:right value="0" unit="HWPUNIT"/><hc:prev value="0" unit="HWPUNIT"/><hc:next value="0" unit="HWPUNIT"/></hh:margin><hh:lineSpacing type="PERCENT" value="140" unit="HWPUNIT"/></hp:case><hp:default><hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="0" unit="HWPUNIT"/><hc:right value="0" unit="HWPUNIT"/><hc:prev value="0" unit="HWPUNIT"/><hc:next value="0" unit="HWPUNIT"/></hh:margin><hh:lineSpacing type="PERCENT" value="140" unit="HWPUNIT"/></hp:default></hp:switch><hh:border borderFillIDRef="2" offsetLeft="0" offsetRight="0" offsetTop="0" offsetBottom="0" connect="0" ignoreMargin="0"/></hh:paraPr>`;
+  const leftPara = centerPara.replace('id="28"', 'id="29"').replace('horizontal="CENTER"', 'horizontal="LEFT"');
+  return header
+    .replace(/<hh:borderFills itemCnt="6">/, `<hh:borderFills itemCnt="10">`)
+    .replace("</hh:borderFills>", `${borderFill(7, SECTION_BANNER.badgeBackground)}${borderFill(8, SECTION_BANNER.titleBackground)}${borderFill(9, "#FFFFFF", "SOLID")}${borderFill(10, SUBSECTION_BANNER.numberBackground, "SOLID")}</hh:borderFills>`)
+    .replace(/<hh:charProperties itemCnt="16">/, `<hh:charProperties itemCnt="19">`)
+    .replace("</hh:charProperties>", `${charPr(16, 1400, SECTION_BANNER.badgeColor, 0)}${charPr(17, 1500, SECTION_BANNER.titleColor, -5)}${charPr(18, 1404, "#111827", -3)}</hh:charProperties>`)
+    .replace(/<hh:paraProperties itemCnt="28">/, `<hh:paraProperties itemCnt="30">`)
+    .replace("</hh:paraProperties>", `${centerPara}${leftPara}</hh:paraProperties>`);
+}
+
 export async function buildReportHwpx(input: HwpxReportInput): Promise<Buffer> {
-  const zip = new JSZip();
-  const now = new Date().toISOString();
-  zip.file("mimetype", "application/hwp+zip", { compression: "STORE" });
-  zip.file("version.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><hv:version xmlns:hv="http://www.hancom.co.kr/hwpml/2011/version" targetApplication="HWP" major="5" minor="1" micro="1" application="HWPX" os="Web" xmlVersion="1.1"/>`);
-  zip.file("META-INF/manifest.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><om:manifest xmlns:om="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"><om:file-entry om:full-path="/" om:media-type="application/hwp+zip"/><om:file-entry om:full-path="Contents/content.hpf" om:media-type="application/xml"/><om:file-entry om:full-path="Contents/header.xml" om:media-type="application/xml"/><om:file-entry om:full-path="Contents/section0.xml" om:media-type="application/xml"/></om:manifest>`);
-  zip.file("Contents/content.hpf", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><hh:hpfs xmlns:hh="${NS.hpf}"><hh:beginNum page="1" footnote="1" endnote="1" picture="1" table="1" equation="1"/><hh:references><hh:refList><hh:fontfaces itemCnt="0"/><hh:charProperties itemCnt="0"/><hh:paraProperties itemCnt="0"/><hh:styles itemCnt="0"/></hh:refList></hh:references><hh:meta><hh:title>${xml(input.productInfo?.serviceName ?? input.fileName ?? "사용성 테스트 결과보고서")}</hh:title><hh:creator>ALPHA BROTHERS</hh:creator><hh:createdDate>${now}</hh:createdDate><hh:modifiedDate>${now}</hh:modifiedDate></hh:meta><hh:manifest><hh:item id="header" href="header.xml" media-type="application/xml"/><hh:item id="sec0" href="section0.xml" media-type="application/xml"/></hh:manifest><hh:spine><hh:itemRef idref="sec0"/></hh:spine></hh:hpfs>`);
-  zip.file("Contents/header.xml", headerXml());
-  zip.file("Contents/section0.xml", sectionXml(reportParagraphs(input)));
-  return zip.generateAsync({ type: "nodebuffer", compression: "STORE" });
+  // 한컴은 XML만 든 최소 ZIP을 구조상 열 수 있어 보여도 실제로는 손상 문서로 거부한다.
+  // settings/Preview/container 메타데이터가 포함된 검증 완료 베이스 패키지를 복제하고 본문만
+  // 교체한다. 이 파일은 next.config.ts의 outputFileTracingIncludes로 서버 번들에도 포함된다.
+  const templatePath = path.join(process.cwd(), "output", "hwpx-templates", "01_공통_기본_사용성테스트_보고서_양식.hwpx");
+  const templateBuffer = await readFile(templatePath);
+  const zip = await JSZip.loadAsync(templateBuffer);
+  const templateSection = await zip.file("Contents/section0.xml")?.async("string");
+  const templateHeader = await zip.file("Contents/header.xml")?.async("string");
+  // 템플릿의 검증된 header.xml 스타일/참조 체계를 그대로 유지한다. 과거 자체 생성 header가
+  // 한컴의 복구 경고를 유발한 핵심 원인이었다.
+  void headerXml;
+  if (templateHeader) zip.file("Contents/header.xml", enhanceTemplateHeader(templateHeader), { createFolders: false });
+  zip.file("Contents/section0.xml", sectionXml(reportParagraphs(input), templateSection), { createFolders: false });
+  // mimetype은 반드시 첫 엔트리이자 무압축이어야 한다. JSZip은 기존 순서를 유지한다.
+  zip.file("mimetype", "application/hwp+zip", { compression: "STORE", createFolders: false });
+  return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } });
 }

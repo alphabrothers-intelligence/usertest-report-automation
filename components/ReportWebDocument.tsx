@@ -15,9 +15,10 @@
  * 그대로 쓴다(차트/표/글 3종 블록, `lib/report/sections.ts`). 정성 데이터가 아직 없는 자리는
  * `pending: true`로 정직하게 "정성 분석 승인 후 표시"라고 보여준다.
  */
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { QuoteCorrectionPanel } from "@/components/QuoteCorrectionPanel";
 import { ActionPanel, SectionBanner, TableOfContents } from "@/components/report-web-document/ReportDocumentChrome";
+import { ReportCoverPage, ReportTocPage } from "@/components/report-web-document/ReportFrontMatter";
 import { AnalysisReferenceContent, QuoteSourceContent } from "@/components/report-web-document/EvidencePanelContent";
 import { BlockView } from "@/components/report-web-document/ReportBlockView";
 import { useReportClipboard } from "@/components/report-web-document/useReportClipboard";
@@ -26,6 +27,7 @@ import { useReportExport } from "@/components/report-web-document/useReportExpor
 import { useReportNavigation } from "@/components/report-web-document/useReportNavigation";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
+import type { ProductInfo } from "@/lib/productInfo/types";
 
 export { applyTextFormat, BlockView, FormatButton, insertArrowLine } from "@/components/report-web-document/ReportBlockView";
 
@@ -44,10 +46,36 @@ type Props = {
   /** 텍스트 서식·전체 복사·인용문 검토 버튼을 스튜디오 상단 고정 헤더(ReportStudio.tsx)에서
    * 그릴 수 있도록, 이 문서 컴포넌트 내부 핸들러를 위로 노출한다. */
   onToolbarActionsChange?: (actions: { copy: () => void; openCorrections: () => void }) => void;
+  productInfo: ProductInfo;
+  onProductInfoChange: (next: ProductInfo) => void;
 };
 
-export function ReportWebDocument({ sections, setSections, checkpoint, reportData, activeSection, onActiveSectionChange, workspaceStatus, workspaceError, onRetry, sourceFileUrl, onToolbarActionsChange }: Props) {
+/** row-group(항목/주요 의견 표)은 행마다 자식 블록을 품고 있어, id로 블록을 찾거나
+ * 바꿔치기하려면 한 단계 더 내려가봐야 한다. */
+function findBlockById(blocks: ReportBlock[], id: string): ReportBlock | null {
+  for (const block of blocks) {
+    if (block.id === id) return block;
+    if (block.kind === "row-group") {
+      for (const row of block.rows) {
+        const found = findBlockById(row.blocks, id);
+        if (found) return found;
+      }
+    }
+  }
+  return null;
+}
+
+function replaceBlockById(blocks: ReportBlock[], id: string, next: ReportBlock): ReportBlock[] {
+  return blocks.map((block) => {
+    if (block.id === id) return next;
+    if (block.kind === "row-group") return { ...block, rows: block.rows.map((row) => ({ ...row, blocks: replaceBlockById(row.blocks, id, next) })) };
+    return block;
+  });
+}
+
+export function ReportWebDocument({ sections, setSections, checkpoint, reportData, activeSection, onActiveSectionChange, workspaceStatus, workspaceError, onRetry, sourceFileUrl, onToolbarActionsChange, productInfo, onProductInfoChange }: Props) {
   const documentContainerRef = useRef<HTMLDivElement>(null);
+  const [pageGroups, setPageGroups] = useState<Record<string, string[][]>>({});
   const [selectedBlockRef, setSelectedBlockRef] = useState<{ numeral: string; id: string } | null>(null);
   const [correctionsPanelOpen, setCorrectionsPanelOpen] = useState(false);
   const { sectionElementsRef, scrollToSection, scrollToSubitem } = useReportNavigation({
@@ -94,15 +122,13 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     checkpoint();
     setSections((previous) =>
       previous.map((section) =>
-        section.numeral !== numeral
-          ? section
-          : { ...section, blocks: section.blocks.map((block) => (block.id === blockId ? next : block)) },
+        section.numeral !== numeral ? section : { ...section, blocks: replaceBlockById(section.blocks, blockId, next) },
       ),
     );
   }
 
   const selectedBlock = selectedBlockRef
-    ? sections.find((section) => section.numeral === selectedBlockRef.numeral)?.blocks.find((block) => block.id === selectedBlockRef.id) ?? null
+    ? findBlockById(sections.find((section) => section.numeral === selectedBlockRef.numeral)?.blocks ?? [], selectedBlockRef.id)
     : null;
 
   // 복사/인용검토 버튼을 스튜디오 상단 고정 헤더에서 그리려면, 이 컴포넌트 내부에서만
@@ -111,6 +137,38 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     onToolbarActionsChange?.({ copy: () => void copyActiveSection(), openCorrections: () => setCorrectionsPanelOpen(true) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, onToolbarActionsChange]);
+
+  // 화면과 인쇄가 같은 A4 본문 폭에서 줄바꿈되도록 실제 렌더 높이를 측정해 블록을 페이지로
+  // 묶는다. 긴 단일 블록은 브라우저가 문단/표 행 경계에서 자연 분할하도록 단독 페이지에 둔다.
+  useLayoutEffect(() => {
+    const root = documentContainerRef.current;
+    if (!root || sections.length === 0) return;
+    const pxPerMm = 96 / 25.4;
+    const pageContentHeight = (297 - 36) * pxPerMm;
+    const next: Record<string, string[][]> = {};
+    for (const section of sections) {
+      const pages: string[][] = [];
+      let current: string[] = [];
+      // 첫 물리 페이지에는 장 제목 배너가 들어가므로 그 높이를 먼저 예약한다.
+      let used = 110;
+      for (const block of section.blocks) {
+        const element = root.querySelector<HTMLElement>(`[data-report-block-id="${CSS.escape(block.id)}"]`);
+        const height = element ? Math.ceil(element.getBoundingClientRect().height) + 8 : 0;
+        if (current.length > 0 && used + height > pageContentHeight) {
+          pages.push(current);
+          current = [];
+          used = 0;
+        }
+        current.push(block.id);
+        used += height;
+      }
+      if (current.length > 0) pages.push(current);
+      next[section.numeral] = pages.length > 0 ? pages : [section.blocks.map((block) => block.id)];
+    }
+    setPageGroups((previous) => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
+    // 계산 결과를 sections에 다시 기록하면 sections 변경 → 재측정 → setSections가 반복되는
+    // 순환이 생긴다. 목차는 pageGroups에서 직접 쪽수를 계산하므로 측정 상태만 갱신한다.
+  }, [sections]);
 
   if (!reportData || sections.length === 0) {
     const isLoading = workspaceStatus === "loading";
@@ -192,24 +250,26 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
           </div>
         </aside>
       )}
-      <article ref={documentContainerRef} className="flex min-w-0 flex-col items-start gap-10">
-        {sections.map((section) => (
+      <article ref={documentContainerRef} className="flex min-w-[210mm] flex-col items-start gap-10">
+        <ReportCoverPage productInfo={productInfo} onChange={(next) => { checkpoint(); onProductInfoChange(next); }} />
+        <ReportTocPage sections={sections} pageGroups={pageGroups} onSectionsChange={(next) => { checkpoint(); setSections(next); }} />
+        {sections.flatMap((section) => {
+          const groups = pageGroups[section.numeral] ?? [section.blocks.map((block) => block.id)];
+          return groups.map((blockIds, pageIndex) => (
           <section
-            key={section.numeral}
-            id={`section-${section.numeral}`}
+            key={`${section.numeral}-${pageIndex}`}
+            id={pageIndex === 0 ? `section-${section.numeral}` : undefined}
             ref={(el) => {
+              if (pageIndex !== 0) return;
               if (el) sectionElementsRef.current.set(section.numeral, el);
               else sectionElementsRef.current.delete(section.numeral);
             }}
             data-section-page={section.numeral}
-            // scroll-mt-24: 목차 클릭 시 studio 헤더(sticky)에 섹션 상단이 가려지지 않게.
-            // max-w-[960px]: A4 폭 비율 — "실제 문서 크기처럼" 요청에 맞춘 페이지 카드 크기
-            // (860px→960px, 2026-08-12: 본문 열 최소폭을 560px로 넓힌 것과 함께 보고서가
-            // 커 보이게 해달라는 요청 반영).
-            className="w-full max-w-[960px] scroll-mt-36 border border-[#dfe3e9] bg-white px-7 py-9 shadow-[0_12px_34px_rgba(28,39,55,.11)] sm:px-12 sm:py-12"
+            data-a4-page
+            className="box-border h-auto min-h-[297mm] w-[210mm] scroll-mt-36 overflow-visible border border-[#dfe3e9] bg-white px-[18mm] py-[18mm] shadow-[0_12px_34px_rgba(28,39,55,.11)]"
           >
-            <SectionBanner numeral={section.numeral} title={section.title} />
-            {section.blocks.map((block) => (
+            {pageIndex === 0 ? <SectionBanner numeral={section.numeral} title={section.title} /> : null}
+            {section.blocks.filter((block) => blockIds.includes(block.id)).map((block) => (
               <div
                 key={block.id}
                 data-report-block-id={block.id}
@@ -219,11 +279,19 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedBlockRef({ numeral: section.numeral, id: block.id }); }}
                 className={`rounded transition-shadow ${selectedBlockRef?.numeral === section.numeral && selectedBlockRef.id === block.id ? "ring-2 ring-[#4fc8e8] ring-offset-2" : "hover:ring-1 hover:ring-[#c9d8ef]"}`}
               >
-                <BlockView block={block} sourceFileUrl={sourceFileUrl} onQuoteSource={(questionKey, quotes, groupLabel) => void openQuoteSource([{ questionKey, quotes }], groupLabel)} onChange={(next) => updateBlock(section.numeral, block.id, next)} />
+                <BlockView
+                  block={block}
+                  sourceFileUrl={sourceFileUrl}
+                  onQuoteSource={(questionKey, quotes, groupLabel) => void openQuoteSource([{ questionKey, quotes }], groupLabel)}
+                  onChange={(next) => updateBlock(section.numeral, block.id, next)}
+                  selectedBlockId={selectedBlockRef?.numeral === section.numeral ? selectedBlockRef.id : undefined}
+                  onSelectBlock={(id) => setSelectedBlockRef({ numeral: section.numeral, id })}
+                />
               </div>
             ))}
           </section>
-        ))}
+          ));
+        })}
       </article>
       <ActionPanel
         activeTitle={sections.find((section) => section.numeral === activeSection)?.title ?? "보고서 편집"}

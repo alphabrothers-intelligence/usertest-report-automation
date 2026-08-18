@@ -1,14 +1,15 @@
 // Ⅰ~Ⅱ, Ⅳ~Ⅶ 섹션 — 정량 위주(개요, 인적사항, 핵심구매요소, 4대가치 표, UX품질, 교차분석).
 // Ⅲ(기능별 고객경험평가)과 Ⅷ·Ⅸ는 정성 콘텐츠 비중이 커서 sectionsQualitative.tsx에 둔다.
+import path from "node:path";
 import { Fragment } from "react";
-import { View, Text } from "@react-pdf/renderer";
+import { View, Text, Image } from "@react-pdf/renderer";
+import { SUBSECTION_BANNER, sectionRomanGlyph } from "@/lib/report/sectionStyle";
 import { styles, colors } from "./theme";
 import {
   VerticalBarChart,
   VerticalBarChartWithAverage,
   RadarChart,
   CanvasQuadrantChart,
-  CanvasPriorityReference,
   PriorityLegendTable,
   PriorityDetailNotes,
   GroupedBarChart,
@@ -29,9 +30,12 @@ import type { ProductInfo } from "@/lib/productInfo/types";
 
 export type { ProductInfo };
 
-// "영역별 참고 지표" 9칸 다이어그램은 이제 저해상도 JPEG 대신 CanvasPriorityReference로
-// 선명하게 그린다(2026-07-23, "예시 사진이 깨진다") — lib/charts/canvasCharts.ts의
-// renderPriorityReferenceDiagram 참고. 예전 이미지 삽입 경로는 제거했다.
+// "영역별 참고 지표" 9칸 다이어그램은 알파브라더스 FGI 원본 평가기준 이미지를 그대로 쓴다
+// (`data/사분면그래프_평가기준.png` → public/images로 복사. data/는 gitignore·미배포).
+// 2026-07-23엔 "저해상도 JPEG가 깨진다"는 이유로 CanvasPriorityReference(코드 렌더)로 바꿨었지만,
+// 그 뒤 고화질 PNG 원본을 받아 lib/pdf/sectionsQuant.tsx가 이미 이미지로 되돌아갔다 — 코드로
+// 그린 도표는 칸 문구·경계가 원본과 달라졌기 때문(2026-08-18 사용자 지시로 이 렌더러도 통일).
+const PRIORITY_REF_PATH = path.join(process.cwd(), "public", "images", "quadrant-priority-reference.png");
 
 /** A4 폭(595.28pt) - 좌우 페이지 여백(theme.ts styles.page.paddingHorizontal 40*2). 실용성/
  * 즐거움처럼 레이더 차트 2개를 한 행에 나란히 놓을 때, 각 열이 실제로 쓸 수 있는 폭을 역산할
@@ -54,7 +58,7 @@ export function shortenLabel(label: string): string {
 export function SectionHeader({ numeral, title }: { numeral: string; title: string }) {
   return (
     <View id={`section-${numeral}`} style={styles.sectionHeader} wrap={false}>
-      <Text style={styles.sectionHeaderBadge}>{numeral}</Text>
+      <Text style={styles.sectionHeaderBadge}>{sectionRomanGlyph(numeral)}</Text>
       <Text style={styles.sectionHeaderTitle}>{title}</Text>
     </View>
   );
@@ -68,28 +72,29 @@ export function SubsectionHeader({ number, title }: { number: number; title: str
     <View
       style={{
         flexDirection: "row",
-        borderWidth: 1,
-        borderColor: colors.navy,
-        marginTop: 10,
-        marginBottom: 8,
+        height: SUBSECTION_BANNER.height,
+        borderWidth: SUBSECTION_BANNER.borderWidth,
+        borderColor: SUBSECTION_BANNER.borderColor,
+        marginTop: SUBSECTION_BANNER.marginTop,
+        marginBottom: SUBSECTION_BANNER.marginBottom,
       }}
       wrap={false}
     >
       <View
         style={{
-        width: 36,
-          backgroundColor: colors.headerBadgeBg, // 원본은 번호 칸을 연한 라벤더로 칠한다(2026-07-23 지적)
-          borderRightWidth: 1,
-          borderRightColor: colors.navy,
+          width: SUBSECTION_BANNER.numberWidth,
+          height: SUBSECTION_BANNER.height - SUBSECTION_BANNER.borderWidth * 2,
+          backgroundColor: SUBSECTION_BANNER.numberBackground,
+          borderRightWidth: SUBSECTION_BANNER.borderWidth,
+          borderRightColor: SUBSECTION_BANNER.borderColor,
           alignItems: "center",
           justifyContent: "center",
-          paddingVertical: 7,
         }}
       >
-        <Text style={{ fontSize: 14, fontWeight: "bold", color: colors.text }}>{number}</Text>
+        <Text style={{ fontSize: SUBSECTION_BANNER.fontSize, fontWeight: "bold", color: colors.text }}>{number}</Text>
       </View>
-      <View style={{ flex: 1, justifyContent: "center", paddingVertical: 7, paddingHorizontal: 12 }}>
-        <Text style={{ fontSize: 14.5, fontWeight: "bold" }}>{title}</Text>
+      <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: 12.96 }}>
+        <Text style={{ fontSize: SUBSECTION_BANNER.fontSize, fontWeight: "bold" }}>{title}</Text>
       </View>
     </View>
   );
@@ -529,9 +534,9 @@ export function SectionCorePurchaseFactor({
           왼쪽 이미지는 열 폭에 꽉 차게(width:"100%", 원본이 정사각형이라 높이는 자동) 키운다. */}
       <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
         <View style={{ flex: 1, alignItems: "center" }}>
-          {/* 저해상도 JPEG 대신 캔버스로 선명하게 그린 9칸 우선순위 다이어그램(2026-07-23,
-              "예시 사진이 깨진다"). 열 폭(약 250pt)에 맞춰 240으로 렌더. */}
-          <CanvasPriorityReference size={240} />
+          {/* FGI 원본 평가기준 이미지(위 PRIORITY_REF_PATH 주석 참고). 열 폭(약 250pt)에
+              맞춰 240으로 렌더 — 원본이 정사각형이라 높이는 자동. */}
+          <Image src={PRIORITY_REF_PATH} style={{ width: 240 }} />
         </View>
         <View style={{ flex: 1 }}>
           <PriorityLegendTable />

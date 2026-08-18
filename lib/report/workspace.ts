@@ -50,7 +50,7 @@ function escapeHtml(value: string): string {
 
 function polarityBannerHtml(polarity: string, index: number, pct: string): string {
   const s = POLARITY_BANNER[polarity];
-  return `<p style="background-color:${s.bg};color:${s.color};font-weight:700;padding:4pt 8pt;margin:10pt 0 6pt"><strong>${index}. ${POLARITY_LABEL[polarity]} 의견 (${pct}%)</strong></p>`;
+  return `<p style="background-color:${s.bg};color:${s.color};font-size:10pt;line-height:1.45;font-weight:700;padding:4pt 8pt;margin:14pt 0 8pt"><strong>${index}. ${POLARITY_LABEL[polarity]} 의견 (${pct}%)</strong></p>`;
 }
 
 // 카테고리 사이 "빈 줄"은 CSS margin으로 주면 안 된다 — 한글(HWP)은 붙여넣기 시 문단
@@ -72,7 +72,7 @@ const BLANK_LINE_HTML = `<p style="margin:0">&nbsp;</p>`;
 // 쓰고, data-quote-text는 항상 마킹 없는 원문 quote를 쓴다 — quote-source/quote-ending/
 // quote-completion API가 raw data 원문과 정확히 대조하는 기준이라 여기 마킹이 섞이면 안 된다.
 function quoteHtml(quote: string, questionKey: string, displayText?: string): string {
-  return `<div data-report-quote data-quote-source="${escapeHtml(questionKey)}" data-quote-text="${escapeHtml(encodeURIComponent(quote))}" style="margin:0 0 3pt"><p style="display:inline;margin:0">"${richTextToInlineHtml(displayText ?? quote)}"</p></div>`;
+  return `<div data-report-quote data-quote-source="${escapeHtml(questionKey)}" data-quote-text="${escapeHtml(encodeURIComponent(quote))}" style="margin:0 0 4pt"><p style="display:inline;margin:0">"${richTextToInlineHtml(displayText ?? quote)}"</p></div>`;
 }
 
 function quoteGroupButton(questionKey: string, label: string): string {
@@ -111,9 +111,9 @@ function improvementCategoryHtml(categories: CategoryRow[], questionKey: string)
 function categoryHtml(cat: CategoryRow, questionKey: string): string[] {
   // 한글 붙여넣기에서 CSS font-weight만으로는 굵게가 유지되지 않는 사례가 있어,
   // 인라인 스타일과 실제 의미 태그를 반드시 함께 낸다.
-  const out = [`<p style="font-weight:700;margin:0 0 2pt"><strong>[${richTextToInlineHtml(cat.label)}]</strong></p>`];
+  const out = [`<p style="font-weight:700;margin:10pt 0 3pt"><strong>[${richTextToInlineHtml(cat.label)}]</strong></p>`];
   cat.quotes.slice(0, 3).forEach((quote, i) => out.push(quoteHtml(quote, questionKey, cat.quotes_display?.[i])));
-  out.push(`<p style="font-weight:700;font-style:italic;margin:0 0 2pt"><strong><em>→ ${richTextToInlineHtml(cat.insight_final ?? cat.insight_draft)}</em></strong></p>`);
+  out.push(`<p style="font-weight:700;font-style:italic;margin:3pt 0 8pt"><strong><em>→ ${richTextToInlineHtml(cat.insight_final ?? cat.insight_draft)}</em></strong></p>`);
   out.push(BLANK_LINE_HTML);
   return out;
 }
@@ -285,7 +285,7 @@ function qualitativeBlocks(idPrefix: string, questions: QuestionWithApprovedCate
     if (!hasPolarity) {
       // 개선 아이디어(2단): label이 "대분류소분류"로 인코딩돼 있으면 원본 45~49쪽처럼
       // [대분류] → <소분류> → 원문 인용(인사이트 없음) 계층으로 렌더링한다.
-      const parts = [`<p style="font-weight:700;font-size:12pt;margin:14pt 0 4pt">${escapeHtml(q.label)}</p>`];
+      const parts = [`<p style="font-weight:700;font-size:10.5pt;margin:16pt 0 6pt">${escapeHtml(q.label)}</p>`];
       parts.push(...improvementCategoryHtml(q.categories, q.question_key));
       blocks.push(textBlock({ id: `${idPrefix}-q${qi}`, label: q.label, html: parts.join(""), styled: true }));
       continue;
@@ -298,7 +298,7 @@ function qualitativeBlocks(idPrefix: string, questions: QuestionWithApprovedCate
       textBlock({
         id: `${idPrefix}-q${qi}-intro`,
         label: q.label,
-        html: `<p style="font-weight:700;font-size:12pt;margin:14pt 0 4pt">${escapeHtml(q.label)}</p><p style="font-weight:700;margin:8pt 0 2pt;color:#315c9c">주관식 응답 감정 분석</p>`,
+        html: `<p style="font-weight:700;font-size:10.5pt;margin:16pt 0 6pt">${escapeHtml(q.label)}</p><p style="font-weight:700;margin:10pt 0 4pt;color:#315c9c">주관식 응답 감정 분석</p>`,
         styled: true,
       }),
     );
@@ -587,6 +587,13 @@ function sectionAiRegenerateButtonHtml(section: SectionAnalysisRegenKey): string
 /** sectionAnalysis.ts가 만든 텍스트(analysis)를 패널 HTML로 렌더링한다. 웹 문서 최초
  * 렌더링과 재생성 버튼 응답(app/api/report-section-analysis/route.ts) 양쪽이 이 함수 하나를
  * 공유해, 버튼으로 교체된 패널이 페이지를 새로고침했을 때 나오는 것과 항상 같은 모양이 되게 한다. */
+/** 패널 제목 배너가 이미 "… 종합 해석"/"… 세부 해석"이므로, 본문 첫 줄의 [종합 해석]/[세부 해석]
+ * 라벨은 같은 말이 두 번 보이게 한다(2026-08-18 지적). 이 라벨은 uxQuality 분할·PDF 렌더러가
+ * 쓰는 구조 마커라 생성 단계에서 없앨 수 없어, 화면에 넣기 직전에만 벗긴다. */
+function stripAnalysisLabel(text: string): string {
+  return text.replace(/^\s*\[(?:종합|세부) 해석\]\s*/u, "").trim();
+}
+
 export function sectionAnalysisPanelHtml(section: SectionAnalysisRegenKey, analysis: string): string {
   const button = sectionAiRegenerateButtonHtml(section);
   if (section === "uxQuality") {
@@ -594,12 +601,12 @@ export function sectionAnalysisPanelHtml(section: SectionAnalysisRegenKey, analy
     const overview = splitIndex >= 0 ? analysis.slice(0, splitIndex).trim() : analysis;
     const detail = splitIndex >= 0 ? analysis.slice(splitIndex).trim() : "";
     return (
-      originalAnalysisPanelHtml("사용자 경험 품질 평가 종합 해석", richTextToHtml(overview), button) +
-      (detail ? originalAnalysisPanelHtml("사용자 경험 품질 세부 해석", richTextToHtml(detail)) : "")
+      originalAnalysisPanelHtml("사용자 경험 품질 평가 종합 해석", richTextToHtml(stripAnalysisLabel(overview)), button) +
+      (detail ? originalAnalysisPanelHtml("사용자 경험 품질 세부 해석", richTextToHtml(stripAnalysisLabel(detail))) : "")
     );
   }
   const title = SECTION_ANALYSIS_TITLES[section];
-  const panel = originalAnalysisPanelHtml(title, richTextToHtml(analysis), button);
+  const panel = originalAnalysisPanelHtml(title, richTextToHtml(stripAnalysisLabel(analysis)), button);
   return section === "corePurchaseFactor" ? panel : analysisEvidenceHtml(title, panel);
 }
 

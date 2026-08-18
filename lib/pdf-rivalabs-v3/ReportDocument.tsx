@@ -28,6 +28,7 @@ import {
 // productInfo.companyName(테스트 대상 회사)이 아니라 고정 브랜드로 넣는다. public/ 아래
 // 정적 파일을 쓴다(fonts.ts와 같은 이유 — data/는 gitignore돼 배포에 포함되지 않는다).
 const LOGO_PATH = path.join(process.cwd(), "public", "images", "alphabrothers-logo.png");
+const COVER_TEMPLATE_PATH = path.join(process.cwd(), "public", "images", "rivalabs-cover-template.png");
 
 export interface ReportDocumentProps {
   fileName: string | null;
@@ -151,7 +152,6 @@ export function ReportDocument({
     r.section.startsWith("feature_improvement:"),
   );
   const coverDate = productInfo?.coverDate?.trim() || generatedAt.replace(/-/g, ".");
-  const coverLogo = productInfo?.coverLogoUrl?.trim() || LOGO_PATH;
 
   return (
     <Document title={fileName ?? "사용성테스트 결과보고서"}>
@@ -165,33 +165,16 @@ export function ReportDocument({
           콜백 조건부 안에 넣으면 자산이 통째로 누락되는 기존 실측 버그도 원천적으로 피한다).
           pageNumber/totalPages는 Document 전체 기준 전역 번호라 이 분리로 번호 체계가 깨지지
           않는다(실제 렌더로 재확인). */}
-      <Page size="A4" style={styles.page}>
-        {/* 모든 사용성 테스트 결과보고서에 공통 적용할 표지. 참고한 네이비 단색 보고서의
-            절제된 위계만 가져오고, 사진·기관 고유 그래픽은 복제하지 않는다. */}
-        <View style={{ height: 748, justifyContent: "space-between" }}>
-          <View style={{ marginTop: 24, minHeight: 580 }}>
-            <View style={{ paddingTop: 4 }}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={{ width: 6, height: 6, backgroundColor: "#55bad8", marginRight: 7 }} />
-                <Text style={{ color: "#4c6f9f", fontSize: 9.5, letterSpacing: 1.3 }}>USABILITY TEST REPORT</Text>
-              </View>
-              <Text style={{ fontSize: 31.5, fontWeight: "bold", lineHeight: 1.38, color: "#155e9f", marginTop: 155 }}>
-                사용성 테스트{"\n"}결과보고서
-              </Text>
-              <View style={{ width: 64, borderTopWidth: 2, borderTopColor: "#84a0d2", marginTop: 24 }} />
-              <Text style={{ fontSize: 25, fontWeight: "bold", color: "#4d70bf", marginTop: 16, lineHeight: 1.25 }}>
-                {productInfo?.companyName ?? "기업명 입력 필요"}
-              </Text>
-              <Text style={{ fontSize: 12.2, color: colors.subtext, marginTop: 9 }}>
-                Usability Test Report for &apos;{productInfo?.serviceName ?? "서비스명 입력 필요"}&apos;
-              </Text>
-              <Text style={{ fontSize: 11.5, color: colors.subtext, marginTop: 32 }}>{coverDate}</Text>
-            </View>
-          </View>
-          <View style={{ alignItems: "center", paddingTop: 16 }}>
-            <Image src={coverLogo} style={{ width: 112, maxHeight: 34, objectFit: "contain" }} />
-          </View>
+      <Page size="A4" style={styles.page} wrap={false}>
+        <View style={{ height: 781.89 }} />
+        <Image src={COVER_TEMPLATE_PATH} style={{ position: "absolute", left: -40, top: -30, width: 595.28, height: 841.89 }} />
+        <View style={{ position: "absolute", left: 14, top: 400, width: 430 }}>
+          <Text style={{ fontSize: 31.5, fontWeight: "bold", lineHeight: 1.35, color: "#075b9c" }}>사용성 테스트{"\n"}결과보고서</Text>
+          <Text style={{ fontSize: 25, fontWeight: "bold", color: "#5d7fd0", marginTop: 28 }}>{productInfo?.companyName ?? "기업명 입력 필요"}</Text>
+          <Text style={{ fontSize: 12, color: "#555555", marginTop: 22 }}>Usability Test Proposal for &apos;{productInfo?.serviceName ?? "서비스명 입력 필요"}&apos;</Text>
+          <Text style={{ fontSize: 11, color: "#666666", marginTop: 24 }}>{coverDate}</Text>
         </View>
+        <Text style={{ position: "absolute", bottom: 2, left: 0, right: 0, textAlign: "center", fontSize: 9 }}>- 1 -</Text>
       </Page>
 
       <Page size="A4" style={styles.page} wrap>

@@ -3,6 +3,7 @@
 import path from "node:path";
 import { Fragment } from "react";
 import { View, Text, Image } from "@react-pdf/renderer";
+import { SUBSECTION_BANNER, sectionRomanGlyph } from "@/lib/report/sectionStyle";
 import { styles, colors } from "./theme";
 import { RichText } from "./richText";
 import {
@@ -36,7 +37,9 @@ export type { ProductInfo };
 // "영역별 참고 지표" 9칸 다이어그램은 알파브라더스 FGI 원본 평가기준 이미지를 그대로 쓴다
 // (2026-07-24 사용자 제공, `data/사분면그래프_평가기준.png` → public/images로 복사. data/는
 // gitignore·미배포라 public/images에 둔다 — nps-scale.png와 같은 사유). 코드로 그리던
-// CanvasPriorityReference보다 고화질이고 FGI 원본과 100% 동일하다. 사분면 경계·9칸 판정 기준의
+// 코드로 그리던 CanvasPriorityReference는 칸 문구가 원본과 달라져 2026-08-18 삭제했다 — 이
+// 참고 지표가 필요하면 어느 렌더러든 이 이미지를 쓴다. 고화질이고 FGI 원본과 100% 동일하다.
+// 사분면 경계·9칸 판정 기준의
 // 단일 출처(FGI, CLAUDE.md 참고).
 const PRIORITY_REF_PATH = path.join(process.cwd(), "public", "images", "quadrant-priority-reference.png");
 
@@ -61,7 +64,7 @@ export function shortenLabel(label: string): string {
 export function SectionHeader({ numeral, title }: { numeral: string; title: string }) {
   return (
     <View id={`section-${numeral}`} style={styles.sectionHeader} wrap={false}>
-      <Text style={styles.sectionHeaderBadge}>{numeral}</Text>
+      <Text style={styles.sectionHeaderBadge}>{sectionRomanGlyph(numeral)}</Text>
       <Text style={styles.sectionHeaderTitle}>{title}</Text>
     </View>
   );
@@ -75,28 +78,29 @@ export function SubsectionHeader({ number, title }: { number: number; title: str
     <View
       style={{
         flexDirection: "row",
-        borderWidth: 1,
-        borderColor: colors.navy,
-        marginTop: 10,
-        marginBottom: 8,
+        height: SUBSECTION_BANNER.height,
+        borderWidth: SUBSECTION_BANNER.borderWidth,
+        borderColor: SUBSECTION_BANNER.borderColor,
+        marginTop: SUBSECTION_BANNER.marginTop,
+        marginBottom: SUBSECTION_BANNER.marginBottom,
       }}
       wrap={false}
     >
       <View
         style={{
-          width: 26,
-          backgroundColor: colors.headerBadgeBg, // 원본은 번호 칸을 연한 라벤더로 칠한다(2026-07-23 지적)
-          borderRightWidth: 1,
-          borderRightColor: colors.navy,
+          width: SUBSECTION_BANNER.numberWidth,
+          height: SUBSECTION_BANNER.height - SUBSECTION_BANNER.borderWidth * 2,
+          backgroundColor: SUBSECTION_BANNER.numberBackground,
+          borderRightWidth: SUBSECTION_BANNER.borderWidth,
+          borderRightColor: SUBSECTION_BANNER.borderColor,
           alignItems: "center",
           justifyContent: "center",
-          paddingVertical: 6,
         }}
       >
-        <Text style={{ fontSize: 10, fontWeight: "bold", color: colors.navy }}>{number}</Text>
+        <Text style={{ fontSize: SUBSECTION_BANNER.fontSize, fontWeight: "bold", color: colors.text }}>{number}</Text>
       </View>
-      <View style={{ flex: 1, justifyContent: "center", paddingVertical: 6, paddingHorizontal: 10 }}>
-        <Text style={{ fontSize: 9.5, fontWeight: "bold" }}>{title}</Text>
+      <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: 12.96 }}>
+        <Text style={{ fontSize: SUBSECTION_BANNER.fontSize, fontWeight: "bold" }}>{title}</Text>
       </View>
     </View>
   );

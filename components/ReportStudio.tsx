@@ -13,9 +13,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
-import { withDefaultQuadrantZones, type ReportSectionContent } from "@/lib/report/sections";
+import { withDefaultQuadrantZones, type ReportBlock, type ReportSectionContent } from "@/lib/report/sections";
 import { ReportWebWorkspace } from "@/components/ReportWebWorkspace";
 import { applyTextFormat, insertArrowLine, FormatButton } from "@/components/report-web-document/ReportBlockView";
+import type { ProductInfo } from "@/lib/productInfo/types";
 
 const STORAGE_KEY = "usertest-report-studio-v3";
 
@@ -87,15 +88,22 @@ function hydrateWorkspaceSections(sections: ReportSectionContent[]): ReportSecti
     // 있어도 새 웹 양식을 덮어쓰지 않도록 복원 시 제거한다. 정성 본문/표는 그대로 보존한다.
     blocks: section.blocks
       .filter((block) => block.kind !== "polarity")
-      .map((block) => {
-        if (block.kind === "quadrant") return withDefaultQuadrantZones(block);
-        if (block.kind === "text" || block.kind === "rich-static") {
-          const withGroupedQuotes = { ...block, html: upgradeLegacyQuoteGroups(block.html) };
-          return upgradeLegacyAnalysisEvidence(withGroupedQuotes);
-        }
-        return block;
-      }),
+      .map(hydrateWorkspaceBlock),
   }));
+}
+
+/** row-group(항목/주요 의견 표의 한 행)은 자식 블록에도 같은 승격 규칙을 재귀 적용한다 —
+ * 그 안에 quadrant·rich-static이 중첩될 수 있어서(workspaceConclusion.ts 참고). */
+function hydrateWorkspaceBlock(block: ReportBlock): ReportBlock {
+  if (block.kind === "quadrant") return withDefaultQuadrantZones(block);
+  if (block.kind === "text" || block.kind === "rich-static") {
+    const withGroupedQuotes = { ...block, html: upgradeLegacyQuoteGroups(block.html) };
+    return upgradeLegacyAnalysisEvidence(withGroupedQuotes);
+  }
+  if (block.kind === "row-group") {
+    return { ...block, rows: block.rows.map((row) => ({ ...row, blocks: row.blocks.filter((child) => child.kind !== "polarity").map(hydrateWorkspaceBlock) })) };
+  }
+  return block;
 }
 
 function withInlinePdf(url?: string | null) {
@@ -152,10 +160,12 @@ export function ReportStudio({
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [workspaceSeed, setWorkspaceSeed] = useState<ReportWorkspaceSeed | null>(null);
+  const [productInfo, setProductInfo] = useState<ProductInfo>({});
   const [reportName, setReportName] = useState("");
   const [nameSaving, setNameSaving] = useState(false);
   const [draftSaving, setDraftSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<"hwpx" | null>(null);
   // 텍스트 서식·전체 복사·인용문 검토 버튼(2026-08-12, 헤더로 이전) — activeSection이
   // 바뀔 때마다 ReportWebDocument가 최신 핸들러로 갱신해준다.
   const [toolbarActions, setToolbarActions] = useState<{ copy: () => void; openCorrections: () => void } | null>(null);
@@ -186,6 +196,7 @@ export function ReportStudio({
         if (cancelled || !payload.workspace) return;
         const seed = payload.workspace;
         setWorkspaceSeed(seed);
+        setProductInfo(seed.productInfo ?? {});
         setReportName(payload.reportName ?? "");
         // 이 특정 보고서(source)를 이전에 편집·저장한 적이 있으면 서버가 방금 계산한 정량
         // 데이터 대신 저장된 편집본을 우선한다 — 없으면 서버 데이터 그대로 시작한다.
@@ -259,6 +270,14 @@ export function ReportStudio({
     setSaveError(null);
     try {
       if (sourceFileUrl) {
+        if (productInfo.companyName?.trim() && productInfo.serviceName?.trim()) {
+          const productResponse = await fetch("/api/wizard/product-info", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileUrl: sourceFileUrl, ...productInfo }),
+          });
+          if (!productResponse.ok) throw new Error("표지 정보를 저장하지 못했습니다.");
+        }
         const res = await fetch("/api/report-workspace/draft", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -279,6 +298,35 @@ export function ReportStudio({
       setSaveError(error instanceof Error ? error.message : "초안을 저장하지 못했습니다.");
     } finally {
       setDraftSaving(false);
+    }
+  }
+
+  async function downloadHwpx() {
+    if (!sourceFileUrl) return;
+    setExporting("hwpx");
+    setSaveError(null);
+    try {
+      const response = await fetch("/api/report-workspace/hwpx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: sourceFileUrl, sections, productInfo }),
+      });
+      if (!response.ok) {
+        const payload = await response.json() as { error?: string };
+        throw new Error(payload.error ?? "HWPX를 만들지 못했습니다.");
+      }
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = encodedName ? decodeURIComponent(encodedName) : "사용성테스트_결과보고서.hwpx";
+      anchor.click();
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "HWPX를 만들지 못했습니다.");
+    } finally {
+      setExporting(null);
     }
   }
 
@@ -353,7 +401,8 @@ export function ReportStudio({
               <button type="button" onClick={() => setWorkspaceMode("web")} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${workspaceMode === "web" ? "bg-white text-[#1473e6] shadow-sm" : "text-[#667085]"}`}>보고서 편집</button>
               {pdfUrl && <button type="button" onClick={() => setWorkspaceMode("pdf")} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${workspaceMode === "pdf" ? "bg-white text-[#1473e6] shadow-sm" : "text-[#667085]"}`}>PDF 미리보기</button>}
             </div>
-            {pdfUrl && <a href={pdfUrl} className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-semibold text-[#475467] hover:bg-[#f7f9fc]">PDF 다운로드</a>}
+            <button type="button" onClick={() => window.print()} disabled={workspaceStatus !== "ready"} className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-semibold text-[#475467] hover:bg-[#f7f9fc] disabled:opacity-50">PDF 저장</button>
+            {sourceFileUrl && <button type="button" onClick={() => void downloadHwpx()} disabled={workspaceStatus !== "ready" || exporting === "hwpx"} className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-semibold text-[#475467] hover:bg-[#f7f9fc] disabled:opacity-50">{exporting === "hwpx" ? "HWPX 생성 중..." : "HWPX 다운로드"}</button>}
             <Link href="/new" className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-medium text-[#475467] hover:bg-[#f7f9fc]">나가기</Link>
           </div>
         </div>
@@ -394,6 +443,8 @@ export function ReportStudio({
           checkpoint={checkpoint}
           workspaceStatus={workspaceStatus}
           reportData={workspaceSeed}
+          productInfo={productInfo}
+          onProductInfoChange={setProductInfo}
           activeSection={activeSection}
           onActiveSectionChange={changeActiveSection}
           onRetry={retryWorkspaceLoad}

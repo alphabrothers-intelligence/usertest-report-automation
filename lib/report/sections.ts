@@ -138,6 +138,10 @@ export type ReportHeadingBlock = {
   variant: "numbered" | "question" | "subheading";
   text: string;
   number?: string;
+  /** 목차 쪽수 수동 보정값. 비어 있으면 웹의 실제 A4 페이지 묶음에서 자동 계산한다. */
+  tocPageOverride?: string;
+  /** 웹 A4 레이아웃 측정으로 계산된 쪽수. 내보내기용이며 사용자가 직접 편집하지 않는다. */
+  tocPageNumber?: number;
 };
 
 export type ReportTableBlock = {
@@ -180,11 +184,28 @@ export type ReportRichStaticBlock = {
   summaryKind?: "polarity" | "value" | "section";
 };
 
-export type ReportBlock = ReportChartBlock | ReportRankCompositionBlock | ReportStackedBarBlock | ReportGroupedBarBlock | ReportRadarBlock | ReportNpsBlock | ReportQuadrantBlock | ReportPriorityReferenceBlock | ReportPolarityBlock | ReportHeadingBlock | ReportTableBlock | ReportTextBlock | ReportRichStaticBlock;
+/** 원본 Ⅸ장 "항목 | 주요 의견"처럼 **여러 행을 가진 표 하나**를 통째로 그린다. 오른쪽 칸에
+ * 인터랙티브 차트(quadrant 등 React 컴포넌트)가 들어가는 행이 있어서 정적 HTML 문자열
+ * (rich-static)로는 표현할 수 없다 — 대신 진짜 `<table>`의 `<td>` 안에 자식 블록을 렌더링한다.
+ * **행마다 블록을 따로 두면 테두리가 끊겨 표가 여러 개로 나뉘어 보이므로, 한 블록이 표 전체를
+ * 갖는다**(2026-08-18 사용자 지적: "이 표는 끊기는 표가 아니라 이어지는 하나의 표"). */
+export type ReportRowGroupBlock = {
+  id: string;
+  kind: "row-group";
+  /** 표 머리행 문구(예: ["항목", "주요 의견"]). 없으면 머리행을 그리지 않는다. */
+  headers?: [string, string];
+  rows: { id: string; label: string; blocks: ReportBlock[] }[];
+};
+
+export type ReportBlock = ReportChartBlock | ReportRankCompositionBlock | ReportStackedBarBlock | ReportGroupedBarBlock | ReportRadarBlock | ReportNpsBlock | ReportQuadrantBlock | ReportPriorityReferenceBlock | ReportPolarityBlock | ReportHeadingBlock | ReportTableBlock | ReportTextBlock | ReportRichStaticBlock | ReportRowGroupBlock;
 
 export type ReportSectionContent = {
   numeral: string;
   title: string;
+  /** 목차의 장 시작 쪽수 수동 보정값. 비어 있으면 자동 계산한다. */
+  tocPageOverride?: string;
+  /** 웹 A4 레이아웃 측정으로 계산된 장 시작 쪽수. */
+  tocPageNumber?: number;
   blocks: ReportBlock[];
 };
 
@@ -375,6 +396,10 @@ export function textBlock(params: { id: string; label: string; html: string; pen
 
 export function richStaticBlock(params: { id: string; html: string; summaryQuestionKey?: string; summaryKind?: "polarity" | "value" | "section" }): ReportRichStaticBlock {
   return { id: params.id, kind: "rich-static", html: params.html, summaryQuestionKey: params.summaryQuestionKey, summaryKind: params.summaryKind };
+}
+
+export function rowGroupBlock(params: { id: string; headers?: [string, string]; rows: ReportRowGroupBlock["rows"] }): ReportRowGroupBlock {
+  return { id: params.id, kind: "row-group", headers: params.headers, rows: params.rows };
 }
 
 export const PENDING_QUALITATIVE_NOTICE =

@@ -4,12 +4,13 @@ import { useEffect, useMemo, useRef } from "react";
 import { ReportPropertyPanel } from "@/components/ReportPropertyPanel";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
+import { SECTION_BANNER, sectionRomanGlyph } from "@/lib/report/sectionStyle";
 
 export function SectionBanner({ numeral, title }: { numeral: string; title: string }) {
   return (
-    <div className="mb-6 flex w-fit overflow-hidden">
-      <div className="flex min-w-14 items-center justify-center bg-[#dfeaf5] px-4 text-2xl font-bold text-[#315c9c]">{numeral}</div>
-      <div className="bg-[#5c73aa] px-9 py-3 text-[28px] font-bold tracking-[-0.04em] text-white">{title}</div>
+    <div className="flex w-fit overflow-hidden" style={{ height: `${SECTION_BANNER.height}pt`, marginBottom: `${SECTION_BANNER.marginBottom}pt` }}>
+      <div className="flex shrink-0 items-center justify-center font-bold" style={{ width: `${SECTION_BANNER.badgeWidth}pt`, backgroundColor: SECTION_BANNER.badgeBackground, color: SECTION_BANNER.badgeColor, fontSize: `${SECTION_BANNER.badgeFontSize}pt` }}>{sectionRomanGlyph(numeral)}</div>
+      <div className="flex shrink-0 items-center justify-center font-bold tracking-[-0.04em]" style={{ width: `${SECTION_BANNER.titleWidth}pt`, backgroundColor: SECTION_BANNER.titleBackground, color: SECTION_BANNER.titleColor, fontSize: `${SECTION_BANNER.titleFontSize}pt` }}>{title}</div>
     </div>
   );
 }

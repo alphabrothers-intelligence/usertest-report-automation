@@ -1,4 +1,5 @@
 import { StyleSheet } from "@react-pdf/renderer";
+import { SECTION_BANNER } from "@/lib/report/sectionStyle";
 
 // 리바랩스·케어클 원본에서 추출한 공통 테마. PDF와 웹 편집 뷰어가 같은 토큰을 공유해야
 // 화면에서 승인한 결과와 발행본의 인상이 달라지지 않는다.
@@ -35,24 +36,28 @@ export const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    height: SECTION_BANNER.height,
+    marginBottom: SECTION_BANNER.marginBottom,
   },
   sectionHeaderBadge: {
-    color: colors.navy,
-    backgroundColor: colors.headerBadgeBg,
-    fontSize: 11,
+    width: SECTION_BANNER.badgeWidth,
+    height: SECTION_BANNER.height,
+    color: SECTION_BANNER.badgeColor,
+    backgroundColor: SECTION_BANNER.badgeBackground,
+    fontSize: SECTION_BANNER.badgeFontSize,
     fontWeight: "bold",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    textAlign: "center",
+    paddingTop: 7.5,
   },
   sectionHeaderTitle: {
-    flex: 1,
-    color: colors.white,
-    fontSize: 11,
+    width: SECTION_BANNER.titleWidth,
+    height: SECTION_BANNER.height,
+    color: SECTION_BANNER.titleColor,
+    fontSize: SECTION_BANNER.titleFontSize,
     fontWeight: "bold",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: colors.navyLight,
+    textAlign: "center",
+    paddingTop: 7,
+    backgroundColor: SECTION_BANNER.titleBackground,
   },
   subheading: {
     fontSize: 10,

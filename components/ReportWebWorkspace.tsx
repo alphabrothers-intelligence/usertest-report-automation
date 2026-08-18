@@ -4,6 +4,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { ReportWebDocument } from "@/components/ReportWebDocument";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import type { ReportSectionContent } from "@/lib/report/sections";
+import type { ProductInfo } from "@/lib/productInfo/types";
 
 type ReportWebWorkspaceProps = {
   sections: ReportSectionContent[];
@@ -17,6 +18,8 @@ type ReportWebWorkspaceProps = {
   onRetry: () => void;
   sourceFileUrl?: string | null;
   onToolbarActionsChange?: (actions: { copy: () => void; openCorrections: () => void }) => void;
+  productInfo: ProductInfo;
+  onProductInfoChange: (next: ProductInfo) => void;
 };
 
 /**
@@ -36,6 +39,8 @@ export function ReportWebWorkspace({
   onRetry,
   sourceFileUrl,
   onToolbarActionsChange,
+  productInfo,
+  onProductInfoChange,
 }: ReportWebWorkspaceProps) {
   return (
     <div data-workspace-status={workspaceStatus}>
@@ -51,6 +56,8 @@ export function ReportWebWorkspace({
         onRetry={onRetry}
         sourceFileUrl={sourceFileUrl}
         onToolbarActionsChange={onToolbarActionsChange}
+        productInfo={productInfo}
+        onProductInfoChange={onProductInfoChange}
       />
     </div>
   );
