@@ -13,13 +13,13 @@ import type { ReportSectionContent } from "@/lib/report/sections";
 export type BatchCorrectionItem = {
   quote: string;
   suggestion: string;
-  kind: "ending" | "typo";
+  kind: "ending" | "typo" | "tone";
   risk: "low" | "review";
   questionKey: string;
   questionLabel?: string;
 };
 
-type ApiItem = { quote: string; suggestion: string; changedFrom: string; changedTo: string; kind: "ending" | "typo"; risk: "low" | "review" };
+type ApiItem = { quote: string; suggestion: string; changedFrom: string; changedTo: string; kind: "ending" | "typo" | "tone"; risk: "low" | "review" };
 
 function collectDocumentQuotes(sections: ReportSectionContent[]): Map<string, Set<string>> {
   const byQuestion = new Map<string, Set<string>>();
@@ -117,7 +117,7 @@ export function QuoteCorrectionPanel({
         <div className="flex items-center justify-between border-b border-[#e3e8ef] px-5 py-4">
           <div>
             <p className="text-base font-bold text-[#263449]">인용문 일괄 검토</p>
-            <p className="mt-1 text-xs leading-5 text-[#7a8799]">문서 전체 인용문의 끝맺음·오탈자·띄어쓰기를 검토합니다. AI가 손댄 항목(&ldquo;확인 필요&rdquo;)은 적용 전 꼭 확인해주세요.</p>
+            <p className="mt-1 text-xs leading-5 text-[#7a8799]">문서 전체 인용문의 끝맺음·오탈자·띄어쓰기·말투를 검토합니다. AI가 손댄 항목(&ldquo;확인 필요&rdquo;)은 적용 전 꼭 확인해주세요.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded px-2 py-1 text-lg text-[#8a94a3] hover:bg-[#f2f5f9]" aria-label="닫기">×</button>
         </div>
@@ -142,12 +142,14 @@ export function QuoteCorrectionPanel({
                         <input type="checkbox" className="mt-1 shrink-0" checked={checked.has(item.quote)} onChange={() => toggle(item.quote)} />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
-                            <span className="rounded bg-[#eef0f3] px-1.5 py-0.5 text-[#596273]">{item.kind === "ending" ? "끝맺음" : "오탈자·띄어쓰기"}</span>
+                            <span className="rounded bg-[#eef0f3] px-1.5 py-0.5 text-[#596273]">{item.kind === "ending" ? "끝맺음" : item.kind === "tone" ? "말투" : "오탈자·띄어쓰기"}</span>
                             <span className={`rounded px-1.5 py-0.5 ${item.risk === "low" ? "bg-[#e7f6ec] text-[#2f7a4d]" : "bg-[#fff3f1] text-[#a64d32]"}`}>{item.risk === "low" ? "안전" : "확인 필요"}</span>
                             {item.questionLabel && <span className="font-medium text-[#9aa5b5]">{item.questionLabel}</span>}
                           </div>
                           <p className="mt-1.5 text-xs leading-5 text-[#8a94a3] line-through decoration-[#c9433c]/50">{item.quote}</p>
-                          <p className="mt-1 text-xs leading-5 text-[#354158]">{parts.prefix}<mark className="rounded bg-[#cfe8ff] text-[#174e91]">{parts.middle}</mark>{parts.suffix}</p>
+                          {value === item.quote
+                            ? <p className="mt-1 text-xs leading-5 text-[#a64d32]">강조어·비속어는 지우면 응답자 의도가 바뀌므로 자동 수정하지 않습니다. 아래에서 직접 다듬거나 다른 인용문으로 교체해주세요.</p>
+                            : <p className="mt-1 text-xs leading-5 text-[#354158]">{parts.prefix}<mark className="rounded bg-[#cfe8ff] text-[#174e91]">{parts.middle}</mark>{parts.suffix}</p>}
                           <input
                             type="text"
                             value={value}

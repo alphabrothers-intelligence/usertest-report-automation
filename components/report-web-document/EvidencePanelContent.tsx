@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { AnalysisReference } from "@/components/report-web-document/analysisEvidence";
-import { reportQuoteEndingToken } from "@/lib/report/quoteEnding";
+import { reportQuoteReviewToken } from "@/lib/report/quoteEnding";
 
 export type QuoteSourceResult = {
   questionLabel: string;
@@ -19,8 +19,10 @@ export type QuoteSourceResult = {
 export type QuoteCompletionTarget = { quote: string; originalResponse: string };
 export type QuoteCompletion = { completedQuote: string; changedFrom: string; changedTo: string };
 
-function QuoteWithEndingReview({ quote, needsReview }: { quote: string; needsReview: boolean }) {
-  const token = needsReview ? reportQuoteEndingToken(quote) : null;
+// needsReview(서버 판정)는 끝맺음 전용이라 "문장 끝맺음 자동 수정" 버튼에만 쓰고,
+// 하이라이트 구간은 띄어쓰기 검토까지 포함하도록 여기서 다시 판정한다.
+function QuoteWithEndingReview({ quote }: { quote: string; needsReview?: boolean }) {
+  const token = reportQuoteReviewToken(quote);
   if (!token) return <>“{quote}”</>;
   const start = quote.lastIndexOf(token);
   return <>“{quote.slice(0, start)}<span className="decoration-dotted decoration-[1.5px] underline underline-offset-4 decoration-[#d36b62]">{token}</span>{quote.slice(start + token.length)}”</>;

@@ -19,6 +19,7 @@ export const TYPO_SPACING_COMPLETION_SYSTEM = `사용성 테스트 보고서에 
 번호가 매겨진 인용문 목록이 주어진다. 각 인용문마다 같은 번호로 correctedQuote를 반환한다.
 맞춤법·띄어쓰기 오류가 없으면 원문을 한 글자도 바꾸지 말고 그대로 반환한다.
 오류가 있으면 그 글자·띄어쓰기만 고치고, 새로운 사실·평가·감정·수식어를 한 글자도 추가하지 않는다.
+특히 "아오그냥입히면겁나귀여워"처럼 여러 낱말이 공백 없이 붙어 있으면 낱말 사이에 공백을 넣는다.
 문장 구조나 단어 선택을 바꾸지 않는다 — 오직 맞춤법·띄어쓰기 오류만 고친다.`;
 
 export function typoSpacingCorrectionPrompt(quotes: string[]): string {

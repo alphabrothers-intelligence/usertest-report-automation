@@ -13,7 +13,14 @@ import {
   TYPO_SPACING_COMPLETION_SYSTEM,
   typoSpacingCorrectionPrompt,
 } from "@/lib/report/prompts";
-import { boundedDiff, deterministicEndingCompletion, needsReportQuoteEndingReview } from "@/lib/report/quoteEnding";
+import {
+  boundedDiff,
+  correctionDiff,
+  deterministicEndingCompletion,
+  needsReportQuoteEndingReview,
+  reportQuoteFillerCleanup,
+  reportQuoteFlaggedWord,
+} from "@/lib/report/quoteEnding";
 
 export const runtime = "nodejs";
 
@@ -43,7 +50,7 @@ type CorrectionItem = {
   suggestion: string;
   changedFrom: string;
   changedTo: string;
-  kind: "ending" | "typo";
+  kind: "ending" | "typo" | "tone";
   risk: "low" | "review";
 };
 
@@ -112,13 +119,28 @@ export async function POST(request: Request) {
       for (const correction of output.corrections) {
         const quote = chunk[correction.index];
         if (!quote || correction.correctedQuote === quote) continue;
-        const diff = boundedDiff(quote, correction.correctedQuote, MAX_DIFF_CHARS);
+        const diff = correctionDiff(quote, correction.correctedQuote, MAX_DIFF_CHARS);
         if (diff) items.push({ quote, suggestion: correction.correctedQuote, ...diff, kind: "typo", risk: "review" });
       }
     } catch (error) {
       console.error("[text-corrections] typo batch failed", error);
     }
   })));
+
+  // (c) 말투 검토(LLM 없음). 한 인용문에 항목이 두 개 뜨면 검토 패널이 같은 인용문을 키로
+  // 쓰므로, 앞 단계에서 이미 잡힌 인용문은 건너뛴다 — 그 교정을 적용하고 다시 검토하면 걸린다.
+  const covered = new Set(items.map((item) => item.quote));
+  for (const quote of quotes) {
+    if (covered.has(quote)) continue;
+    const flagged = reportQuoteFlaggedWord(quote);
+    if (flagged) {
+      // 강조어·욕설은 지우면 응답자 의도가 바뀌므로 제안 없이 노출만 한다(패널에서 직접 수정).
+      items.push({ quote, suggestion: quote, changedFrom: flagged, changedTo: flagged, kind: "tone", risk: "review" });
+      continue;
+    }
+    const cleaned = reportQuoteFillerCleanup(quote);
+    if (cleaned) items.push({ quote, suggestion: cleaned, changedFrom: quote, changedTo: cleaned, kind: "tone", risk: "low" });
+  }
 
   return NextResponse.json({ ok: true, questionKey: spec.id, questionLabel: spec.label, items });
 }

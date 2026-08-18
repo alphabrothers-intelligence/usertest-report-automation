@@ -12,10 +12,12 @@ import { EditableQuadrantChart } from "@/components/report/EditableQuadrantChart
 import { PriorityReferenceDiagram } from "@/components/report/PriorityReferenceDiagram";
 import { EditablePolarityChart } from "@/components/report/EditablePolarityChart";
 import { EditableTable } from "@/components/report/EditableTable";
+import { ReportImageUploadSlots } from "@/components/report/ReportImageUploadSlots";
 import { cleanQuoteEndingReviewMarkup, markQuoteEndingReviews } from "@/components/report-web-document/quoteEndingMarkup";
 import { downloadSvgAsPng } from "@/lib/report/exportImage";
-import { reportQuoteEndingToken } from "@/lib/report/quoteEnding";
+import { reportQuoteReviewToken } from "@/lib/report/quoteEnding";
 import type { ReportBlock } from "@/lib/report/sections";
+import { SUBSECTION_BANNER } from "@/lib/report/sectionStyle";
 
 /**
  * 개요/설문 항목처럼 병합 셀이 있는 표는 데이터 배열로 단순화하면 원본의 행·열 병합과
@@ -27,10 +29,16 @@ function EditableRichStaticBlock({
   block,
   onChange,
   sourceFileUrl,
+  compact,
+  showEmbeddedChartControls = true,
 }: {
   block: Extract<ReportBlock, { kind: "rich-static" }>;
   onChange: (next: ReportBlock) => void;
   sourceFileUrl?: string | null;
+  /** 표 셀 안(row-group)처럼 이미 테두리로 둘러싸인 자리에서는 안내문과 바깥 여백을 뺀다 —
+   * 행마다 안내문이 반복되면 표가 끊겨 보인다(2026-08-18). */
+  compact?: boolean;
+  showEmbeddedChartControls?: boolean;
 }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const [summaryStatus, setSummaryStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -40,7 +48,7 @@ function EditableRichStaticBlock({
     const editor = editorRef.current;
     if (!editor || editor.contains(document.activeElement)) return;
     editor.innerHTML = block.html;
-    markQuoteEndingReviews(editor, reportQuoteEndingToken);
+    markQuoteEndingReviews(editor, reportQuoteReviewToken);
   }, [block.html]);
 
   function save() {
@@ -137,18 +145,18 @@ function EditableRichStaticBlock({
   };
 
   return (
-    <div className="mb-5 mt-3">
+    <div className={compact ? "" : "mb-5 mt-3"}>
       {/* 이 블록은 표뿐 아니라 도넛차트+표 조합(Ⅲ/Ⅴ장 감정 분석)에도 쓰이므로 "표의 셀"이라는
          문구는 안 맞았다 — 일반화된 문구로 바꾸고, 바로 위 블록(제목 등)과 붙어 보이지 않게
          위쪽 여백을 줬다(2026-07-28 실측: 안내문이 위 헤딩에 달라붙어 보인다는 지적). */}
-      <p data-copy-ignore className="mb-2 text-xs text-[#70675e]">클릭하면 바로 내용을 수정할 수 있습니다.</p>
-      <div data-copy-ignore className="mb-2 flex flex-wrap items-center gap-2">
+      {!compact && <p data-copy-ignore className="mb-2 text-xs text-[#70675e]">클릭하면 바로 내용을 수정할 수 있습니다.</p>}
+      {showEmbeddedChartControls && <div data-copy-ignore className="mb-2 flex flex-wrap items-center gap-2">
         {hasEmbeddedCharts && Array.from({ length: (block.html.match(/<svg[\s>]/gi) ?? []).length }).map((_, index) => (
           <button key={index} type="button" data-chart-index={index} onClick={handleChartDownload} className="rounded border border-[#315c9c] px-2.5 py-1 text-xs font-semibold text-[#315c9c] hover:bg-[#edf3fc]">
             {chartLabel(index)} PNG 다운로드
           </button>
         ))}
-      </div>
+      </div>}
       {summaryError && <p data-copy-ignore className="mb-2 text-xs text-[#a64d32]">{summaryError}</p>}
       <div
         ref={editorRef}
@@ -161,6 +169,86 @@ function EditableRichStaticBlock({
       />
     </div>
   );
+}
+
+function previewStorageKey(sourceFileUrl: string | null | undefined, blockId: string) {
+  return `viewer:image:${sourceFileUrl ?? "demo"}:${blockId}`;
+}
+
+/** /viewer에서도 HWPX 미리보기와 같은 문항별 정량 프레임을 사용한다.
+ * 저장된 scorebox HTML에서 실제 히스토그램 SVG만 재사용해 제목이 중복되지 않는다. */
+function FeatureScoreboxPreview({ block, sourceFileUrl }: { block: Extract<ReportBlock, { kind: "rich-static" }>; sourceFileUrl?: string | null }) {
+  const mean = block.html.match(/만족도 점수 평균\s*:\s*([^<]+)/i)?.[1]?.trim() ?? "-";
+  const sd = block.html.match(/표준편차\s*:\s*([^<]+)/i)?.[1]?.trim() ?? "-";
+  const histogram = block.html.match(/<svg[\s\S]*?<\/svg>/i)?.[0] ?? "";
+  return <section className="rivalabs-feature-frame viewer-feature-frame">
+    <div className="rivalabs-score-strip">
+      <strong>만족도 점수 평균 : {mean}</strong>
+      <span><strong>표준편차 : {sd}</strong><small>*평균에서의 흩어진 정도</small></span>
+    </div>
+    <div className="rivalabs-two-column mt-4">
+      <div className="rivalabs-cell">
+        <p className="rivalabs-cell-title">만족도 분포도</p>
+        <div className="rivalabs-chart-slot report-rich-static" dangerouslySetInnerHTML={{ __html: histogram }} />
+      </div>
+      <div className="rivalabs-cell">
+        <p className="rivalabs-cell-title">주요 키워드 도출</p>
+        <ReportImageUploadSlots storageKey={previewStorageKey(sourceFileUrl, block.id)} emptyLabel="워드클라우드 이미지 첨부" maxImages={1} variant="wordcloud" />
+      </div>
+    </div>
+  </section>;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function textFromHtml(value: string) {
+  return value.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").trim();
+}
+
+function overviewValue(html: string, label: string) {
+  const labelPattern = escapeRegExp(label);
+  const match = html.match(new RegExp(`<td[^>]*>\\s*${labelPattern}\\s*<\\/td>\\s*<td[^>]*>([\\s\\S]*?)<\\/td>`, "i"));
+  return textFromHtml(match?.[1] ?? "");
+}
+
+function patchOverviewValue(html: string, label: string, next: string) {
+  const labelPattern = escapeRegExp(label);
+  const escaped = next.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return html.replace(new RegExp(`(<td[^>]*>\\s*${labelPattern}\\s*<\\/td>\\s*<td[^>]*>)[\\s\\S]*?(<\\/td>)`, "i"), `$1${escaped}$2`);
+}
+
+/** 기존 workspace HTML은 그대로 저장하고, 웹 화면에서만 주요 기능 셀을 이미지+설명 구조로 보강한다. */
+function ViewerOverviewService({ block, sourceFileUrl, onChange }: { block: Extract<ReportBlock, { kind: "rich-static" }>; sourceFileUrl?: string | null; onChange: (next: ReportBlock) => void }) {
+  const fields = {
+    serviceName: overviewValue(block.html, "서비스 명"),
+    summary: overviewValue(block.html, "서비스 요약"),
+    businessArea: overviewValue(block.html, "사업 영역"),
+    industry: overviewValue(block.html, "산업 분야"),
+    environment: overviewValue(block.html, "운영 환경"),
+    stage: overviewValue(block.html, "사업화 단계"),
+    mainFeatures: overviewValue(block.html, "주요 기능"),
+  };
+  const save = (label: string, value: string) => onChange({ ...block, html: patchOverviewValue(block.html, label, value) });
+  const cellBorder = "1px solid #6b87d6";
+  const labelStyle = { border: cellBorder, background: "#dfe6f7", textAlign: "center" as const, fontWeight: 700, padding: "8px 6px", verticalAlign: "middle" as const };
+  const valueStyle = { border: cellBorder, padding: "8px 10px", verticalAlign: "middle" as const };
+  const editable = (label: string, value: string, className = "") => <div contentEditable suppressContentEditableWarning className={`viewer-overview-edit ${className}`} onBlur={(event) => save(label, event.currentTarget.textContent?.trim() ?? "")}>{value || "입력 필요"}</div>;
+
+  return <table className="viewer-overview-table" style={{ width: "100%", marginBottom: 18, borderCollapse: "collapse", tableLayout: "fixed", color: "#111827", fontSize: 13 }}>
+    <tbody>
+      <tr><th colSpan={4} style={{ ...labelStyle, background: "#d6e0f4", color: "#111827", fontSize: 15 }}>제품 및 서비스 개요</th></tr>
+      <tr><th style={labelStyle}>서비스 명</th><td colSpan={3} style={valueStyle}>{editable("서비스 명", fields.serviceName)}</td></tr>
+      <tr><th style={labelStyle}>서비스 요약</th><td colSpan={3} style={valueStyle}>{editable("서비스 요약", fields.summary, "is-left")}</td></tr>
+      <tr><th style={labelStyle}>사업 영역</th><td style={valueStyle}>{editable("사업 영역", fields.businessArea)}</td><th style={labelStyle}>산업 분야</th><td style={valueStyle}>{editable("산업 분야", fields.industry)}</td></tr>
+      <tr><th style={labelStyle}>운영 환경</th><td style={valueStyle}>{editable("운영 환경", fields.environment)}</td><th style={labelStyle}>사업화 단계</th><td style={valueStyle}>{editable("사업화 단계", fields.stage)}</td></tr>
+      <tr><th style={{ ...labelStyle, width: 110 }}>주요 기능</th><td colSpan={3} className="viewer-overview-main-feature" style={{ ...valueStyle, padding: 0, verticalAlign: "top" }}>
+        <ReportImageUploadSlots storageKey={previewStorageKey(sourceFileUrl, block.id)} emptyLabel="제품·서비스 이미지 첨부" />
+        {editable("주요 기능", fields.mainFeatures, "viewer-overview-feature-text is-left")}
+      </td></tr>
+    </tbody>
+  </table>;
 }
 
 /**
@@ -212,11 +300,21 @@ export function BlockView({
   onChange,
   sourceFileUrl,
   onQuoteSource,
+  selectedBlockId,
+  onSelectBlock,
+  compact,
 }: {
   block: ReportBlock;
   onChange: (next: ReportBlock) => void;
   sourceFileUrl?: string | null;
   onQuoteSource?: (questionKey: string, quotes: string[], groupLabel: string) => void;
+  /** 표 셀 안에 중첩된 블록이면 안내문·바깥 여백을 줄인다. */
+  compact?: boolean;
+  /** row-group 자식처럼 최상위 블록 목록 바깥에 중첩된 블록도 개별 선택(사이드 속성 패널)이
+   * 되게 하려고 선택 상태를 아래로 흘려보낸다 — 없으면(최상위 호출) 중첩 자식이 없는
+   * 블록이므로 그냥 무시된다. */
+  selectedBlockId?: string;
+  onSelectBlock?: (id: string) => void;
 }) {
   if (block.kind === "heading") {
     const saveHeading = (event: FocusEvent<HTMLElement>) => {
@@ -227,19 +325,19 @@ export function BlockView({
     // studio 헤더(sticky)에 상단이 가려지지 않게 하는 여백이다.
     if (block.variant === "numbered") {
       return (
-        <div id={block.id} className="mb-7 grid scroll-mt-24 grid-cols-[64px_minmax(0,1fr)] border border-[#6388e6] text-[#111827]">
+        <div id={block.id} className="grid scroll-mt-24 text-[#111827]" style={{ gridTemplateColumns: `${SUBSECTION_BANNER.numberWidth}pt minmax(0,1fr)`, minHeight: `${SUBSECTION_BANNER.height}pt`, marginTop: `${SUBSECTION_BANNER.marginTop}pt`, marginBottom: `${SUBSECTION_BANNER.marginBottom}pt`, border: `${SUBSECTION_BANNER.borderWidth}pt solid ${SUBSECTION_BANNER.borderColor}` }}>
           <div contentEditable suppressContentEditableWarning onBlur={(event) => {
             const number = event.currentTarget.textContent?.trim() ?? "";
             if (number !== (block.number ?? "")) onChange({ ...block, number });
-          }} className="flex min-h-14 items-center justify-center border-r border-[#6388e6] bg-[#e1e8f7] text-2xl font-medium outline-none focus:bg-[#d4e3fb]">{block.number}</div>
-          <h2 contentEditable suppressContentEditableWarning onBlur={saveHeading} className="flex min-h-14 items-center px-6 text-[23px] font-semibold tracking-[-0.035em] outline-none focus:bg-[#f8fbff]">{block.text}</h2>
+          }} className="flex items-center justify-center font-medium outline-none focus:bg-[#d4e3fb]" style={{ minHeight: `${SUBSECTION_BANNER.height - SUBSECTION_BANNER.borderWidth * 2}pt`, borderRight: `${SUBSECTION_BANNER.borderWidth}pt solid ${SUBSECTION_BANNER.borderColor}`, backgroundColor: SUBSECTION_BANNER.numberBackground, fontSize: `${SUBSECTION_BANNER.fontSize}pt` }}>{block.number}</div>
+          <h2 contentEditable suppressContentEditableWarning onBlur={saveHeading} className="flex items-center px-3 font-semibold tracking-[-0.035em] outline-none focus:bg-[#f8fbff]" style={{ minHeight: `${SUBSECTION_BANNER.height - SUBSECTION_BANNER.borderWidth * 2}pt`, fontSize: `${SUBSECTION_BANNER.fontSize}pt` }}>{block.text}</h2>
         </div>
       );
     }
     if (block.variant === "question") {
       return (
-        <div id={block.id} className="mb-4 mt-7 scroll-mt-24 border-b-4 border-[#4fc8e8] pb-3">
-          <h3 className="text-[21px] font-medium leading-[1.45] tracking-[-0.035em] text-[#111827]">
+        <div id={block.id} className="mb-5 mt-7 scroll-mt-24 border-b-[3px] border-[#4fc8e8] pb-2.5">
+          <h3 className="text-[18px] font-medium leading-[1.5] tracking-[-0.035em] text-[#111827]">
             {block.number ? `${block.number}. ` : ""}
             <span contentEditable suppressContentEditableWarning onBlur={saveHeading} className="outline-none focus:bg-[#f8fbff]">{block.text}</span>
           </h3>
@@ -247,6 +345,63 @@ export function BlockView({
       );
     }
     return <h3 id={block.id} contentEditable suppressContentEditableWarning onBlur={saveHeading} className="mb-3 mt-6 scroll-mt-24 text-[21px] font-semibold tracking-[-0.035em] text-[#111827] outline-none focus:bg-[#f8fbff]">{block.text}</h3>;
+  }
+  // row-group: 원본 "항목 | 주요 의견" 표 전체를 진짜 <table>로 그린다. 오른쪽 칸에 인터랙티브
+  // 차트가 들어가는 행이 있어 정적 HTML 표로는 못 만들지만, <td> 안에 React 자식 블록을 그리면
+  // 테두리는 표 하나로 이어진다(sections.ts의 ReportRowGroupBlock 주석 참고).
+  if (block.kind === "row-group") {
+    const updateChild = (rowId: string, next: ReportBlock) =>
+      onChange({
+        ...block,
+        rows: block.rows.map((row) => (row.id !== rowId ? row : { ...row, blocks: row.blocks.map((b) => (b.id === next.id ? next : b)) })),
+      });
+    return (
+      <table className="mb-3 w-full table-fixed border-collapse text-[#111827]">
+        {block.headers && (
+          <thead>
+            <tr>
+              {block.headers.map((header, index) => (
+                <th key={header} className={`border border-[#d4d4d8] bg-[#d0dcf3] p-2 text-center font-bold ${index === 0 ? "w-[18%]" : ""}`}>{header}</th>
+              ))}
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {block.rows.map((row) => (
+            <tr key={row.id}>
+              <td className="w-[18%] border border-[#d4d4d8] bg-[#dfe7f6] p-2 text-center align-middle font-bold">{row.label}</td>
+              <td className="border border-[#d4d4d8] p-3 align-top">
+                <div className="space-y-3">
+                  {row.blocks.map((child) => (
+                    <div
+                      key={child.id}
+                      role="button"
+                      tabIndex={0}
+                      // stopPropagation: 최상위 목록에서 이 표 전체에도 선택 핸들러가 걸려있어서
+                      // (ReportWebDocument.tsx), 막지 않으면 자식을 눌러도 표 전체가 선택돼
+                      // 사이드 패널에서 사분면 차트 등 자식 고유 편집 항목을 못 연다.
+                      onClick={(event) => { event.stopPropagation(); onSelectBlock?.(child.id); }}
+                      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.stopPropagation(); onSelectBlock?.(child.id); } }}
+                      className={`rounded transition-shadow ${selectedBlockId === child.id ? "ring-2 ring-[#4fc8e8] ring-offset-2" : "hover:ring-1 hover:ring-[#c9d8ef]"}`}
+                    >
+                      <BlockView
+                        block={child}
+                        sourceFileUrl={sourceFileUrl}
+                        onQuoteSource={onQuoteSource}
+                        onChange={(next) => updateChild(row.id, next)}
+                        selectedBlockId={selectedBlockId}
+                        onSelectBlock={onSelectBlock}
+                        compact
+                      />
+                    </div>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
   }
   if (block.kind === "chart") return <EditableBarChart block={block} />;
   if (block.kind === "rank-composition") return <EditableRankCompositionChart block={block} />;
@@ -262,7 +417,16 @@ export function BlockView({
   // 읽기 전용 표. RichReportEditor는 table/border/width 스타일을 전부 제거하므로 편집기를
   // 거치지 않고 그대로 렌더링한다(2026-07-26).
   if (block.kind === "rich-static") {
-    return <EditableRichStaticBlock block={block} onChange={onChange} sourceFileUrl={sourceFileUrl} />;
+    if (/^feature-qualitative-q\d+-scorebox$/.test(block.id)) {
+      return <FeatureScoreboxPreview block={block} sourceFileUrl={sourceFileUrl} />;
+    }
+    if (/^feature-qualitative-q\d+-emotionbox$/.test(block.id)) {
+      return <div className="rivalabs-emotion-frame viewer-emotion-frame"><EditableRichStaticBlock block={block} onChange={onChange} sourceFileUrl={sourceFileUrl} compact showEmbeddedChartControls={false} /></div>;
+    }
+    if (block.id === "overview-service") {
+      return <ViewerOverviewService block={block} sourceFileUrl={sourceFileUrl} onChange={onChange} />;
+    }
+    return <EditableRichStaticBlock block={block} onChange={onChange} sourceFileUrl={sourceFileUrl} compact={compact} />;
   }
   // text 블록: 정성 분석 대기 중이면 편집 도구 없이 안내 문구만 보여준다(채울 실제 내용이
   // 없는데 서식 도구를 주는 건 혼란만 준다 — 2026-07-25 결정).

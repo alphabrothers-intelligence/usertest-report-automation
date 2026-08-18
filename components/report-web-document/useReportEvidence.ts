@@ -5,7 +5,7 @@ import type { BatchCorrectionItem } from "@/components/QuoteCorrectionPanel";
 import { ANALYSIS_EVIDENCE_BY_BLOCK, type AnalysisReference } from "@/components/report-web-document/analysisEvidence";
 import { markQuoteEndingReviews } from "@/components/report-web-document/quoteEndingMarkup";
 import type { QuoteCompletionTarget, QuoteSourceResult } from "@/components/report-web-document/EvidencePanelContent";
-import { reportQuoteEndingToken, splitHighlightParts } from "@/lib/report/quoteEnding";
+import { reportQuoteReviewToken, splitHighlightParts } from "@/lib/report/quoteEnding";
 import { escapeHtml } from "@/lib/report/richText";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
 
@@ -49,7 +49,7 @@ export function useReportEvidence({
     const firstFrame = window.requestAnimationFrame(() => {
       secondFrame = window.requestAnimationFrame(() => {
         const container = documentContainerRef.current;
-        if (container) markQuoteEndingReviews(container, reportQuoteEndingToken);
+        if (container) markQuoteEndingReviews(container, reportQuoteReviewToken);
       });
     });
     return () => {

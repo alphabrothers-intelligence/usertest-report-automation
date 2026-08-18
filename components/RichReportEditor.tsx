@@ -3,7 +3,7 @@
 import { useEffect, useRef, type ClipboardEvent, type MouseEvent } from "react";
 import { htmlToPlainText, richTextToHtml, CLIPBOARD_FONT_FAMILY } from "@/lib/report/richText";
 import { htmlToRtf } from "@/lib/report/rtfClipboard";
-import { reportQuoteEndingToken } from "@/lib/report/quoteEnding";
+import { reportQuoteReviewToken } from "@/lib/report/quoteEnding";
 
 type RichReportEditorProps = {
   label: string;
@@ -18,7 +18,7 @@ const allowedTags = new Set(["P", "DIV", "H1", "H2", "H3", "STRONG", "B", "U", "
  * 반복하며, 문장 내용이나 출력 서식에는 손대지 않는다. */
 function markQuoteEndingReview(quoteNode: HTMLElement, quote: string) {
   quoteNode.querySelector("[data-quote-ending-note]")?.remove();
-  const token = reportQuoteEndingToken(quote);
+  const token = reportQuoteReviewToken(quote);
   if (!token) {
     quoteNode.removeAttribute("data-quote-ending-review");
     return;
@@ -309,7 +309,7 @@ export function RichReportEditor({ label, value, onChange, onQuoteSource }: Rich
       onClick={handleClick}
       onPaste={pasteMarkdownAsRichText}
       style={{ fontFamily: CLIPBOARD_FONT_FAMILY }}
-      className="report-rich-editor min-h-7 rounded px-1 py-1 text-[15px] leading-8 text-[#202020] outline-none transition hover:bg-[#fafcff] focus:bg-[#fafcff] focus:ring-2 focus:ring-[#4fc8e8]/60"
+      className="report-rich-editor min-h-7 rounded px-1 py-1 text-[13px] leading-[1.7] text-[#202020] outline-none transition hover:bg-[#fafcff] focus:bg-[#fafcff] focus:ring-2 focus:ring-[#4fc8e8]/60"
     />
   );
 }
