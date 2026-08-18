@@ -1,11 +1,56 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { type ReactNode } from "react";
 import type { FeatureStat } from "@/lib/quant/compute";
+import type { ProductInfo } from "@/lib/productInfo/types";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
-import { findHtml, keywordCandidates } from "./model";
+import { EditableBarChart } from "@/components/report/EditableBarChart";
+import { EditableGroupedBarChart } from "@/components/report/EditableGroupedBarChart";
+import { EditableNpsChart } from "@/components/report/EditableNpsChart";
+import { EditablePolarityChart } from "@/components/report/EditablePolarityChart";
+import { PriorityReferenceDiagram } from "@/components/report/PriorityReferenceDiagram";
+import { EditableQuadrantChart } from "@/components/report/EditableQuadrantChart";
+import { EditableRadarChart } from "@/components/report/EditableRadarChart";
+import { EditableRankCompositionChart } from "@/components/report/EditableRankCompositionChart";
+import { EditableStackedBarChart } from "@/components/report/EditableStackedBarChart";
+import { ReportImageUploadSlots } from "@/components/report/ReportImageUploadSlots";
+import { findBlock, findHtml } from "./model";
 
 export function A4Page({ children, className = "", id }: { children: ReactNode; className?: string; id?: string }) {
   return <article id={id} data-hwpx-print-page className={`hwpx-sheet ${className}`}>{children}</article>;
+}
+
+/**
+ * 원본의 이미지 영역을 웹 미리보기에서도 실제 첨부 슬롯으로 둔다.
+ * 아직 HWPX 이미지 위치와 연결하지 않은 POC이므로 해당 브라우저의 미리보기에만 저장한다.
+ */
+function OverviewCell({ children, editable = false, colSpan }: { children: ReactNode; editable?: boolean; colSpan?: number }) {
+  return <td colSpan={colSpan} contentEditable={editable} suppressContentEditableWarning={editable}>{children}</td>;
+}
+
+/** Ⅰ.1 원본의 제품·서비스 개요: 이미지 3칸과 주요 기능 서술칸을 별도 구조로 복원한다. */
+export function RivalabsOverviewReferencePage({ section, productInfo }: { section: ReportSectionContent; productInfo: ProductInfo | null | undefined }) {
+  const remaining = section.blocks.filter((block) => !["overview-h1", "overview-company", "overview-service"].includes(block.id));
+  const imageKey = `hwpx-preview:product-images:${productInfo?.companyName ?? "company"}:${productInfo?.serviceName ?? "service"}`;
+  return <A4Page className="rivalabs-reference-page p-[15mm]" id="preview-section-I">
+    <div className="rivalabs-chapter-heading"><div className="rivalabs-chapter-number">Ⅰ</div><h2>개요</h2></div>
+    <div className="rivalabs-section-content">
+      <div className="rivalabs-section-heading"><span>1</span><strong>제품 소개</strong></div>
+      <table className="rivalabs-overview-table">
+        <tbody>
+          <tr><th colSpan={4}>제품 및 서비스 개요</th></tr>
+          <tr><th>서비스 명</th><OverviewCell editable colSpan={3}>{productInfo?.serviceName ?? "서비스·제품명 입력"}</OverviewCell></tr>
+          <tr><th>서비스 요약</th><OverviewCell editable colSpan={3}>{productInfo?.serviceSummary ?? "서비스 요약 입력"}</OverviewCell></tr>
+          <tr><th>사업 영역</th><OverviewCell editable>{productInfo?.businessArea ?? "입력 필요"}</OverviewCell><th>산업 분야</th><OverviewCell editable>{productInfo?.industry ?? "입력 필요"}</OverviewCell></tr>
+          <tr><th>운영 환경</th><OverviewCell editable>{productInfo?.operatingEnvironment ?? "입력 필요"}</OverviewCell><th>사업화 단계</th><OverviewCell editable>{productInfo?.businessStage ?? "입력 필요"}</OverviewCell></tr>
+          <tr><th rowSpan={2}>주요 기능</th><td colSpan={3}><ReportImageUploadSlots key={imageKey} storageKey={imageKey} /></td></tr>
+          <tr><OverviewCell editable colSpan={3}>{productInfo?.mainFeatures ?? "주요 기능 설명을 입력하세요."}</OverviewCell></tr>
+        </tbody>
+      </table>
+      <RivalabsBlockList blocks={remaining} />
+    </div>
+  </A4Page>;
 }
 
 export function RivalabsFeatureReferencePage({
@@ -27,11 +72,9 @@ export function RivalabsFeatureReferencePage({
   detailPageId: string;
   showChapterHeading: boolean;
 }) {
-  const keywords = keywordCandidates(detailHtml);
-  const tableEnd = scoreboxHtml.indexOf("</table>");
-  const distributionHtml = tableEnd >= 0
-    ? scoreboxHtml.slice(tableEnd + "</table>".length)
-    : scoreboxHtml;
+  // scorebox에는 평균표와 "만족도 분포도" 제목까지 포함돼 있다. 원본처럼 셀 제목은
+  // 이 컴포넌트가 한 번만 그리고, 여기서는 실제 히스토그램 SVG만 꺼낸다.
+  const distributionHtml = scoreboxHtml.match(/<svg[\s\S]*?<\/svg>/i)?.[0] ?? "";
   const editPrefix = `feature:${feature?.name ?? "unknown"}`;
 
   return (
@@ -56,11 +99,7 @@ export function RivalabsFeatureReferencePage({
               </div>
               <div className="rivalabs-cell">
                 <p className="rivalabs-cell-title">주요 키워드 도출</p>
-                <div className="rivalabs-keyword-slot" data-hwpx-edit-key={`${editPrefix}:keywords`} contentEditable suppressContentEditableWarning>
-                  {keywords.length > 0 ? keywords.map((keyword, index) => (
-                    <span key={keyword} className={`keyword-${index % 4}`}>{keyword}</span>
-                  )) : <span className="text-sm text-slate-400">정성 분석 결과에서 키워드를 불러옵니다.</span>}
-                </div>
+                <ReportImageUploadSlots key={editPrefix} storageKey={`hwpx-preview:feature-keyword:${editPrefix}`} emptyLabel="워드클라우드 이미지 첨부" maxImages={1} variant="wordcloud" />
               </div>
             </div>
             <div className="rivalabs-emotion-frame report-rich-static mt-5" dangerouslySetInnerHTML={{ __html: emotionboxHtml }} />
@@ -78,36 +117,32 @@ export function RivalabsFeatureReferencePage({
 }
 
 export function RivalabsConclusionReferencePage({ workspace }: { workspace: ReportWorkspaceSeed }) {
-  const featureSummary = findHtml(workspace, "conclusion-feature-summary-table");
-  const featureBullets = findHtml(workspace, "conclusion-feature-summary-bullets");
-  const evidence = findHtml(workspace, "conclusion-evidence-table");
+  const summary = findBlock(workspace, "conclusion-summary-table");
   const strategy = findHtml(workspace, "conclusion-strategy-table");
   const customer = findHtml(workspace, "conclusion-feature-customer-table");
-  const points = workspace.quantStats.relativeImportance.map((importance) => ({
-    ...importance,
-    satisfaction: workspace.quantStats.featureSatisfaction.find((feature) => feature.name === importance.name)?.mean ?? 0,
-  }));
+  const summaryRows = summary?.kind === "row-group" ? summary.rows : [];
+  const featureExperience = summaryRows.find((row) => row.id === "conclusion-row-feature-experience");
+  const otherResults = summaryRows.filter((row) => row.id !== "conclusion-row-feature-experience");
 
   return <>
     <A4Page className="rivalabs-reference-page p-[15mm]" id="preview-conclusion">
       <div className="rivalabs-chapter-heading"><div className="rivalabs-chapter-number">Ⅸ</div><h2>종합 결과 및 제언</h2></div>
       <div className="mt-9 border-t-[4px] border-[#48c2e0]">
         <div className="rivalabs-section-heading"><span>1</span><strong>사용성테스트 결과 요약</strong></div>
-        <div className="rivalabs-conclusion-table mt-5">
+        {summary?.kind === "row-group" ? <div className="rivalabs-conclusion-table mt-5">
           <div className="rivalabs-conclusion-label">항목</div><div className="rivalabs-conclusion-head">주요 의견</div>
           <div className="rivalabs-conclusion-label">기능별 고객<br />경험 평가</div>
           <div className="rivalabs-conclusion-body">
-            <p className="mb-3 font-bold">기능별 상대 중요도-만족도 그래프</p>
-            <div className="rivalabs-quadrant" aria-label="기능별 상대 중요도와 만족도">
-              <span className="quad-y">상대 만족도</span><span className="quad-x">상대 중요도</span>
-              {points.map((point, index) => <i key={point.name} style={{ left: `${Math.max(8, Math.min(92, ((point.score + 5) / 10) * 100))}%`, bottom: `${Math.max(8, Math.min(92, point.satisfaction * 10))}%` }} title={`${point.name}: 중요도 ${point.score.toFixed(2)}, 만족도 ${point.satisfaction.toFixed(2)}`}>{index + 1}</i>)}
-            </div>
-            <div className="mt-4 report-rich-static" dangerouslySetInnerHTML={{ __html: featureSummary }} />
-            <div className="report-rich-static" dangerouslySetInnerHTML={{ __html: featureBullets }} />
+            <RivalabsBlockList blocks={featureExperience?.blocks ?? []} />
           </div>
           <div className="rivalabs-conclusion-label">기타 분석 결과</div>
-          <div className="rivalabs-conclusion-body report-rich-static" dangerouslySetInnerHTML={{ __html: evidence }} />
-        </div>
+          <div className="rivalabs-conclusion-body">
+            {otherResults.map((row) => <section key={row.id} className="rivalabs-conclusion-result-row">
+              <h3>{row.label}</h3>
+              <RivalabsBlockList blocks={row.blocks} />
+            </section>)}
+          </div>
+        </div> : <p className="mt-5 text-sm text-slate-500">저장된 사용성테스트 결과 요약이 없습니다.</p>}
       </div>
     </A4Page>
 
@@ -131,16 +166,112 @@ function RivalabsGenericBlock({ block }: { block: ReportBlock }) {
     return <h3 className="rivalabs-subheading">{block.text}</h3>;
   }
   if (block.kind === "rich-static" || block.kind === "text") return <div className="rivalabs-generic-rich report-rich-static" data-hwpx-edit-key={`block:${block.id}`} contentEditable suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: block.html }} />;
-  if (block.kind === "table") return <div className="rivalabs-data-table" data-hwpx-edit-key={`block:${block.id}`}><p>{block.title}</p><table><thead><tr>{block.headers.map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{block.rows.map((row, index) => <tr key={`${block.id}-${index}`}>{row.map((cell, cellIndex) => <td key={cellIndex} contentEditable={typeof cell === "number"} suppressContentEditableWarning>{String(cell)}</td>)}</tr>)}</tbody></table></div>;
-  if (block.kind === "chart") return <div className="rivalabs-data-chart"><p>{block.title}</p><div className="rivalabs-bars">{block.items.map((item) => <div key={item.id}><i style={{ height: `${Math.max(4, ((item.value - block.axisMin) / Math.max(block.axisMax - block.axisMin, 1)) * 100)}%`, background: block.color }} /><span>{item.label}</span><b>{item.value.toFixed(2)}{block.unit}</b></div>)}</div></div>;
-  if (block.kind === "nps") return <div className="rivalabs-nps"><p>{block.title}</p><strong>NPS {block.npsScore}</strong><span>추천 {block.promoterPct}% · 중립 {block.passivePct}% · 비추천 {block.detractorPct}%</span></div>;
-  if (block.kind === "polarity") return <div className="rivalabs-polarity"><p>{block.title}</p><div><i style={{ width: `${block.positive}%`, background: block.positiveColor ?? "#b9c8ed" }} /><i style={{ width: `${block.negative}%`, background: block.negativeColor ?? "#fde4d0" }} /><i style={{ width: `${block.neutral}%`, background: block.neutralColor ?? "#e8e8e8" }} /></div><small>{block.positiveLabel ?? "긍정"} {block.positive}% · {block.negativeLabel ?? "부정"} {block.negative}% · {block.neutralLabel ?? "중립"} {block.neutral}%</small></div>;
-  if (block.kind === "quadrant") return <div className="rivalabs-data-chart"><p>{block.title}</p><div className="rivalabs-quadrant">{block.items.map((item, index) => <i key={item.id} style={{ left: `${Math.max(8, Math.min(92, ((item.importance - block.xMin) / Math.max(block.xMax - block.xMin, 1)) * 100))}%`, bottom: `${Math.max(8, Math.min(92, ((item.satisfaction - block.yMin) / Math.max(block.yMax - block.yMin, 1)) * 100))}%` }} title={item.name}>{index + 1}</i>)}</div></div>;
-  if (block.kind === "rank-composition") return <div className="rivalabs-data-table"><p>{block.title}</p><table><thead><tr><th>순위</th>{block.candidates.map((candidate) => <th key={candidate.name}>{candidate.name}</th>)}</tr></thead><tbody>{block.rows.map((row) => <tr key={row.rank}><td>{row.rank}위</td>{block.candidates.map((candidate) => <td key={candidate.name}>{row.segments.find((segment) => segment.name === candidate.name)?.percentage ?? 0}%</td>)}</tr>)}</tbody></table></div>;
-  if (block.kind === "stacked-bar") return <div className="rivalabs-data-table"><p>{block.title}</p><table><thead><tr><th>구분</th>{block.categories.map((category) => <th key={category.name}>{category.name}</th>)}</tr></thead><tbody>{block.rows.map((row) => <tr key={row.label}><td>{row.label}</td>{block.categories.map((category) => <td key={category.name}>{row.segments.find((segment) => segment.name === category.name)?.value ?? 0}{block.unit}</td>)}</tr>)}</tbody></table></div>;
-  if (block.kind === "grouped-bar") return <div className="rivalabs-data-table"><p>{block.title}</p><table><thead><tr><th>항목</th>{block.series.map((series) => <th key={series.name}>{series.name}</th>)}</tr></thead><tbody>{block.categories.map((category) => <tr key={category.label}><td>{category.label}</td>{block.series.map((series) => <td key={series.name}>{category.values.find((value) => value.series === series.name)?.value ?? 0}{block.unit}</td>)}</tr>)}</tbody></table></div>;
-  if (block.kind === "radar") return <div className="rivalabs-data-table"><p>{block.title}</p><table><thead><tr><th>항목</th>{block.series.map((series) => <th key={series.name}>{series.name}</th>)}</tr></thead><tbody>{block.indicators.map((indicator, index) => <tr key={indicator}><td>{indicator}</td>{block.series.map((series) => <td key={series.name}>{series.values[index] ?? 0}</td>)}</tr>)}</tbody></table></div>;
-  return <div className="rivalabs-data-chart"><p>{block.title}</p><div className="rivalabs-priority-grid"><b>개선 필요성 높음</b><b>중요 개선</b><b>긴급 개선</b><b>개선 필요성 보통</b><b>개선 권장</b><b>개선 필요성 낮음</b></div></div>;
+  if (block.kind === "table") {
+    if (block.id === "feature-rank-table") return <FeatureRankSummaryTable block={block} />;
+    if (block.id === "feature-importance-table") return <FeatureImportanceSummaryTable block={block} />;
+    return <div className="rivalabs-data-table" data-hwpx-edit-key={`block:${block.id}`}><p>{block.title}</p><table><thead><tr>{block.headers.map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{block.rows.map((row, index) => <tr key={`${block.id}-${index}`}>{row.map((cell, cellIndex) => <td key={cellIndex} contentEditable={typeof cell === "number"} suppressContentEditableWarning>{String(cell)}</td>)}</tr>)}</tbody></table></div>;
+  }
+  // /viewer에서 검증된 SVG 차트만 그대로 재사용한다. 이 경로에서 HTML/CSS로 차트를
+  // 다시 그리면 축·격자·범례·PNG 출력이 달라져 원본 보고서 검토 경험이 깨진다.
+  if (block.kind === "chart") return <EditableBarChart block={block} />;
+  if (block.kind === "nps") return <EditableNpsChart block={block} />;
+  if (block.kind === "polarity") return <EditablePolarityChart block={block} />;
+  if (block.kind === "quadrant") return <EditableQuadrantChart block={block} onChange={() => undefined} />;
+  if (block.kind === "priority-reference") return <PriorityReferenceDiagram block={block} />;
+  if (block.kind === "rank-composition") return <EditableRankCompositionChart block={block} />;
+  if (block.kind === "stacked-bar") return <EditableStackedBarChart block={block} />;
+  if (block.kind === "grouped-bar") return <EditableGroupedBarChart block={block} />;
+  if (block.kind === "radar") return <EditableRadarChart block={block} />;
+  return null;
+}
+
+type TableBlock = Extract<ReportBlock, { kind: "table" }>;
+
+function HorizontalSummaryTable({
+  title,
+  rows,
+  editKey,
+}: {
+  title: string;
+  rows: Array<{ label: string; values: Array<string | number> }>;
+  editKey: string;
+}) {
+  const count = Math.max(1, ...rows.map((row) => row.values.length));
+  return <div className="rivalabs-data-table rivalabs-horizontal-summary" data-hwpx-edit-key={editKey}>
+    <p>{title}</p>
+    <table>
+      <tbody>{rows.map((row, rowIndex) => <tr key={row.label}>
+        <th>{row.label}</th>
+        {Array.from({ length: count }, (_, index) => {
+          const value = row.values[index] ?? "-";
+          const emphasis = rowIndex > 0 ? (index === 0 ? "is-best" : index === count - 1 ? "is-lowest" : "") : "";
+          return <td key={`${row.label}-${index}`} className={emphasis} contentEditable={typeof value === "number"} suppressContentEditableWarning>{String(value)}</td>;
+        })}
+      </tr>)}</tbody>
+    </table>
+  </div>;
+}
+
+function FeatureRankSummaryTable({ block }: { block: TableBlock }) {
+  return <HorizontalSummaryTable
+    title="기능별 만족도 순위 종합"
+    editKey={`block:${block.id}`}
+    rows={[
+      { label: "순위", values: block.rows.map((row, index) => row[0] ?? `${index + 1}위`) },
+      { label: "기능", values: block.rows.map((row) => row[1] ?? "-") },
+      { label: "평균 만족도", values: block.rows.map((row) => row[2] ?? "-") },
+    ]}
+  />;
+}
+
+function FeatureImportanceSummaryTable({ block }: { block: TableBlock }) {
+  return <HorizontalSummaryTable
+    title="기능별 중요 순위 종합"
+    editKey={`block:${block.id}`}
+    rows={[
+      { label: "순위", values: block.rows.map((row, index) => row[0] ?? `${index + 1}위`) },
+      { label: "기능", values: block.rows.map((row) => row[1] ?? "-") },
+      { label: "상대 중요도", values: block.rows.map((row) => row[2] ?? "-") },
+    ]}
+  />;
+}
+
+function RivalabsBlockList({ blocks }: { blocks: ReportBlock[] }) {
+  return <>{blocks.map((block) => <RivalabsGenericBlock key={block.id} block={block} />)}</>;
+}
+
+/** Ⅲ장에서 문항별 분석 다음에 빠져 있던 정량 결과 페이지를 원본 순서로 렌더링한다. */
+export function RivalabsFeatureMetricsReferencePages({ section }: { section: ReportSectionContent }) {
+  const start = section.blocks.findIndex((block) => block.id === "feature-satisfaction-heading");
+  const end = section.blocks.findIndex((block) => block.id === "feature-analysis-heading");
+  if (start < 0) return null;
+  const blocks = section.blocks.slice(start, end >= 0 ? end : undefined);
+  const satisfaction = blocks.filter((block) => ["feature-satisfaction", "feature-rank-table"].includes(block.id));
+  const importance = blocks.filter((block) => ["feature-q12", "feature-rank-composition", "feature-importance-table"].includes(block.id));
+  const quadrant = blocks.filter((block) => ["feature-importance-satisfaction-quadrant", "feature-priority-reference"].includes(block.id));
+  return <>
+    <A4Page className="rivalabs-reference-page p-[15mm]" id="preview-feature-metrics-satisfaction"><RivalabsBlockList blocks={satisfaction} /></A4Page>
+    <A4Page className="rivalabs-reference-page p-[15mm]" id="preview-feature-metrics-importance"><RivalabsBlockList blocks={importance} /></A4Page>
+    <A4Page className="rivalabs-reference-page p-[15mm]" id="preview-feature-metrics-quadrant"><RivalabsBlockList blocks={quadrant} /></A4Page>
+  </>;
+}
+
+/** Ⅴ장의 가치별 긍정·부정 표를 A4 단위로 나누어, 뒤쪽 문항이 잘려 사라지지 않게 한다. */
+export function RivalabsFourValuesReferencePages({ section }: { section: ReportSectionContent }) {
+  const starts = section.blocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block }) => /^four-values-qualitative-q\d+$/.test(block.id));
+  if (!starts.length) return <RivalabsSectionReferencePage section={section} />;
+  const analysisStart = section.blocks.findIndex((block) => block.id === "values-analysis-heading");
+  const intro = section.blocks.slice(0, starts[0].index);
+  const groups = starts.map(({ index }, groupIndex) => section.blocks.slice(index, starts[groupIndex + 1]?.index ?? analysisStart));
+  const analysis = analysisStart >= 0 ? section.blocks.slice(analysisStart) : [];
+  return <>
+    {groups.map((group, index) => <A4Page key={group[0]?.id ?? index} className="rivalabs-reference-page p-[15mm]" id={index === 0 ? "preview-section-V" : `preview-section-V-${index + 1}`}>
+      {index === 0 ? <><div className="rivalabs-chapter-heading"><div className="rivalabs-chapter-number">Ⅴ</div><h2>{section.title}</h2></div><div className="rivalabs-section-content"><RivalabsBlockList blocks={intro} /><RivalabsBlockList blocks={group} /></div></> : <RivalabsBlockList blocks={group} />}
+    </A4Page>)}
+    {analysis.length > 0 ? <A4Page className="rivalabs-reference-page p-[15mm]" id="preview-section-V-analysis"><RivalabsBlockList blocks={analysis} /></A4Page> : null}
+  </>;
 }
 
 export function RivalabsSectionReferencePage({ section }: { section: ReportSectionContent }) {

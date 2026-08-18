@@ -73,6 +73,8 @@ def main() -> int:
         qualitative_out = temp_dir / "qualitative-filled.hwpx"
         recommendation_fitted = temp_dir / "recommendation-fitted.hwpx"
         recommendation_expanded = temp_dir / "recommendation-expanded.hwpx"
+        chart_assets_dir = temp_dir / "chart-assets"
+        charts_filled = temp_dir / "charts-filled.hwpx"
         run([
             "node", "poc/hwpx-template/scripts/build-content-plan.cjs",
             str(args.db_export), str(content_plan),
@@ -101,8 +103,19 @@ def main() -> int:
             "--source", str(recommendation_fitted), "--db-export", str(args.db_export),
             "--output", str(recommendation_expanded), "--skill-dir", str(args.skill_dir),
         ], args.project_root)
+        # 원본 차트 이미지는 수치가 달라진 DB 결과에 재사용하면 안 된다. 원본의 확정 BinData
+        # 프레임(image14~31)은 유지하되, 현재 DB snapshot으로 만든 PNG 18개만 교체한다.
+        run([
+            "npx", "tsx", "poc/hwpx-template/scripts/render-rivalabs-db-chart-assets.ts",
+            str(content_plan), str(chart_assets_dir),
+        ], args.project_root)
+        run([
+            "python3", "poc/hwpx-template/scripts/apply-rivalabs-chart-assets.py",
+            "--source", str(recommendation_expanded), "--assets", str(chart_assets_dir),
+            "--output", str(charts_filled), "--skill-dir", str(args.skill_dir),
+        ], args.project_root)
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        apply_identity(recommendation_expanded, args.output, company, service, args.skill_dir)
+        apply_identity(charts_filled, args.output, company, service, args.skill_dir)
     # HWPX와 같은 입력 스냅샷에서 제언의 근거 manifest도 함께 만든다. 웹 UI는 이 파일을
     # '분석 근거' 패널로 표시할 수 있고, 문서 컴파일은 이 파일을 읽기만 한다.
     rationale_output = args.output.with_suffix(".analysis-rationale.json")

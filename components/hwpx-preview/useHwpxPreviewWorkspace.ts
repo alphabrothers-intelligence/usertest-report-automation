@@ -10,6 +10,7 @@ export function useHwpxPreviewWorkspace(sourceFileUrl?: string) {
   const [workspace, setWorkspace] = useState<ReportWorkspaceSeed | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
+  const [reportName, setReportName] = useState<string | null>(null);
 
   useEffect(() => {
     const endpoint = sourceFileUrl
@@ -23,10 +24,12 @@ export function useHwpxPreviewWorkspace(sourceFileUrl?: string) {
         if (!response.ok || !payload.ok || !payload.workspace) {
           throw new Error(payload.error ?? "보고서 데이터를 불러오지 못했습니다.");
         }
-        return payload.workspace;
+        return payload;
       })
-      .then((loadedWorkspace) => {
-        setWorkspace(loadedWorkspace);
+      .then((payload) => {
+        if (!payload.workspace) return;
+        setWorkspace(payload.workspace);
+        setReportName(payload.reportName ?? null);
         setState("ready");
       })
       .catch((reason: unknown) => {
@@ -38,5 +41,5 @@ export function useHwpxPreviewWorkspace(sourceFileUrl?: string) {
     return () => abortController.abort();
   }, [sourceFileUrl]);
 
-  return { workspace, state, error };
+  return { workspace, state, error, reportName };
 }
