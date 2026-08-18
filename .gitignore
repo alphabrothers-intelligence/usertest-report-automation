@@ -49,3 +49,9 @@ next-env.d.ts
 
 # graphify 스킬 산출물(지식그래프 캐시·시각화) — 실행할 때마다 로컬에 생성되는 임시 파일
 /graphify-out/
+
+# 로컬 PDF 시각 검증 산출물
+/tmp/pdfs/
+
+# HWPX 동적 그래프 검증 산출물
+/output/hwpx-preview-poc/*동적그래프검증*
