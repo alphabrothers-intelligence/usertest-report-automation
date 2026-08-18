@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { loadWallaFromUrl } from "@/lib/walla/loadFromUrl";
-import { extractFeatureNames, WALLA_COLUMN_COUNT } from "@/lib/walla/schema";
+import { extractFeatureNames } from "@/lib/walla/schema";
 import { filterWallaResponseRows } from "@/lib/walla/normalize";
 
 // app/api/chat/route.ts의 validateInput 도구 본문을 그대로 옮긴 것 — LLM 없이 raw data
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     fileName: fileName ?? null,
     valid: loaded.validation.valid,
-    expectedColumnCount: WALLA_COLUMN_COUNT,
+    expectedColumnCount: loaded.validation.expectedColumnCount,
     actualColumnCount: loaded.validation.columnCount,
     respondentCount: filterWallaResponseRows(loaded.parsed.dataRows).length,
     featureNames,

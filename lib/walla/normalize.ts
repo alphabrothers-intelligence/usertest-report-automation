@@ -1,5 +1,5 @@
-// WALLA 표준 59컬럼 데이터 행을 내부 스키마(PRD 4장)로 정규화한다.
-import { extractFeatureNames, extractUxQualityNames } from "./schema";
+// WALLA 표준 데이터 행을 내부 스키마(PRD 4장)로 정규화한다.
+import { detectFeatureBlockLayout, extractFeatureNames, extractUxQualityNames } from "./schema";
 
 function asNumber(value: unknown): number | null {
   if (typeof value === "number") return value;
@@ -25,9 +25,9 @@ export function filterWallaResponseRows(dataRows: unknown[][]): unknown[][] {
 }
 
 /**
- * 18~23번(순위 응답) 컬럼의 항목명은 6/8/10/12/14/16번(기능 만족도) 헤더에서 추출한 짧은
- * 이름과 문구가 다르다(실측: "실시간 거점형" ↔ "실시간 위치 기반 거점형 콘텐츠"). 순위 응답값의
- * 모든 어절이 후보 기능명에 부분 문자열로 포함되면 같은 기능으로 정렬한다.
+ * 순위 응답 컬럼의 항목명은 기능 만족도 헤더에서 추출한 짧은 이름과 문구가 다르다(실측:
+ * "실시간 거점형" ↔ "실시간 위치 기반 거점형 콘텐츠"). 순위 응답값의 모든 어절이 후보
+ * 기능명에 부분 문자열로 포함되면 같은 기능으로 정렬한다.
  */
 function alignToFeatureName(raw: string, featureNames: string[]): string {
   if (featureNames.includes(raw)) return raw;
@@ -44,8 +44,8 @@ function alignToFeatureName(raw: string, featureNames: string[]): string {
 }
 
 /**
- * 6/8/10/12/14/16번 헤더에서 뽑은 기능명은 짧게 축약돼 있다(예: "실시간 거점형"). 그런데
- * 실제 발행 보고서는 18~23번(순위 응답) 컬럼에 응답자가 실제로 본 더 긴 설명형 문구
+ * 기능 만족도 헤더에서 뽑은 기능명은 짧게 축약돼 있다(예: "실시간 거점형"). 그런데
+ * 실제 발행 보고서는 순위 응답 컬럼에 응답자가 실제로 본 더 긴 설명형 문구
  * ("실시간 위치 기반 거점형 콘텐츠")를 차트·표 라벨로 쓴다(2026-07-21 실측 대조 — 사용자가
  * "항목 풀네임을 써달라"고 요청). 특정 기능 하나만 하드코딩해 늘리면 다른 프로젝트 raw
  * data에 안 맞으므로, 일반화된 규칙으로 푼다: 순위 응답 컬럼 전체를 훑어 각 짧은 기능명에
@@ -54,10 +54,10 @@ function alignToFeatureName(raw: string, featureNames: string[]): string {
  * rank 등 하위 전체에서 쓰이는 유일한 기준명이 된다 — golden 체크 기대값도 이 긴 이름
  * 기준으로 맞춰야 한다.
  */
-function resolveFeatureDisplayNames(shortNames: string[], dataRows: unknown[][]): string[] {
+function resolveFeatureDisplayNames(shortNames: string[], dataRows: unknown[][], rankCols: number[]): string[] {
   const longest = new Map<string, string>(shortNames.map((n) => [n, n]));
   for (const row of dataRows) {
-    for (const col of [18, 19, 20, 21, 22, 23]) {
+    for (const col of rankCols) {
       const raw = asString(row[col]);
       if (!raw) continue;
       const matched = alignToFeatureName(raw, shortNames);
@@ -124,13 +124,14 @@ export function normalizeWallaRows(
   dataRows: unknown[][],
 ): WallaRecord[] {
   const responseRows = filterWallaResponseRows(dataRows);
+  const layout = detectFeatureBlockLayout(headerRow);
   const shortFeatureNames = extractFeatureNames(headerRow);
-  const featureNames = resolveFeatureDisplayNames(shortFeatureNames, responseRows);
-  const featureCols = [6, 8, 10, 12, 14, 16];
+  const featureNames = resolveFeatureDisplayNames(shortFeatureNames, responseRows, layout.rankCols);
   const uxNames = extractUxQualityNames(headerRow);
+  const t = layout.tailStart;
 
   return responseRows.map((row, i): WallaRecord => {
-    const hasExperienceRaw = asString(row[24]);
+    const hasExperienceRaw = asString(row[t]);
     return {
       respondentId: i + 1,
       segment: asString(row[0]),
@@ -139,11 +140,11 @@ export function normalizeWallaRows(
       os: asString(row[3]),
       avgWalkTime: asString(row[4]),
       walkFrequencyPerWeek: asString(row[5]),
-      featureSatisfaction: featureCols.map((col, idx) => ({
+      featureSatisfaction: layout.featureCols.map((col, idx) => ({
         name: featureNames[idx],
         ...scoreReason(row, col, col + 1),
       })),
-      rank: [18, 19, 20, 21, 22, 23].map((col) => {
+      rank: layout.rankCols.map((col) => {
         const raw = asString(row[col]);
         if (raw === null) return "";
         const shortMatch = alignToFeatureName(raw, shortFeatureNames);
@@ -153,38 +154,24 @@ export function normalizeWallaRows(
       priorService: {
         hasExperience:
           hasExperienceRaw === null ? null : /있|네|예/.test(hasExperienceRaw),
-        usedServices: asString(row[25]),
-        satisfaction: asNumber(row[26]),
-        reason: asString(row[27]),
+        usedServices: asString(row[t + 1]),
+        satisfaction: asNumber(row[t + 2]),
+        reason: asString(row[t + 3]),
       },
-      keyFactor: { choice: asString(row[28]), reason: asString(row[29]) },
+      keyFactor: { choice: asString(row[t + 4]), reason: asString(row[t + 5]) },
       values: {
-        functional: scoreReason(row, 30, 31),
-        aesthetic: scoreReason(row, 32, 33),
-        economic: scoreReason(row, 34, 35),
-        social: scoreReason(row, 36, 37),
+        functional: scoreReason(row, t + 6, t + 7),
+        aesthetic: scoreReason(row, t + 8, t + 9),
+        economic: scoreReason(row, t + 10, t + 11),
+        social: scoreReason(row, t + 12, t + 13),
       },
-      uxQuality: [
-        {
-          usability: { name: uxNames.usability[0], ...scoreReason(row, 38, 39) },
-          fun: { name: uxNames.fun[0], ...scoreReason(row, 40, 41) },
-        },
-        {
-          usability: { name: uxNames.usability[1], ...scoreReason(row, 42, 43) },
-          fun: { name: uxNames.fun[1], ...scoreReason(row, 44, 45) },
-        },
-        {
-          usability: { name: uxNames.usability[2], ...scoreReason(row, 46, 47) },
-          fun: { name: uxNames.fun[2], ...scoreReason(row, 48, 49) },
-        },
-        {
-          usability: { name: uxNames.usability[3], ...scoreReason(row, 50, 51) },
-          fun: { name: uxNames.fun[3], ...scoreReason(row, 52, 53) },
-        },
-      ],
-      overallSatisfaction: scoreReason(row, 54, 55),
-      nps: scoreReason(row, 56, 57),
-      improvementIdea: asString(row[58]),
+      uxQuality: [0, 1, 2, 3].map((idx) => ({
+        usability: { name: uxNames.usability[idx], ...scoreReason(row, t + 14 + idx * 4, t + 15 + idx * 4) },
+        fun: { name: uxNames.fun[idx], ...scoreReason(row, t + 16 + idx * 4, t + 17 + idx * 4) },
+      })),
+      overallSatisfaction: scoreReason(row, t + 30, t + 31),
+      nps: scoreReason(row, t + 32, t + 33),
+      improvementIdea: asString(row[t + 34]),
     };
   });
 }
