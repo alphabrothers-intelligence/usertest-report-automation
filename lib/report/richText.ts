@@ -19,6 +19,9 @@ export type RichTextBlock = {
   runs: RichTextRun[];
   /** 원문에 있던 빈 줄. 화면·클립보드 모두에서 문단 간격으로 보존한다. */
   empty?: boolean;
+  /** 원문이 `[제목]` 형태였던 heading. 대괄호는 판별용 마커로 벗겨내지만 원본 보고서에서는
+   * 실제로 보이는 글자라, 렌더러가 다시 붙일 수 있게 표시해 둔다(`# 제목`과 구분). */
+  bracketed?: boolean;
 };
 
 export function escapeHtml(value: string): string {
@@ -82,7 +85,7 @@ export function parseRichText(value: string): RichTextBlock[] {
         const marker = contentLine.match(/^(#{1,3})\s+/)?.[1] ?? "#";
         return { kind: "heading" as const, level: marker.length as 1 | 2 | 3, runs: runs(contentLine.replace(/^#{1,3}\s+/, "")) };
       }
-      if (/^\[[^\]]+\]$/.test(contentLine)) return { kind: "heading" as const, level: 2, runs: runs(contentLine.slice(1, -1)) };
+      if (/^\[[^\]]+\]$/.test(contentLine)) return { kind: "heading" as const, level: 2, bracketed: true, runs: runs(contentLine.slice(1, -1)) };
       if (/^(→|▶)\s*/.test(contentLine)) return { kind: "arrow" as const, runs: runs(contentLine.replace(/^(→|▶)\s*/, "")) };
       if (/^[-•]\s+/.test(contentLine)) return { kind: "bullet" as const, runs: runs(contentLine.replace(/^[-•]\s+/, "")) };
       return { kind: "paragraph" as const, runs: runs(contentLine) };
@@ -93,9 +96,25 @@ export function runsToPlainText(runs: RichTextRun[]): string {
   return runs.map((run) => run.text).join("");
 }
 
+/** 개조식 기호(•/→)를 문단 왼쪽에 걸고 두 번째 줄부터 글자 위치에 맞춰 들여쓰는 내어쓰기. */
+const HANGING_INDENT = "padding-left:14pt;text-indent:-14pt";
+
+/**
+ * 웹 문서용 HTML. **원본 보고서(리바랩스 40~42쪽) 형식에 맞춘 인라인 스타일**로 낸다
+ * (2026-08-18 대조): `[제목]`은 대괄호를 유지한 굵은 줄, `#/##` 제목은 한 단계 큰 굵은 줄,
+ * 불릿은 실제 "•" + 내어쓰기, 불릿 아래 설명 줄은 기호 뒤 글자에 맞춰 들여쓰기, "→" 결과문은
+ * 굵게·기울임을 강제하지 않고 모델이 지정한 강조(굵게/밑줄)만 남긴다.
+ * `<ul>`/`<h2>` 같은 태그 대신 인라인 스타일 문단을 쓰는 이유는 Tailwind preflight가 목록
+ * 기호·제목 크기를 초기화해 화면에서 개조식이 사라지기 때문이다.
+ */
 export function richTextToHtml(value: string): string {
-  return parseRichText(value).map((block) => {
-    if (block.empty) return `<p><br></p>`;
+  const blocks = parseRichText(value);
+  let indentFollowing = false; // 직전 줄이 불릿/화살표였는지 — 설명 줄 들여쓰기용
+  return blocks.map((block) => {
+    if (block.empty) {
+      indentFollowing = false;
+      return `<p><br></p>`;
+    }
     const content = block.runs.map((run) => {
       const text = escapeHtml(run.text);
       if (run.bold && run.underline && run.italic) return `<strong><u><em>${text}</em></u></strong>`;
@@ -106,12 +125,21 @@ export function richTextToHtml(value: string): string {
       if (run.italic) return `<em>${text}</em>`;
       return text;
     }).join("");
-    if (block.kind === "heading") return `<h${block.level ?? 2}>${content}</h${block.level ?? 2}>`;
-    // 화살표 제언은 원본 보고서 관례대로 굵게+기울임. 편집기 sanitize가 인라인 style을 지우므로
-    // 의미 태그(<strong><em>)로 강조해 화면 표시·복사·붙여넣기에서 모두 유지되게 한다.
-    if (block.kind === "arrow") return `<p data-report-kind="arrow"><strong><em>→ ${content}</em></strong></p>`;
-    if (block.kind === "bullet") return `<ul><li>${content}</li></ul>`;
-    return `<p>${content}</p>`;
+    if (block.kind === "heading") {
+      indentFollowing = false;
+      const size = block.bracketed ? "" : "font-size:1.08em;";
+      const text = block.bracketed ? `[${content}]` : content;
+      return `<p style="margin:9pt 0 4pt;${size}font-weight:700"><strong>${text}</strong></p>`;
+    }
+    if (block.kind === "arrow") {
+      indentFollowing = true;
+      return `<p data-report-kind="arrow" style="margin:5pt 0 4pt;${HANGING_INDENT}">→ ${content}</p>`;
+    }
+    if (block.kind === "bullet") {
+      indentFollowing = true;
+      return `<p data-report-kind="bullet" style="margin:0 0 2pt;${HANGING_INDENT}">• ${content}</p>`;
+    }
+    return `<p style="margin:0 0 4pt${indentFollowing ? ";padding-left:14pt" : ""}">${content}</p>`;
   }).join("");
 }
 
@@ -167,11 +195,14 @@ export function richTextToClipboardHtml(value: string): string {
       }
       const inner = block.runs.map(runToInlineHtml).join("");
       if (block.kind === "heading") {
-        const size = block.level === 1 ? "16pt" : block.level === 2 ? "13pt" : "12pt";
-        return `<p style="${HWP_CLIPBOARD_FONT_STYLE};margin:12pt 0 6pt;font-weight:700;font-size:${size};line-height:1.4">${withHwpClipboardFont(inner)}</p>`;
+        // `[제목]`은 원본에서 대괄호까지 보이는 글자다(richTextToHtml과 같은 규칙).
+        const text = block.bracketed ? `[${inner}]` : inner;
+        const size = block.bracketed ? "11pt" : block.level === 1 ? "16pt" : block.level === 2 ? "13pt" : "12pt";
+        return `<p style="${HWP_CLIPBOARD_FONT_STYLE};margin:12pt 0 6pt;font-weight:700;font-size:${size};line-height:1.4">${withHwpClipboardFont(text)}</p>`;
       }
       if (block.kind === "arrow") {
-        return `<p style="${HWP_CLIPBOARD_FONT_STYLE};margin:0 0 5pt;font-weight:700;font-style:italic;line-height:1.5">${withHwpClipboardFont(`→ ${inner}`)}</p>`;
+        // 굵게·기울임을 강제하지 않는다(2026-08-18 원본 대조) — 강조는 모델이 지정한 구간만.
+        return `<p style="${HWP_CLIPBOARD_FONT_STYLE};margin:0 0 5pt;padding-left:15pt;text-indent:-15pt;line-height:1.5">${withHwpClipboardFont(`→ ${inner}`)}</p>`;
       }
       if (block.kind === "bullet") {
         return `<p style="${HWP_CLIPBOARD_FONT_STYLE};margin:0 0 5pt;padding-left:15pt;text-indent:-15pt;line-height:1.5">${withHwpClipboardFont(`• ${inner}`)}</p>`;

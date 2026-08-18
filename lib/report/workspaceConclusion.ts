@@ -2,7 +2,7 @@ import type { QuestionWithApprovedCategories, RecommendationRow } from "@/lib/db
 import { splitOverallDirection } from "@/lib/pdf/sectionsQualitative";
 import type { QuantStats } from "@/lib/quant/compute";
 import { richTextToHtml } from "@/lib/report/richText";
-import { headingBlock, quadrantBlock, richStaticBlock, type ReportBlock } from "@/lib/report/sections";
+import { headingBlock, quadrantBlock, richStaticBlock, rowGroupBlock, type ReportBlock } from "@/lib/report/sections";
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -74,7 +74,10 @@ function resultSummaryPart(resultSummary: string | null | undefined, aliases: st
   return part ? richTextToHtml(part) : fallback;
 }
 
-function conclusionEvidenceTableHtml(stats: QuantStats, resultSummary: string | null | undefined): string {
+/** "항목 | 주요 의견" 표에서 기능별 고객 경험 평가를 제외한 나머지 행들. 각 행의 오른쪽 칸
+ * 내용을 HTML로 만들어 돌려주고, 표 구조 자체는 row-group 블록이 그린다(행별로 표를 따로
+ * 만들면 표가 끊겨 보이기 때문 — 2026-08-18). */
+function conclusionEvidenceRows(stats: QuantStats, resultSummary: string | null | undefined): { id: string; label: string; html: string }[] {
   const values = [
     ["기능적 가치", stats.fourValues.functional.mean],
     ["심미적 가치", stats.fourValues.aesthetic.mean],
@@ -85,23 +88,20 @@ function conclusionEvidenceTableHtml(stats: QuantStats, resultSummary: string | 
   const usability = stats.uxQuality.usability;
   const fun = stats.uxQuality.fun;
   const lowestUx = [...usability, ...fun].sort((a, b) => a.mean - b.mean)[0];
-  const cell = "border:0.75pt solid #d4d4d8;padding:10pt 12pt;vertical-align:top";
-  const label = "border:0.75pt solid #d4d4d8;padding:10pt 7pt;vertical-align:middle;text-align:center;background-color:#dfe7f6;font-weight:700;width:18%";
   const coreFallback = `<p style="margin:0">상위 선택 항목은 ${topFactors.map((item) => `<strong>${escapeHtml(item.label)}(${item.percentage}%)</strong>`).join(", ")}로 집계되었습니다.</p>`;
   const valuesFallback = `<p style="margin:0">${values.map(([labelText, value]) => `<strong>${labelText}</strong> ${value.toFixed(2)}점`).join(", ")}으로 집계되었습니다. 항목별 수치는 원자료 기반 정량 결과입니다.</p>`;
   const uxFallback = `<p style="margin:0">실용성 평균은 ${(usability.reduce((sum, item) => sum + item.mean, 0) / Math.max(usability.length, 1)).toFixed(2)}점, 즐거움 평균은 ${(fun.reduce((sum, item) => sum + item.mean, 0) / Math.max(fun.length, 1)).toFixed(2)}점입니다.${lowestUx ? ` 가장 낮은 항목은 <strong>${escapeHtml(lowestUx.name)}(${lowestUx.mean.toFixed(2)}점)</strong>입니다.` : ""}</p>`;
   const npsFallback = `<p style="margin:0">전반적 만족도는 <strong>${stats.overallSatisfaction.mean.toFixed(2)}점</strong>, 평균 구매 의향은 <strong>${stats.nps.rawMean.toFixed(2)}점</strong>, NPS 지수는 <strong>${stats.nps.npsScore}</strong>입니다.</p>`;
   const crossFallback = `<p style="margin:0">연령·성별별 차이는 교차 분석의 정량 차트와 표를 함께 참조합니다.</p>`;
+  const font = `font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.5pt;line-height:1.65`;
+  const wrap = (html: string) => `<div style="${font}">${html}</div>`;
   return [
-    `<table style="border-collapse:collapse;width:100%;margin:0 0 12pt;table-layout:fixed;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.5pt;line-height:1.65">`,
-    `<thead><tr><th style="${label};background-color:#d0dcf3">항목</th><th style="${cell};background-color:#d0dcf3;text-align:center;font-weight:700">주요 의견</th></tr></thead><tbody>`,
-    `<tr><td style="${label}">핵심구매요소</td><td style="${cell}">${resultSummaryPart(resultSummary, ["핵심구매요소"], coreFallback)}</td></tr>`,
-    `<tr><td style="${label}">4대 가치 만족도</td><td style="${cell}">${resultSummaryPart(resultSummary, ["4대 가치", "4대가치"], valuesFallback)}</td></tr>`,
-    `<tr><td style="${label}">사용자 경험<br>품질 평가</td><td style="${cell}">${resultSummaryPart(resultSummary, ["사용자 경험 품질", "UX"], uxFallback)}</td></tr>`,
-    `<tr><td style="${label}">교차 분석</td><td style="${cell}">${resultSummaryPart(resultSummary, ["교차 분석"], crossFallback)}</td></tr>`,
-    `<tr><td style="${label}">종합 만족도<br>및 NPS 지수</td><td style="${cell}">${resultSummaryPart(resultSummary, ["종합 만족도", "NPS"], npsFallback)}</td></tr>`,
-    `</tbody></table>`,
-  ].join("");
+    { id: "conclusion-row-core-factor", label: "핵심구매요소", html: wrap(resultSummaryPart(resultSummary, ["핵심구매요소"], coreFallback)) },
+    { id: "conclusion-row-four-values", label: "4대 가치 만족도", html: wrap(resultSummaryPart(resultSummary, ["4대 가치", "4대가치"], valuesFallback)) },
+    { id: "conclusion-row-ux-quality", label: "사용자 경험 품질 평가", html: wrap(resultSummaryPart(resultSummary, ["사용자 경험 품질", "UX"], uxFallback)) },
+    { id: "conclusion-row-cross-analysis", label: "교차 분석", html: wrap(resultSummaryPart(resultSummary, ["교차 분석"], crossFallback)) },
+    { id: "conclusion-row-nps", label: "종합 만족도 및 NPS 지수", html: wrap(resultSummaryPart(resultSummary, ["종합 만족도", "NPS"], npsFallback)) },
+  ];
 }
 
 function conclusionStrategyTableHtml(stats: QuantStats, recommendations: RecommendationRow[]): string {
@@ -152,23 +152,40 @@ export function buildConclusionSection(
   const rankedImportance = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
   return [
     headingBlock({ id: "conclusion-result-heading", variant: "numbered", number: "1", text: "사용성테스트 결과 요약" }),
-    richStaticBlock({ id: "conclusion-summary-table-header", html: `<table style="border-collapse:collapse;width:100%;margin:0"><thead><tr><th style="width:18%;border:0.75pt solid #d4d4d8;background-color:#d0dcf3;padding:6pt;text-align:center;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif">항목</th><th style="border:0.75pt solid #d4d4d8;background-color:#d0dcf3;padding:6pt;text-align:center;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif">주요 의견</th></tr></thead></table>` }),
-    quadrantBlock({
-      id: "conclusion-importance-satisfaction-quadrant",
-      title: "기능별 상대 중요도-만족도 그래프",
-      items: rankedImportance.map((item) => ({
-        id: `conclusion-${slug(item.name)}`,
-        name: item.name,
-        importance: item.score,
-        satisfaction: stats.featureSatisfaction.find((feature) => feature.name === item.name)?.mean ?? 0,
-      })),
+    // 원본처럼 머리행부터 마지막 행까지 이어지는 표 하나. 기능별 고객 경험 평가 행만 차트를
+    // 품기 때문에 정적 HTML 표가 아니라 row-group 블록으로 그린다.
+    rowGroupBlock({
+      id: "conclusion-summary-table",
+      headers: ["항목", "주요 의견"],
+      rows: [
+        {
+          id: "conclusion-row-feature-experience",
+          label: "기능별 고객 경험 평가",
+          blocks: [
+            quadrantBlock({
+              id: "conclusion-importance-satisfaction-quadrant",
+              title: "기능별 상대 중요도-만족도 그래프",
+              items: rankedImportance.map((item) => ({
+                id: `conclusion-${slug(item.name)}`,
+                name: item.name,
+                importance: item.score,
+                satisfaction: stats.featureSatisfaction.find((feature) => feature.name === item.name)?.mean ?? 0,
+              })),
+            }),
+            richStaticBlock({ id: "conclusion-feature-summary-table", html: conclusionFeatureTableHtml(stats, qualitative, rankedImportance) }),
+            richStaticBlock({
+              id: "conclusion-feature-summary-bullets",
+              html: `<div style="font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.5pt;line-height:1.65">${resultSummaryPart(resultSummary, ["기능별 고객 경험 평가"], "")}</div>`,
+            }),
+          ],
+        },
+        ...conclusionEvidenceRows(stats, resultSummary).map((row) => ({
+          id: row.id,
+          label: row.label,
+          blocks: [richStaticBlock({ id: `${row.id}-body`, html: row.html })],
+        })),
+      ],
     }),
-    richStaticBlock({ id: "conclusion-feature-summary-table", html: conclusionFeatureTableHtml(stats, qualitative, rankedImportance) }),
-    richStaticBlock({
-      id: "conclusion-feature-summary-bullets",
-      html: `<div style="padding:0 0 10pt 18%;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.5pt;line-height:1.65">${resultSummaryPart(resultSummary, ["기능별 고객 경험 평가"], "")}</div>`,
-    }),
-    richStaticBlock({ id: "conclusion-evidence-table", html: conclusionEvidenceTableHtml(stats, resultSummary) }),
     headingBlock({ id: "conclusion-strategy-heading", variant: "numbered", number: "2", text: "개선 전략 제언" }),
     richStaticBlock({ id: "conclusion-strategy-table", html: conclusionStrategyTableHtml(stats, recommendations) }),
     headingBlock({ id: "conclusion-feature-customer-heading", variant: "numbered", number: "3", text: "기능별 고객 제언 종합" }),

@@ -71,7 +71,7 @@ export function RichText({ value, style = {} }: { value: string; style?: Style }
           // level 1(# 헤딩)은 원래 대괄호 문법이 아니었으므로 건드리지 않는다.
           return (
             <Text key={i} style={[styles.body, { fontWeight: "bold", marginTop: 4, marginBottom: 2 }, style]}>
-              {block.level === 2 ? <>[{content}]</> : content}
+              {block.bracketed ? <>[{content}]</> : content}
             </Text>
           );
         }

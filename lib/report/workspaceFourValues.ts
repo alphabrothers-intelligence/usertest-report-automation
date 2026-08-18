@@ -33,7 +33,8 @@ function buildFourValuesAnalysisText(
   questionsByKeyPrefix: FourValuesServices["questionsByKeyPrefix"],
 ): string {
   const ranked = [...rows].sort((a, b) => b.mean - a.mean);
-  const parts: string[] = [`<p style="font-weight:700;margin:6pt 0 4pt">[4대 가치 만족도 종합 해석]</p>`];
+  // 패널 제목 배너가 이미 "4대 가치 만족도 종합 해석"이므로 본문 라벨은 중복이다(2026-08-18).
+  const parts: string[] = [];
   parts.push(`<p style="margin:0 0 3pt">• '${escapeHtml(ranked[0].label)}'의 만족도가 ${ranked[0].mean.toFixed(2)}점으로 가장 높고, '${escapeHtml(ranked[ranked.length - 1].label)}'가 ${ranked[ranked.length - 1].mean.toFixed(2)}점으로 가장 낮음.</p>`);
   const valuesQual = questionsByKeyPrefix(qualitative, "values:");
   for (const row of ranked) {

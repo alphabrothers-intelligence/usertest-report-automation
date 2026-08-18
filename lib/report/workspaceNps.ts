@@ -1,6 +1,7 @@
 import type { QuestionWithApprovedCategories } from "@/lib/db/reports";
 import type { QuantStats } from "@/lib/quant/compute";
 import { satisfactionHistogramSvg } from "@/lib/report/chartSvg";
+import { richTextToInlineHtml } from "@/lib/report/richText";
 import {
   headingBlock,
   npsBlock,
@@ -15,10 +16,6 @@ export type NpsSectionServices = {
   findSurveyQuestion: (stats: QuantStats, stage: string, occurrenceIndex: number) => { qno: number; question: string } | null;
   qualitativeBlock: (id: string, label: string, questions: QuestionWithApprovedCategories[]) => ReportBlock[];
 };
-
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 
 function npsReferenceHtml(stats: QuantStats): string {
   const nps = stats.nps;
@@ -58,7 +55,7 @@ function npsJudgmentHtml(
   if (generatedLines.length === 3) {
     return [
       `<div style="margin:8pt 0 0;font-family:'맑은 고딕','Malgun Gothic',sans-serif;font-size:10.5pt;line-height:1.7">`,
-      ...generatedLines.map((line, index) => `<p style="margin:0 ${index === 2 ? "0" : "0 5pt"};padding-left:14pt;text-indent:-12pt">▶ ${escapeHtml(line.trim())}</p>`),
+      ...generatedLines.map((line, index) => `<p style="margin:0 ${index === 2 ? "0" : "0 5pt"};padding-left:14pt;text-indent:-12pt">▶ ${richTextToInlineHtml(line.trim())}</p>`),
       `</div>`,
     ].join("");
   }
@@ -66,9 +63,9 @@ function npsJudgmentHtml(
   const urgency = nps.npsScore >= 0 ? "추세를 지속적으로 관리할 필요가 있음" : "개선 전략의 수립이 시급하다고 사료됨";
   return [
     `<div style="margin:8pt 0 0;font-family:'맑은 고딕','Malgun Gothic',sans-serif;font-size:10.5pt;line-height:1.7">`,
-    `<p style="margin:0 0 5pt;padding-left:14pt;text-indent:-12pt">▶ 구매의향, 추천의향을 NPS 지수로 환산했을 때, ${nps.npsScore}으로 <u>'${marketability}'</u> 수준으로 판단되어 ${urgency}</p>`,
+    `<p style="margin:0 0 5pt;padding-left:14pt;text-indent:-12pt">▶ 구매의향, 추천의향을 NPS 지수로 환산했을 때, ${nps.npsScore}으로 <strong><u>'${marketability}'</u></strong> 수준으로 판단되어 ${urgency}</p>`,
     `<p style="margin:0 0 5pt;padding-left:14pt;text-indent:-12pt">▶ 구매 고객 대비 중립 고객(${nps.passivePct}%) 비율을 확인할 때, <strong><u>사용자들의 구매 전환을 일으키는 요소를 보완할 필요가 있음</u></strong></p>`,
-    `<p style="margin:0;padding-left:14pt;text-indent:-12pt">▶ 전체 기능에 대한 고도화 및 사용자에게 도출된 불편 사항, 개선 사항을 반영하여 사용자의 만족도를 높이는 방안이 필요함</p>`,
+    `<p style="margin:0;padding-left:14pt;text-indent:-12pt">▶ 전체 기능에 대한 고도화 및 사용자에게 도출된 불편 사항, 개선 사항을 반영하여 <strong><u>사용자의 만족도를 높이는 방안이 필요함</u></strong></p>`,
     `</div>`,
   ].join("");
 }

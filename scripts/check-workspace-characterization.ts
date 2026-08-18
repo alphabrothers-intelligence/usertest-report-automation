@@ -35,9 +35,11 @@ const actual = {
 };
 
 const expected = {
-  workspace: "6e0977f9285b4c0b9e83d334f7844dbb03017ed585a16452d281f1bda40523fa",
+  // 2026-08-18 갱신: Ⅸ장 "항목 | 주요 의견"을 행별 블록에서 표 한 개(row-group)로 합쳤다.
+  // feature(Ⅲ장) 해시는 그대로 — 변경이 Ⅸ장에만 닿았다는 증거.
+  workspace: "819a469cbc4afd3b502bbcd27bf4447af8b89da410b585c513f1f338a98a436e",
   feature: "0089c2c4e8d37f61b24323bc9207f30989fce4650258926b9205b32e9e9be64b",
-  structure: "837ab14e25069351322ffbd2e577ffdf2cae26025a3cc573df980e9e408db4d8",
+  structure: "0842ebdaa4357f8ad6087490a23507a17fb76a0f67d45d108e0788fbc7c6c642",
 };
 
 console.log(JSON.stringify(actual, null, 2));

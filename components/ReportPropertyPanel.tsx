@@ -231,7 +231,7 @@ export function ReportPropertyPanel({ block, onChange }: Props) {
   if (!block) return <div className="rounded-lg bg-[#f7f9fc] p-3 text-sm leading-6 text-zinc-500">본문의 차트, 표 또는 제목을 선택하면 기존 값이 채워진 편집칸이 여기에 표시됩니다.</div>;
   const isEmbeddedChart = block.kind === "rich-static" && /<svg[\s>]/i.test(block.html);
   return <div className="space-y-3">
-    <div><p className="text-xs text-zinc-500">선택한 요소</p><p className="mt-0.5 text-sm font-bold text-zinc-900">{block.kind === "chart" ? "막대 차트" : block.kind === "table" ? "표" : block.kind === "heading" ? "제목" : block.kind === "quadrant" ? "사분면 차트" : block.kind === "radar" ? "방사형 차트" : block.kind === "nps" ? "NPS 차트" : block.kind === "polarity" ? "감정 분석 도넛" : isEmbeddedChart ? "내장 차트" : "보고서 블록"}</p></div>
+    <div><p className="text-xs text-zinc-500">선택한 요소</p><p className="mt-0.5 text-sm font-bold text-zinc-900">{block.kind === "chart" ? "막대 차트" : block.kind === "table" ? "표" : block.kind === "heading" ? "제목" : block.kind === "quadrant" ? "사분면 차트" : block.kind === "radar" ? "방사형 차트" : block.kind === "nps" ? "NPS 차트" : block.kind === "polarity" ? "감정 분석 도넛" : block.kind === "row-group" ? "항목·주요 의견 표" : isEmbeddedChart ? "내장 차트" : "보고서 블록"}</p></div>
     {block.kind === "heading" && <><TextField label="제목 문구" value={block.text} onChange={(text) => onChange({ ...block, text })} />{block.number !== undefined && <TextField label="번호" value={block.number} onChange={(number) => onChange({ ...block, number })} />}</>}
     {block.kind === "text" && <div className="rounded-lg bg-[#f7f9fc] p-3 text-sm leading-6 text-zinc-600">본문 문단을 클릭하면 그 자리에서 서식과 함께 수정할 수 있습니다.</div>}
     {block.kind === "table" && <TableFields block={block} onChange={onChange} />}
@@ -265,5 +265,6 @@ export function ReportPropertyPanel({ block, onChange }: Props) {
       <p className="text-xs leading-5 text-zinc-500">세 비율은 자동 정규화되어 도넛 전체(100%)로 표시됩니다.</p>
     </>}
     {block.kind === "priority-reference" && <><TextField label="도표 제목" value={block.title} onChange={(title) => onChange({ ...block, title })} /><p className="rounded bg-[#f7f9fc] p-3 text-xs leading-5 text-zinc-600">이 도표는 사분면 해석 기준입니다. 기능 좌표는 사분면 차트를 선택해 수정할 수 있습니다.</p></>}
+    {block.kind === "row-group" && <><PanelTitle>행 항목명</PanelTitle>{block.rows.map((row) => <TextField key={row.id} label={row.label || "항목"} value={row.label} onChange={(label) => onChange({ ...block, rows: block.rows.map((item) => item.id === row.id ? { ...item, label } : item) })} />)}<p className="rounded bg-[#f7f9fc] p-3 text-xs leading-5 text-zinc-600">표 안의 차트·표·문단은 본문에서 직접 클릭해 선택하면 각각 편집할 수 있습니다.</p></>}
   </div>;
 }

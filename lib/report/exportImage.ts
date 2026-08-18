@@ -161,6 +161,15 @@ export async function downloadSectionExportsAsZip(container: HTMLElement, zipFil
     index += 1;
     const kind = node.getAttribute("data-report-export");
     const name = (node.getAttribute("data-report-export-name") || `${kind}-${index}`).replace(/[\\/:*?"<>|]/g, "_");
+    // 이미 PNG 파일인 정적 이미지(영역별 참고 지표 등)는 래스터화할 게 없다 — 원본을 그대로 담는다.
+    if (kind === "image") {
+      const source = node.querySelector("img")?.src;
+      if (source) {
+        const response = await fetch(source);
+        zip.file(`${name}.png`, await response.blob());
+      }
+      continue;
+    }
     // data-report-export는 실제 그릴 대상(svg/table)을 감싼 바깥 div에 붙인다 — 안쪽의
     // 진짜 요소를 찾아 각자 맞는 방식으로 래스터화한다(차트=svgToPngBlob, 표=tableToPngBlob).
     const target = kind === "chart" ? node.querySelector("svg") : node.querySelector("table");

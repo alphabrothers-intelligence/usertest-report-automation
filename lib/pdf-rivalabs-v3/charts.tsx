@@ -6,7 +6,7 @@
 import type { ReactNode } from "react";
 import { View, Text, Svg, Polygon, Line, Circle, Rect, Image } from "@react-pdf/renderer";
 import { colors, styles } from "./theme";
-import { renderQuadrantChart, renderPriorityReferenceDiagram } from "@/lib/charts/canvasCharts";
+import { renderQuadrantChart } from "@/lib/charts/canvasCharts";
 
 const TRACK_HEIGHT = 8;
 
@@ -1772,12 +1772,4 @@ export function CanvasQuadrantChart({
       <Image src={chart.buffer} style={{ width: chart.width, height: chart.height }} />
     </View>
   );
-}
-
-/** "영역별 참고 지표" 9칸 우선순위 예시 다이어그램 — 저해상도 JPEG 대신 캔버스로 선명하게
- * 그린다(2026-07-23, "예시 사진이 깨진다"). renderPriorityReferenceDiagram이 사분면과 같은
- * 색·경계 공식을 재사용하므로 본 그래프와 항상 일관되고, 어떤 크기에서도 글자가 선명하다. */
-export function CanvasPriorityReference({ size = 300 }: { size?: number }) {
-  const chart = renderPriorityReferenceDiagram(size, size);
-  return <Image src={chart.buffer} style={{ width: chart.width, height: chart.height }} />;
 }

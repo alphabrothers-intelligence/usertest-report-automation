@@ -1,10 +1,17 @@
 "use client";
 
 /** 원본 보고서의 사분면 뒤 "영역별 참고 지표"를 웹 문서에도 유지한다.
- * 사분면 수치는 별도 차트에서 조정하고, 이 블록은 판정 기준을 명확히 전달하는 용도다. */
+ * 사분면 수치는 별도 차트에서 조정하고, 이 블록은 판정 기준을 명확히 전달하는 용도다.
+ *
+ * **9칸 평가기준 도표는 코드로 그리지 않고 FGI 원본 이미지를 그대로 쓴다**(2026-08-18 사용자
+ * 지시). 예전엔 SVG로 근사해 그렸는데 칸 문구·경계가 원본과 달라 "잘못된 이미지"였다. 원본은
+ * `data/사분면그래프_평가기준.png`이고, data/는 gitignore라 배포에 안 실리므로
+ * `public/images/quadrant-priority-reference.png`로 복사해서 쓴다(fonts.ts와 같은 이유).
+ * PDF 렌더러(lib/pdf/sectionsQuant.tsx의 PRIORITY_REF_PATH)도 같은 파일을 쓴다 — 이 참고
+ * 지표가 필요한 렌더러가 새로 생기면 반드시 이 이미지를 쓸 것(코드로 다시 그리지 말 것). */
 import type { ReportPriorityReferenceBlock } from "@/lib/report/sections";
-import { useRef } from "react";
-import { downloadSvgAsPng } from "@/lib/report/exportImage";
+
+export const PRIORITY_REFERENCE_IMAGE = "/images/quadrant-priority-reference.png";
 
 const levels = [
   ["최상", "긴급 개선", "#f9c9a8"],
@@ -24,24 +31,16 @@ const notes = [
 ] as const;
 
 export function PriorityReferenceDiagram({ block }: { block: ReportPriorityReferenceBlock }) {
-  const svgRef = useRef<SVGSVGElement>(null);
   return (
     <section className="mb-6">
-      <div className="mb-2 flex justify-end" data-copy-ignore><button type="button" onClick={() => svgRef.current && void downloadSvgAsPng(svgRef.current, `${block.title}.png`)} className="rounded border border-[#315c9c] px-2 py-1 text-xs font-semibold text-[#315c9c] hover:bg-[#edf3fc]">참고 지표 PNG 다운로드</button></div>
-      <div data-report-export="chart" data-report-export-name={block.title} className="border border-[#d4d4d8] bg-white p-4">
+      <div className="mb-2 flex justify-end" data-copy-ignore><a href={PRIORITY_REFERENCE_IMAGE} download={`${block.title}.png`} className="rounded border border-[#315c9c] px-2 py-1 text-xs font-semibold text-[#315c9c] hover:bg-[#edf3fc]">참고 지표 PNG 다운로드</a></div>
+      <div data-report-export="image" data-report-export-name={block.title} className="border border-[#d4d4d8] bg-white p-4">
         <h4 className="-mx-4 -mt-4 mb-4 border-b border-[#d4d4d8] bg-[#ececec] py-1.5 text-center text-sm font-bold text-[#111827]">{block.title}</h4>
         <div className="grid gap-4 md:grid-cols-[minmax(220px,0.9fr)_minmax(270px,1.1fr)]">
           <div className="mx-auto w-full max-w-[270px]">
-            <svg ref={svgRef} viewBox="0 0 270 288" className="block w-full" aria-label={block.title}>
-              <rect width="270" height="288" fill="#fff" />
-              {["#aebfe5", "#dbe5f5", "#dbe5f5", "#dbe5f5", "#ffffff", "#fde9dd", "#ffffff", "#fde9dd", "#f9c9a8"].map((color, index) => {
-                const col = index % 3, row = Math.floor(index / 3); const label = index === 0 ? "개선 필요성 적음" : index === 2 ? "개선 필요성 낮음" : index === 5 ? "중요 개선" : index === 8 ? "긴급 개선" : "";
-                return <g key={index}><rect x={18 + col * 76} y={10 + row * 76} width="76" height="76" fill={color} stroke="#64748b" /><text x={56 + col * 76} y={49 + row * 76} textAnchor="middle" fontSize="8" fontWeight="700" fill="#334155">{label}</text></g>;
-              })}
-              <rect x="18" y="10" width="228" height="228" fill="none" stroke="#111827" strokeWidth="1.5" />
-              <text x="132" y="262" textAnchor="middle" fontSize="12" fontWeight="700" fill="#111827">상대 중요도</text>
-              <text x="10" y="124" textAnchor="middle" fontSize="12" fontWeight="700" fill="#111827" transform="rotate(-90 10 124)">만족도</text>
-            </svg>
+            {/* eslint-disable-next-line @next/next/no-img-element -- next/image는 최적화 프록시를
+                거쳐 URL이 바뀌는데, 이 요소는 섹션 ZIP 내보내기가 src를 그대로 fetch해 담는다. */}
+            <img src={PRIORITY_REFERENCE_IMAGE} alt={block.title} className="block w-full" />
           </div>
           <div>
             <div className="border border-[#a1a1aa] text-xs">

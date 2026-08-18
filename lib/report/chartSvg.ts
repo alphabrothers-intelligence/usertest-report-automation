@@ -108,13 +108,18 @@ export function satisfactionHistogramSvg(distribution: number[], options: Histog
   const yLabel = options.yLabel ?? "응답자 수";
   const barColor = options.barColor ?? "#2ed6a4";
   const peakColor = options.peakColor ?? "#078c44";
-  // 최댓값=peakColor(가장 진함), 그 다음 유니크값=barColor, 그 다음=더 옅게, 나머지=회색.
+  // 최댓값=peakColor(가장 진함), 나머지 유니크값은 barColor→회색으로 순위에 비례해 고르게
+  // 분배한다(2026-08-18 — 예전엔 상위 3개만 단계별 색을 받고 나머지 전부가 같은 회색으로
+  // 뭉쳐 "중간값이 배제된다"는 지적이 있었다).
   const rankedValues = [...new Set(values.filter((v) => v > 0))].sort((a, b) => b - a);
-  const emphasisColors = [peakColor, barColor, mixHex(barColor, "#ffffff", 0.4), "#c9cfd3"];
+  const grayColor = "#c9cfd3";
   const colorFor = (count: number) => {
     if (count <= 0) return barColor;
     const rank = rankedValues.indexOf(count);
-    return emphasisColors[Math.min(rank, emphasisColors.length - 1)];
+    if (rank === 0) return peakColor;
+    const lastRank = rankedValues.length - 1;
+    const t = lastRank <= 1 ? 0 : (rank - 1) / (lastRank - 1);
+    return mixHex(barColor, grayColor, t);
   };
   const grid: string[] = [];
   for (let index = 0; index <= tickCount; index += 1) {

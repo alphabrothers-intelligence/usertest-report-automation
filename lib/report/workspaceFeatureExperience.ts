@@ -89,7 +89,8 @@ function buildFeatureAnalysisText(
     { title: "차우선 개발 기능", items: items.filter((item) => item.score === 0) },
     { title: "비우선 개발 기능", items: items.filter((item) => item.score <= -1) },
   ];
-  const parts: string[] = [`<p style="font-weight:700;margin:6pt 0 4pt">[종합 해석]</p>`];
+  // 패널 제목 배너가 이미 "… 종합 해석"이므로 본문에 라벨을 또 넣지 않는다(2026-08-18).
+  const parts: string[] = [];
   for (const line of summaryLines) parts.push(`<p style="margin:0 0 3pt">${escapeHtml(line)}</p>`);
   for (const group of groups) {
     if (group.items.length === 0) continue;
