@@ -190,13 +190,26 @@ function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions
   let qi = 0;
   const border = "1px solid #d4d4d8";
   const panelHead = (title: string) => `<td style="width:50%;vertical-align:top;border:${border};padding:0"><p style="margin:0;background-color:#dfe6f7;color:#315c9c;font-weight:700;text-align:center;padding:5pt">${escapeHtml(title)}</p><div style="padding:6pt">`;
+
+  // **이 페이지의 주인은 정량(기능)이고 정성은 있으면 얹는다**(2026-08-25 원본 재대조로 수정).
+  // 예전에는 정성 문항을 순회해서 `categories.length === 0`이면 문항을 통째로 건너뛰었는데,
+  // 원본 8쪽 상단 절반(만족도 평균·표준편차 배너 + 만족도 분포도)은 raw data만으로 그려지는
+  // 정량 블록이다. 정성 분석 전이거나 한 문항이 실패했을 때 그 문항 페이지가 통째로
+  // 사라져(= 원본에 있는 쪽이 없어져) 보고서 구조 자체가 달라지던 문제를 고친다 —
+  // 정성 실패가 정량 결과까지 못 내보내게 만들면 안 된다는 원칙(PRD 11장 15번과 같은 방향).
+  const byFeature = new Map<string, QuestionWithApprovedCategories>();
   for (const q of questions) {
     if (q.categories.length === 0) continue;
+    const matched = findFeatureStat(stats, q);
+    if (matched && !byFeature.has(matched.name)) byFeature.set(matched.name, q);
+  }
+
+  for (const feature of stats.featureSatisfaction) {
     qi += 1;
-    const feature = findFeatureStat(stats, q);
-    const survey = feature ? findFeatureSurveyQuestion(stats, feature.name) : null;
+    const q = byFeature.get(feature.name) ?? null;
+    const survey = findFeatureSurveyQuestion(stats, feature.name);
     const counts: Record<string, number> = { positive: 0, negative: 0, neutral: 0 };
-    for (const c of q.categories) if (c.polarity) counts[c.polarity] += c.clause_count;
+    if (q) for (const c of q.categories) if (c.polarity) counts[c.polarity] += c.clause_count;
 
     // (1) Q번호 질문 헤딩(시안 밑줄). 원본은 "Q7. '펫 성장 시스템' 기능의 만족도는 몇 점입니까?"
     // 형식의 완전한 문장이다 — raw data 헤더는 짧은 라벨("… 기능 만족도")이라, Q번호는 설문
@@ -205,18 +218,17 @@ function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions
       id: `${idPrefix}-q${qi}-heading`,
       variant: "question",
       number: survey ? `Q${survey.qno}` : undefined,
-      text: `'${feature?.name ?? q.label}' 기능의 만족도는 몇 점입니까?`,
+      text: `'${feature.name}' 기능의 만족도는 몇 점입니까?`,
     }));
 
     // (2) 만족도 점수 평균/표준편차 배너 + 만족도 분포도(전체 폭). 원본은 옆에 "주요 키워드
     // 도출" 워드클라우드가 있었지만 사용자 요청으로 제외했다(2026-07-28).
-    const meanSdBanner = feature
-      ? `<table style="border-collapse:collapse;width:100%;margin:0 0 8pt;font-size:13px"><tbody><tr>` +
+    const meanSdBanner =
+      `<table style="border-collapse:collapse;width:100%;margin:0 0 8pt;font-size:13px"><tbody><tr>` +
         `<td style="width:66%;background-color:#dfe6f7;text-align:center;font-weight:700;padding:6pt;border:${border}">만족도 점수 평균 : ${feature.mean.toFixed(2)} / 10</td>` +
         `<td style="background-color:#dfe6f7;text-align:center;font-weight:700;padding:6pt;border:${border}">표준편차 : ${feature.sd.toFixed(2)}</td>` +
-        `</tr></tbody></table>`
-      : "";
-    const histogram = feature?.scoreDistribution ? satisfactionHistogramSvg(feature.scoreDistribution) : `<p style="margin:0;color:#9ca3af;text-align:center">분포 데이터 없음</p>`;
+        `</tr></tbody></table>`;
+    const histogram = feature.scoreDistribution ? satisfactionHistogramSvg(feature.scoreDistribution) : `<p style="margin:0;color:#9ca3af;text-align:center">분포 데이터 없음</p>`;
     blocks.push(richStaticBlock({
       id: `${idPrefix}-q${qi}-scorebox`,
       html: meanSdBanner +
@@ -224,6 +236,17 @@ function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions
         `<td style="vertical-align:top;border:${border};padding:0"><p style="margin:0;background-color:#dfe6f7;color:#315c9c;font-weight:700;text-align:center;padding:5pt">만족도 분포도</p><div style="padding:6pt;text-align:center">${histogram}</div></td>` +
         `</tr></tbody></table>`,
     }));
+
+    // (3)(4)는 정성 결과가 있을 때만. 없으면 이 문항 페이지가 사라지는 대신 대기 안내만 남는다.
+    if (!q) {
+      blocks.push(textBlock({
+        id: `${idPrefix}-q${qi}-detail`,
+        label: feature.name,
+        html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`,
+        pending: true,
+      }));
+      continue;
+    }
 
     // (3) [감정 분석 도넛+%표 | 응답 요약] 2열.
     const donut = donutSvg(counts);
@@ -253,6 +276,7 @@ function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions
     }
     blocks.push(textBlock({ id: `${idPrefix}-q${qi}-detail`, label: q.label, html: restParts.join(""), styled: true }));
   }
+  // 기능 문항 자체가 없는 raw data 에서만 걸린다(정성 유무와 무관).
   return blocks.length
     ? blocks
     : [textBlock({ id: idPrefix, label: "기능별 고객 경험 분석", html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`, pending: true })];

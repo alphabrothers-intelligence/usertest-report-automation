@@ -105,7 +105,11 @@ export function EditableBarChart({ block }: { block: ReportChartBlock }) {
   const plotHeight = 200;
   const plotWidth = 540;
   const range = block.axisMax - block.axisMin || 1;
-  const gridCount = 5;
+  // 원본은 눈금이 항상 정수로 떨어진다(4/5/6/7/8). 축 양끝이 정수이고 칸이 10개 이하면
+  // 1 단위 정수 눈금을 쓰고, 그 밖(예: 0~100%)에서만 5등분으로 돌아간다 — 예전엔 항상
+  // 5등분이라 4~8 축이 4.0/4.8/5.6/6.4/7.2/8.0 처럼 나왔다(2026-08-25 원본 대조).
+  const useIntegerTicks = Number.isInteger(block.axisMin) && Number.isInteger(block.axisMax) && range <= 10;
+  const gridCount = useIntegerTicks ? range : 5;
   const grid = Array.from({ length: gridCount + 1 }, (_, i) => block.axisMin + (range / gridCount) * i);
   const average = block.items.length ? block.items.reduce((sum, item) => sum + item.value, 0) / block.items.length : 0;
   const averageY = top + plotHeight - ((average - block.axisMin) / range) * plotHeight;

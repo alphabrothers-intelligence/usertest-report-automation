@@ -65,6 +65,9 @@ export function EditableQuadrantChart({ block, onChange }: { block: ReportQuadra
   const scaleY = (value: number) => top + plotSize - ((value - block.yMin) / yRange) * plotSize;
   const cellWidth = plotSize / xRange;
   const cellHeight = plotSize / yRange;
+  // 한글 한 글자 ≈ 글자 크기(8.5px)만큼의 폭을 차지한다. 칸 안에 들어갈 글자 수를 계산해두고
+  // 라벨 줄바꿈에 쓴다(칸이 좁아지면 자동으로 더 잘게 쪼개진다).
+  const labelMaxChars = Math.max(3, Math.floor((cellWidth - 4) / 8.5));
 
   const cells = useMemo(() => {
     const result: Cell[] = [];
@@ -136,12 +139,17 @@ export function EditableQuadrantChart({ block, onChange }: { block: ReportQuadra
           {Array.from({ length: Math.round(xRange) + 1 }, (_, index) => block.xMin + index).map((value) => <text key={`x-${value}`} x={scaleX(value)} y={top + plotSize + 17} textAnchor="middle" fontSize="9" fill="#404040">{lineLabel(value)}</text>)}
           {Array.from({ length: Math.round(yRange) + 1 }, (_, index) => block.yMin + index).map((value) => <text key={`y-${value}`} x={left - 10} y={scaleY(value) + 3} textAnchor="end" fontSize="9" fill="#404040">{lineLabel(value)}</text>)}
           <text x={left + plotSize / 2} y={top + plotSize + 39} textAnchor="middle" fontSize="12" fontWeight="700" fill="#404040">{block.xLabel}</text>
-          <text x="21" y={top + plotSize / 2} textAnchor="middle" fontSize="12" fontWeight="700" fill="#404040" transform={`rotate(-90 21 ${top + plotSize / 2})`}>{block.yLabel}</text>
+          {/* 원본은 y축 제목을 눕히지 않고 "만 / 족 / 도"처럼 한 글자씩 세로로 쌓는다(28쪽 실측). */}
+          {[...block.yLabel].map((char, index, all) => (
+            <text key={`ylabel-${index}`} x="21" y={top + plotSize / 2 + (index - (all.length - 1) / 2) * 15} textAnchor="middle" fontSize="12" fontWeight="700" fill="#404040">{char}</text>
+          ))}
 
           {cells.map((cell) => {
             const box = cellBox(cell);
             const text = contentByCell.get(cellId(cell)) ?? (defaultTextByCell.get(cellId(cell)) ?? []).join("\n");
-            const lines = text.split("\n").flatMap((line) => wrapLabel(line));
+            // 칸 폭에 맞춰 줄바꿈한다 — 예전엔 고정 8자로 잘라서 긴 기능명("실시간 위치 기반
+            // 거점형 콘텐츠")이 옆 칸까지 넘쳐 이웃 라벨과 글자가 겹쳐 보였다(2026-08-25 실측).
+            const lines = text.split("\n").flatMap((line) => wrapLabel(line, labelMaxChars));
             return lines.map((line, index) => <text key={`label-${cellId(cell)}-${index}`} x={box.x + box.width / 2} y={box.y + box.height / 2 + (index - (lines.length - 1) / 2) * 10} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#27272a" pointerEvents="none">{line}</text>);
           })}
         </svg>

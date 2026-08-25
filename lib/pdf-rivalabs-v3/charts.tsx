@@ -275,21 +275,8 @@ function placeBarLabel(barHeight: number, avgPx: number): number {
  * 계산식을 들고 있으면 새 raw data에 이 원칙이 일관되게 적용되는지 보장할 수 없어서(실제로
  * 지금까지 두 곳이 토씨 하나까지 같은 코드를 복붙해서 써왔다), 계산을 이 함수 하나로 모았다.
  */
-export function computeBarWithAverageRange(values: number[], average: number): [number, number] {
-  const all = [...values, average];
-  const dataMin = Math.min(...all);
-  const dataMax = Math.max(...all);
-  // **원본 보고서 양식(2026-07-23 사용자 결정: "원본과 동일하게 4~8점")**: 실제 발행 보고서의
-  // 기능별 만족도·4대가치 차트는 데이터에 딱 맞춘 확대 축이 아니라, 정수 눈금(step 1)의 넉넉한
-  // 축을 쓴다(예: 값이 5.85~7.20이면 y축을 4~8로). 최솟값 아래로 약 1점 여백을 두고 정수로
-  // 내림, 최댓값 위로 약 1점 여백을 두고 정수로 올린다 — 그러면 그리드 눈금이 항상 4/5/6/7/8
-  // 처럼 정수로 떨어지고, 어떤 raw data가 들어와도 같은 원리로 원본과 같은 양식이 나온다.
-  // (예전엔 "값이 몰려 있으면 축을 좁혀 막대를 키우는" 확대 방식이었으나, 원본 재현을 위해
-  //  이 정수 넉넉 축으로 되돌렸다.)
-  const min = Math.max(0, Math.floor(dataMin) - 1);
-  const max = Math.min(10, Math.floor(dataMax) + 1);
-  return [min, max];
-}
+// 축 규칙은 웹 작업공간·PDF·DOCX가 공유한다 — 구현은 lib/report/chartAxis.ts 한 곳에만 둔다.
+export { computeBarWithAverageRange } from "@/lib/report/chartAxis";
 
 function niceStep(max: number): number {
   // 그리드라인 5개 안팎으로 떨어지는 "보기 좋은" 간격을 고른다(10/20/25/50 배수 등).

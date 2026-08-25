@@ -148,6 +148,9 @@ export type ReportTableBlock = {
   id: string;
   kind: "table";
   title?: string;
+  /** 원본은 문항 계열(실용성/즐거움 등)마다 표 색을 다르게 쓴다(sectionStyle.ts의 TABLE_PALETTES).
+   * 계열 순번을 주면 그 팔레트로 그린다. 없으면 첫 팔레트(파랑). */
+  paletteIndex?: number;
   headers: string[];
   /** 숫자 셀만 편집 가능 — 문자열 셀(라벨 등)은 읽기 전용으로 렌더링한다. */
   rows: (string | number)[][];
@@ -241,8 +244,8 @@ export function chartBlock(params: {
   };
 }
 
-export function tableBlock(params: { id: string; title?: string; headers: string[]; rows: (string | number)[][] }): ReportTableBlock {
-  return { id: params.id, kind: "table", title: params.title, headers: params.headers, rows: params.rows };
+export function tableBlock(params: { id: string; title?: string; paletteIndex?: number; headers: string[]; rows: (string | number)[][] }): ReportTableBlock {
+  return { id: params.id, kind: "table", title: params.title, paletteIndex: params.paletteIndex, headers: params.headers, rows: params.rows };
 }
 
 /** PDF `RankCompositionChart`와 웹 렌더러가 공유하는 순위구성 데이터 계약. */
@@ -329,16 +332,20 @@ export function npsBlock(params: Omit<ReportNpsBlock, "kind">): ReportNpsBlock {
 
 export function defaultQuadrantZones(): ReportQuadrantBlock["zones"] {
   // FGI CSV 기준: X=-5~-2/ -2~2/ 2~5, Y=0~6/ 6~8/ 8~10.
+  // **색상은 원본 발행 보고서 28쪽을 150dpi로 렌더해 픽셀에서 직접 뽑은 값이다(2026-08-25).**
+  // 경계(-2/+2, 6/8)와 9칸 배치는 data/FGI_데이터_정리_및_그래프_생성.xlsx 의 평가기준 격자
+  // (N18:W27)와 일치함을 확인했다 — 좌상단 파랑에서 우하단 주황으로 가는 반대각선 패턴.
+  // 눈대중으로 고른 근사색(#b4c6e7/#d9e1f2/#fce4d6/#f8cbad)을 쓰고 있었어서 교체했다.
   return [
-    { id: "top-left", title: "개선 필요성 적음", description: "우선순위 최하 · 추후 고도화", color: "#aebfe5", x0: -5, x1: -2, y0: 8, y1: 10 },
-    { id: "top-middle", title: "개선 필요성 낮음", description: "우선순위 하 · 추후 고도화", color: "#dbe5f5", x0: -2, x1: 2, y0: 8, y1: 10 },
+    { id: "top-left", title: "개선 필요성 적음", description: "우선순위 최하 · 추후 고도화", color: "#b4c6e7", x0: -5, x1: -2, y0: 8, y1: 10 },
+    { id: "top-middle", title: "개선 필요성 낮음", description: "우선순위 하 · 추후 고도화", color: "#d9e1f2", x0: -2, x1: 2, y0: 8, y1: 10 },
     { id: "top-right", title: "개선 필요성 낮음", description: "우선순위 중 · 추후 고도화", color: "#ffffff", x0: 2, x1: 5, y0: 8, y1: 10 },
-    { id: "middle-left", title: "개선 권장", description: "우선순위 하 · 추후 고도화", color: "#dbe5f5", x0: -5, x1: -2, y0: 6, y1: 8 },
+    { id: "middle-left", title: "개선 권장", description: "우선순위 하 · 추후 고도화", color: "#d9e1f2", x0: -5, x1: -2, y0: 6, y1: 8 },
     { id: "middle-middle", title: "개선 필요", description: "우선순위 중 · 추후 고도화", color: "#ffffff", x0: -2, x1: 2, y0: 6, y1: 8 },
-    { id: "middle-right", title: "중요 개선", description: "우선순위 상 · 고도화 필요", color: "#fde9dd", x0: 2, x1: 5, y0: 6, y1: 8 },
+    { id: "middle-right", title: "중요 개선", description: "우선순위 상 · 고도화 필요", color: "#fce4d6", x0: 2, x1: 5, y0: 6, y1: 8 },
     { id: "bottom-left", title: "요소 제거 권장", description: "또는 개선 권장 · 우선순위 중 · 고도화 권장", color: "#ffffff", x0: -5, x1: -2, y0: 0, y1: 6 },
-    { id: "bottom-middle", title: "중요 개선", description: "우선순위 상", color: "#fde9dd", x0: -2, x1: 2, y0: 0, y1: 6 },
-    { id: "bottom-right", title: "긴급 개선", description: "우선순위 최상", color: "#f9c9a8", x0: 2, x1: 5, y0: 0, y1: 6 },
+    { id: "bottom-middle", title: "중요 개선", description: "우선순위 상", color: "#fce4d6", x0: -2, x1: 2, y0: 0, y1: 6 },
+    { id: "bottom-right", title: "긴급 개선", description: "우선순위 최상", color: "#f8cbad", x0: 2, x1: 5, y0: 0, y1: 6 },
   ];
 }
 

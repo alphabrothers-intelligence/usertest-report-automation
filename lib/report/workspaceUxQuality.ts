@@ -31,6 +31,7 @@ function uxItemBlocks(stats: QuantStats): ReportBlock[] {
     { group: "실용성", index, item: usabilityItem },
     ...(stats.uxQuality.fun[index] ? [{ group: "즐거움", index, item: stats.uxQuality.fun[index] }] : []),
   ]);
+  const groupOrder = [...new Set(pairs.map((entry) => entry.group))];
   return pairs.flatMap((entry, order) => {
     const survey = surveyRows[order];
     const title = `${entry.group}${entry.index + 1}) ${entry.item.name}`;
@@ -41,6 +42,9 @@ function uxItemBlocks(stats: QuantStats): ReportBlock[] {
       tableBlock({
         id: `ux-item-score-${order}`,
         title: `${title} 점수`,
+        // 원본은 계열마다 표 색이 다르다 — 실용성 파랑, 즐거움 베이지(37쪽 실측).
+        // 계열이 셋 이상인 raw data 는 TABLE_PALETTES 를 순환한다.
+        paletteIndex: groupOrder.indexOf(entry.group),
         headers: ["", "평균", "표준편차"],
         rows: [["전체", entry.item.mean, entry.item.sd]],
       }),
