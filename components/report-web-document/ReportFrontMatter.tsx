@@ -1,6 +1,6 @@
 "use client";
 
-import type { ProductInfo } from "@/lib/productInfo/types";
+import { PUBLISHER_DEFAULTS, type ProductInfo } from "@/lib/productInfo/types";
 import type { ReportHeadingBlock, ReportSectionContent } from "@/lib/report/sections";
 import { sectionRomanGlyph } from "@/lib/report/sectionStyle";
 
@@ -24,6 +24,50 @@ export function ReportCoverPage({ productInfo, onChange }: { productInfo: Produc
         <p contentEditable suppressContentEditableWarning onBlur={(event) => onChange({ ...productInfo, coverDate: editableText(event) })} className="mt-[8mm] text-[11pt] tracking-normal text-[#666] outline-none focus:bg-[#eef5ff]">{date}</p>
       </div>
       <p className="absolute bottom-[10mm] left-0 right-0 text-center text-[9pt] text-[#222]">- 1 -</p>
+    </section>
+  );
+}
+
+/**
+ * 판권면(배면, 레이아웃 L30) — 원본 마지막 쪽. 표지와 같은 배경 이미지를 쓰되 **상단 50%만**
+ * 잘라 쓴다: 원본 배면에는 모자이크만 있고 하단 ALPHA BROTHERS 워드마크가 없기 때문이다
+ * (템플릿 PNG 실측 — 모자이크 14.7~48.8%, 워드마크 93.3~94.5%). 별도 배경 이미지를 새로
+ * 만들지 않고 클리핑으로 해결한다.
+ *
+ * 라벨 앞 세로 막대는 원본의 "▌" 글자를 그대로 쓰지 않고 CSS 사각형으로 그린다 — 서브셋
+ * 폰트에 없는 특수문자가 텍스트를 통째로 지워버린 사고가 반복됐다(CLAUDE.md 참고).
+ */
+export function ReportBackCoverPage({ productInfo, onChange }: { productInfo: ProductInfo; onChange: (next: ProductInfo) => void }) {
+  const year = (productInfo.coverDate?.trim().match(/\d{4}/)?.[0]) || String(new Date().getFullYear());
+  const brand = productInfo.footerBrandName?.trim() || "alphabrothers";
+  const rows: { label: string; field: "publisher" | "publisherContact" | "publisherAddress" }[] = [
+    { label: "발행인", field: "publisher" },
+    { label: "문　의", field: "publisherContact" },
+    { label: "주　소", field: "publisherAddress" },
+  ];
+  return (
+    <section data-front-page data-a4-page className="relative box-border h-[297mm] w-[210mm] overflow-hidden border border-[#dfe3e9] bg-white shadow-[0_12px_34px_rgba(28,39,55,.11)]">
+      <div className="absolute inset-x-0 top-0 h-[150mm] overflow-hidden">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/rivalabs-cover-template.png" alt="" className="h-[297mm] w-full object-cover" />
+      </div>
+      <div className="absolute left-[26mm] top-[212mm] w-[160mm]">
+        {rows.map((row) => (
+          <p key={row.field} className="mb-[3.4mm] flex items-center text-[11pt] text-[#222]">
+            <span aria-hidden className="mr-[2.5mm] inline-block h-[4.6mm] w-[1.1mm] shrink-0 bg-[#1b2c58]" />
+            <span className="shrink-0 font-medium">{row.label}</span>
+            <span
+              contentEditable
+              suppressContentEditableWarning
+              onBlur={(event) => onChange({ ...productInfo, [row.field]: editableText(event) })}
+              className="ml-[6mm] outline-none focus:bg-[#eef5ff]"
+            >
+              {productInfo[row.field]?.trim() || PUBLISHER_DEFAULTS[row.field]}
+            </span>
+          </p>
+        ))}
+        <p className="mt-[9mm] text-[9.5pt] text-[#8a8a8a]">Copyright {year} {brand}, All Right Reserved, Printed in Korea.</p>
+      </div>
     </section>
   );
 }

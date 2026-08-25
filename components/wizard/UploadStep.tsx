@@ -5,7 +5,7 @@ import { FileUploadButton, type UploadedFile } from "@/components/FileUploadButt
 import { ProductInfoPromptCard } from "@/components/ProductInfoPromptCard";
 import { ProductInfoExtractedCard } from "@/components/ProductInfoCard";
 import type { ProductInfo } from "@/lib/productInfo/types";
-import type { ProductType, ValidateResult } from "./types";
+import type { ValidateResult } from "./types";
 
 const RAW_DATA_EXTENSIONS = [".xlsx", ".csv"];
 
@@ -20,14 +20,12 @@ function isRawDataFile(name: string) {
  * LLM이 "다음에 뭘 부를지" 판단하지 않고 이 컴포넌트가 고정 순서로 호출한다.
  */
 export function UploadStep({
-  productType,
   onValidated,
   onProductInfoDone,
   onNext,
   validation,
   productInfoDone,
 }: {
-  productType: ProductType;
   onValidated: (file: UploadedFile, result: ValidateResult) => void;
   onProductInfoDone: () => void;
   onNext: () => void;
@@ -55,13 +53,6 @@ export function UploadStep({
       });
       const result: ValidateResult = await res.json();
       setIsValidating(false);
-      if (result.valid) {
-        await fetch("/api/wizard/product-type", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileUrl: file.url, productType }),
-        });
-      }
       onValidated(file, result);
     } else {
       setCompanyFile(file);
@@ -90,7 +81,7 @@ export function UploadStep({
   async function saveProductInfo(fields: ProductInfo) {
     if (!rawDataFile) return;
     if (!fields.companyName?.trim() || !fields.serviceName?.trim()) {
-      setExtractError(`기업명과 ${productType === "physical" ? "제품명" : "서비스명"}을 입력해주세요.`);
+      setExtractError("기업명과 서비스·제품명을 입력해주세요.");
       setLastExtracted(fields);
       setExtracted(null);
       return;
@@ -162,7 +153,6 @@ export function UploadStep({
               onSkip={onProductInfoDone}
               onSubmit={saveProductInfo}
               initial={lastExtracted ?? undefined}
-              productType={productType}
             />
           )}
           {savingInfo && <p className="mt-2 text-sm text-zinc-500">저장 중...</p>}

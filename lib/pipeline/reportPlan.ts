@@ -56,7 +56,7 @@ export function buildReportPlan(featureNames: string[]): ReportPlanSection[] {
       numeral: "V",
       title: "4대 가치 만족도",
       source: "기능적·심미적·경제적·사회공공적 가치 통계 + 각 가치 주관식 응답 정성 분석",
-      subitems: ["4대 가치 조사 결과", "4대 가치 조사 결과 분석"],
+      subitems: ["4대 가치 만족도 조사 결과", "4대 가치 만족도 조사 결과 분석"],
     },
     {
       numeral: "VI",

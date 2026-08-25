@@ -36,7 +36,20 @@ export interface ProductInfo {
   // 이미지 URL을 저장한다.
   coverDate?: string;
   coverLogoUrl?: string;
+  // 마지막 판권면(배면, 레이아웃 L30)의 발행 정보. footerBrandName과 같은 성격 — 이 보고서를
+  // 만드는 발행사 자신의 정보라 기본값(알파브라더스)이 박혀 있고, 자사 명의로 발행할 때만
+  // 채팅이나 웹 화면에서 바꾼다. 비워두면 기본값이 그대로 렌더된다.
+  publisher?: string;
+  publisherContact?: string;
+  publisherAddress?: string;
 }
+
+/** 판권면 기본값 — 발행사 자신의 정보(CLAUDE.md "Alphabrothers는 이 도구 자신의 정체성" 참고). */
+export const PUBLISHER_DEFAULTS = {
+  publisher: "주식회사 알파브라더스",
+  publisherContact: "02-6953-2166 / ksd@alphabrothers.co.kr",
+  publisherAddress: "서울시 강서구 공항대로45길 71, 씨에이치빌딩 3F, 8F",
+} as const;
 
 export const PRODUCT_INFO_FIELD_LABELS: Record<keyof ProductInfo, string> = {
   companyName: "기업명",
@@ -56,4 +69,7 @@ export const PRODUCT_INFO_FIELD_LABELS: Record<keyof ProductInfo, string> = {
   footerBrandName: "보고서 하단 브랜드명(기본: Alphabrothers)",
   coverDate: "표지 발행일 (예: 2025.09.05)",
   coverLogoUrl: "표지 로고 이미지 URL (비우면 기본 로고 사용)",
+  publisher: "판권면 발행인 (기본: 주식회사 알파브라더스)",
+  publisherContact: "판권면 문의처 (기본: 알파브라더스 대표번호·메일)",
+  publisherAddress: "판권면 주소 (기본: 알파브라더스 주소)",
 };

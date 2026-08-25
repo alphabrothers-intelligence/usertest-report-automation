@@ -9,11 +9,9 @@ import { ReportPlanCard, type ReportPlanOutput } from "@/components/ReportPlanCa
  */
 export function ReportPlanStep({
   featureNames,
-  productType,
   onApprove,
 }: {
   featureNames: string[];
-  productType: "sw" | "physical";
   onApprove: (plan: ReportPlanOutput) => void;
 }) {
   const [plan, setPlan] = useState<ReportPlanOutput | null>(null);
@@ -23,7 +21,7 @@ export function ReportPlanStep({
     fetch("/api/wizard/report-plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ featureNames, productType }),
+      body: JSON.stringify({ featureNames }),
     })
       .then((res) => res.json())
       .then((data: ReportPlanOutput) => {

@@ -274,7 +274,7 @@ function reportParagraphs(input: HwpxReportInput): string[] {
   p.push(paragraph("1. 핵심구매요소 조사 결과", "heading"));
   q.keyFactorDistribution.forEach((item, index) => p.push(paragraph(`${index + 1}. ${item.label}: ${item.percentage}% (${item.count}명)`)));
   p.push(paragraph("Ⅴ. 4대 가치 만족도", "section"));
-  p.push(paragraph("1. 4대 가치 조사 결과", "heading"));
+  p.push(paragraph("1. 4대 가치 만족도 조사 결과", "heading"));
   [["기능적 가치", q.fourValues.functional], ["심미적 가치", q.fourValues.aesthetic], ["경제적 가치", q.fourValues.economic], ["사회·공공적 가치", q.fourValues.social]].forEach(([name, value]) => {
     const metric = value as { mean: number; sd: number };
     p.push(paragraph(`${name}: 평균 ${stat(metric.mean)}점 / 표준편차 ${stat(metric.sd)}`));

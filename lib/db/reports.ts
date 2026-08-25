@@ -82,21 +82,11 @@ export async function getProductInfoByFileUrl(fileUrl: string): Promise<ProductI
   return row?.product_info ?? null;
 }
 
-/** 마법사 1단계(제품유형 선택)는 파일 첨부보다 먼저 일어나 fileUrl이 아직 없으므로,
- * validateInput이 성공해 fileUrl이 확정된 뒤(2단계) 호출해 저장한다. saveProductInfo와
- * 같은 upsert-by-fileUrl 패턴. */
-export async function saveProductType(
-  fileUrl: string,
-  productType: "sw" | "physical",
-): Promise<void> {
-  await sql`
-    insert into reports (file_url, product_type, updated_at)
-    values (${fileUrl}, ${productType}, now())
-    on conflict (file_url) do update set
-      product_type = excluded.product_type,
-      updated_at = now()
-  `;
-}
+// 제품유형을 저장하던 saveProductType은 삭제했다(2026-08-24) — 홈 화면에서 실무자가
+// 제품군을 고르는 경로 자체를 없앴기 때문이다(PRD 3.2절 "제품군을 사용자에게 묻지 않는다").
+// product_type 컬럼은 과거 보고서 호환을 위해 읽기만 하며(`report.product_type ??
+// detectProductType(stats)`), 새 보고서는 항상 정량 결과로 자동 판별한다. 범용 문항 역할
+// 분류 에이전트(PRD 2.2.2절)가 들어오면 이 자동 판별도 역할 기반 섹션 조립으로 대체된다.
 
 /** raw data 파일 하나당 report 하나. 같은 fileUrl로 재검증하면 정량 통계를 덮어쓴다. */
 export async function upsertReportQuantStats(params: {

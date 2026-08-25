@@ -4,8 +4,6 @@ import type { ProductInfo } from "@/lib/productInfo/types";
 import type { QuantStats } from "@/lib/quant/compute";
 import type { ReportPlanSection } from "@/lib/pipeline/reportPlan";
 
-export type ProductType = "sw" | "physical";
-
 export interface ValidateResult {
   fileName: string | null;
   valid: boolean;
@@ -18,7 +16,6 @@ export interface ValidateResult {
 }
 
 export interface WizardState {
-  productType: ProductType | null;
   rawDataFile: { url: string; name: string } | null;
   companyFile: { url: string; name: string } | null;
   validation: ValidateResult | null;
@@ -31,7 +28,6 @@ export interface WizardState {
 }
 
 export const INITIAL_WIZARD_STATE: WizardState = {
-  productType: null,
   rawDataFile: null,
   companyFile: null,
   validation: null,

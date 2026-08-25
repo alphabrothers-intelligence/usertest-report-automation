@@ -18,7 +18,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { QuoteCorrectionPanel } from "@/components/QuoteCorrectionPanel";
 import { ActionPanel, SectionBanner, TableOfContents } from "@/components/report-web-document/ReportDocumentChrome";
-import { ReportCoverPage, ReportTocPage } from "@/components/report-web-document/ReportFrontMatter";
+import { ReportBackCoverPage, ReportCoverPage, ReportTocPage } from "@/components/report-web-document/ReportFrontMatter";
 import { AnalysisReferenceContent, QuoteSourceContent } from "@/components/report-web-document/EvidencePanelContent";
 import { BlockView } from "@/components/report-web-document/ReportBlockView";
 import { useReportClipboard } from "@/components/report-web-document/useReportClipboard";
@@ -292,6 +292,7 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
           </section>
           ));
         })}
+        <ReportBackCoverPage productInfo={productInfo} onChange={(next) => { checkpoint(); onProductInfoChange(next); }} />
       </article>
       <ActionPanel
         activeTitle={sections.find((section) => section.numeral === activeSection)?.title ?? "보고서 편집"}

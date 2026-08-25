@@ -55,3 +55,7 @@ next-env.d.ts
 
 # HWPX 동적 그래프 검증 산출물
 /output/hwpx-preview-poc/*동적그래프검증*
+
+# NOTION_STAGE_MAPPING.xlsx 작업 중 저장한 스냅샷/백업본 — 최종본만 커밋
+docs/NOTION_STAGE_MAPPING.pre-*.xlsx
+docs/NOTION_STAGE_MAPPING.backup-*.xlsx

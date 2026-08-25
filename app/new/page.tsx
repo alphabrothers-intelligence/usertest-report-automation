@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { RecentReportsSidebar } from "@/components/RecentReportsSidebar";
-import { ProductTypeStep } from "@/components/wizard/ProductTypeStep";
 import { UploadStep } from "@/components/wizard/UploadStep";
 import { ReportPlanStep } from "@/components/wizard/ReportPlanStep";
 import { QuantReviewStep } from "@/components/wizard/QuantReviewStep";
@@ -10,10 +9,9 @@ import { QualitativeStep } from "@/components/wizard/QualitativeStep";
 import type { ReportPlanOutput } from "@/components/ReportPlanCard";
 import { INITIAL_WIZARD_STATE, type WizardState } from "@/components/wizard/types";
 
-type Step = "product-type" | "upload" | "report-plan" | "quant-review" | "qualitative";
+type Step = "upload" | "report-plan" | "quant-review" | "qualitative";
 
 const STEPS: { id: Step; label: string }[] = [
-  { id: "product-type", label: "제품 유형" },
   { id: "upload", label: "데이터 등록" },
   { id: "report-plan", label: "목차 확인" },
   { id: "quant-review", label: "정량 검토" },
@@ -27,7 +25,7 @@ const STEPS: { id: Step; label: string }[] = [
  * 뒤이어 구현한다 — 지금은 목차 확인까지만 연결돼 있다.
  */
 export default function WizardPage() {
-  const [step, setStep] = useState<Step>("product-type");
+  const [step, setStep] = useState<Step>("upload");
   const [state, setState] = useState<WizardState>(INITIAL_WIZARD_STATE);
 
   return (
@@ -49,17 +47,8 @@ export default function WizardPage() {
             })}
           </nav>
           <section className="rounded-xl border border-[#dde5ef] bg-white p-6 shadow-[0_4px_18px_rgba(31,48,78,0.05)] lg:p-8">
-        {step === "product-type" && (
-          <ProductTypeStep
-            value={state.productType}
-            onSelect={(productType) => setState((s) => ({ ...s, productType }))}
-            onNext={() => setStep("upload")}
-          />
-        )}
-
-        {step === "upload" && state.productType && (
+        {step === "upload" && (
           <UploadStep
-            productType={state.productType}
             validation={state.validation}
             productInfoDone={state.productInfoDone}
             onValidated={(file, result) =>
@@ -70,10 +59,9 @@ export default function WizardPage() {
           />
         )}
 
-        {step === "report-plan" && state.productType && state.validation?.valid && (
+        {step === "report-plan" && state.validation?.valid && (
           <ReportPlanStep
             featureNames={state.validation.featureNames ?? []}
-            productType={state.productType}
             onApprove={(plan: ReportPlanOutput) => {
               setState((s) => ({
                 ...s,

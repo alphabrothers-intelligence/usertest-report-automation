@@ -62,9 +62,9 @@ export function buildFourValuesSection(
     { label: "사회·공공적 가치", mean: stats.fourValues.social.mean, sd: stats.fourValues.social.sd },
   ];
   return [
-    headingBlock({ id: "values-result-heading", variant: "numbered", number: "1", text: "4대 가치 조사 결과" }),
+    headingBlock({ id: "values-result-heading", variant: "numbered", number: "1", text: "4대 가치 만족도 조사 결과" }),
     ...services.fourValueQualitativeBlocks(stats, "four-values-qualitative", services.questionsByKeyPrefix(qualitative, "values:"), itemsText),
-    headingBlock({ id: "values-analysis-heading", variant: "numbered", number: "2", text: "4대 가치 조사 결과 분석" }),
+    headingBlock({ id: "values-analysis-heading", variant: "numbered", number: "2", text: "4대 가치 만족도 조사 결과 분석" }),
     meanChart("four-values-chart", "4대 가치 만족도 종합 결과", rows.map((r) => ({ name: r.label, mean: r.mean }))),
     tableBlock({
       id: "four-values-table",

@@ -511,7 +511,7 @@ export function SectionFourValuesQualitative({
   return (
     <View break>
       <SectionHeader numeral="V" title="4대 가치 만족도" />
-      <SubsectionHeader number={1} title="4대 가치 조사 결과" />
+      <SubsectionHeader number={1} title="4대 가치 만족도 조사 결과" />
       {!hasQualitative && <Text style={styles.placeholder}>정성 분석 결과가 아직 없습니다.</Text>}
       {valueQuestions.map((q) => {
         if (q.categories.length === 0) return null;
@@ -580,7 +580,7 @@ export function SectionFourValuesQualitative({
           이 함수 안으로 옮기고(별도 최상위 break-컴포넌트로 안 뺌), ReportDocument.tsx의
           독립 SectionFourValuesTable 호출은 제거했다. */}
       <View break>
-        <SubsectionHeader number={2} title="4대 가치 조사 결과 분석" />
+        <SubsectionHeader number={2} title="4대 가치 만족도 조사 결과 분석" />
         <FourValuesSummaryChart stats={stats} />
         <View style={{ backgroundColor: colors.chartBannerBg, padding: 5, marginVertical: 6 }} wrap={false}>
           <Text style={{ fontSize: 9.5, fontWeight: "bold", textAlign: "center", color: colors.navy }}>
