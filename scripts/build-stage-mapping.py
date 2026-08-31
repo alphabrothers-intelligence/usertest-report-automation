@@ -559,12 +559,12 @@ def build_rows() -> list[dict]:
 
 def main() -> None:
     rows, fields = build_rows(), FIELDS
-    with (DOCS / "NOTION_STAGE_MAPPING.csv").open("w", newline="", encoding="utf-8-sig") as f:
+    with (DOCS / "STAGE_MAPPING.csv").open("w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fields, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
 
-    with (DOCS / "NOTION_LAYOUT_CATALOG.csv").open("w", newline="", encoding="utf-8-sig") as f:
+    with (DOCS / "LAYOUT_CATALOG.csv").open("w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
         w.writerow(["레이아웃 코드", "레이아웃 이름", "분류", "형태 설명", "사용 단계", "생성 조건"])
         w.writerows(LAYOUTS)
@@ -687,7 +687,7 @@ def write_xlsx(rows: list[dict], fields: list[str]) -> None:
     ws2.freeze_panes = "A2"
     ws2.auto_filter.ref = f"A1:H{len(LAYOUTS) + 1}"
 
-    wb.save(DOCS / "NOTION_STAGE_MAPPING.xlsx")
+    wb.save(DOCS / "STAGE_MAPPING.xlsx")
 
 
 if __name__ == "__main__":

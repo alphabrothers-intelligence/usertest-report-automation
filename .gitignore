@@ -53,9 +53,15 @@ next-env.d.ts
 # 로컬 PDF 시각 검증 산출물
 /tmp/pdfs/
 
+# 레이아웃 검사 스크립트가 매번 새로 만드는 미리보기 HTML(check:layout-blocks)
+/tmp/*.html
+
+# 담당자 확인용으로 그때그때 만드는 원본 대조 이미지
+/tmp/review/
+
 # HWPX 동적 그래프 검증 산출물
 /output/hwpx-preview-poc/*동적그래프검증*
 
-# NOTION_STAGE_MAPPING.xlsx 작업 중 저장한 스냅샷/백업본 — 최종본만 커밋
-docs/NOTION_STAGE_MAPPING.pre-*.xlsx
-docs/NOTION_STAGE_MAPPING.backup-*.xlsx
+# STAGE_MAPPING.xlsx 작업 중 저장한 스냅샷/백업본 — 최종본만 커밋
+docs/STAGE_MAPPING.pre-*.xlsx
+docs/STAGE_MAPPING.backup-*.xlsx
