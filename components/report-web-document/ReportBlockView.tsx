@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FocusEvent, type MouseEvent } from "r
 import { RichReportEditor } from "@/components/RichReportEditor";
 import { EditableBarChart } from "@/components/report/EditableBarChart";
 import { EditableRankCompositionChart } from "@/components/report/EditableRankCompositionChart";
+import { EditableJourneyLineChart, EditableWaterfallChart } from "@/components/report/EditableJourneyCharts";
 import { EditableStackedBarChart } from "@/components/report/EditableStackedBarChart";
 import { EditableGroupedBarChart } from "@/components/report/EditableGroupedBarChart";
 import { EditableRadarChart } from "@/components/report/EditableRadarChart";
@@ -16,8 +17,13 @@ import { ReportImageUploadSlots } from "@/components/report/ReportImageUploadSlo
 import { cleanQuoteEndingReviewMarkup, markQuoteEndingReviews } from "@/components/report-web-document/quoteEndingMarkup";
 import { downloadSvgAsPng } from "@/lib/report/exportImage";
 import { reportQuoteReviewToken } from "@/lib/report/quoteEnding";
-import type { ReportBlock } from "@/lib/report/sections";
-import { SUBSECTION_BANNER } from "@/lib/report/sectionStyle";
+import { scaleNoteFromQuestion, type ReportBlock } from "@/lib/report/sections";
+import { DATA_TABLE, REPORT_TEXT, SUBSECTION_BANNER, tablePalette } from "@/lib/report/sectionStyle";
+
+/** 표 셀 테두리는 문서 전체가 같은 토큰을 쓴다(sectionStyle.ts) — 색 리터럴을 다시 쓰지 말 것. */
+function rowGroupCell(background?: string) {
+  return { border: `${DATA_TABLE.borderWidth}pt solid ${tablePalette(0).border}`, backgroundColor: background };
+}
 
 /**
  * 개요/설문 항목처럼 병합 셀이 있는 표는 데이터 배열로 단순화하면 원본의 행·열 병합과
@@ -231,14 +237,15 @@ function ViewerOverviewService({ block, sourceFileUrl, onChange }: { block: Extr
     mainFeatures: overviewValue(block.html, "주요 기능"),
   };
   const save = (label: string, value: string) => onChange({ ...block, html: patchOverviewValue(block.html, label, value) });
-  const cellBorder = "1px solid #6b87d6";
-  const labelStyle = { border: cellBorder, background: "#dfe6f7", textAlign: "center" as const, fontWeight: 700, padding: "8px 6px", verticalAlign: "middle" as const };
+  const palette = tablePalette(0);
+  const cellBorder = `${DATA_TABLE.borderWidth}pt solid ${palette.border}`;
+  const labelStyle = { border: cellBorder, background: palette.header, textAlign: "center" as const, fontWeight: 700, padding: "8px 6px", verticalAlign: "middle" as const };
   const valueStyle = { border: cellBorder, padding: "8px 10px", verticalAlign: "middle" as const };
   const editable = (label: string, value: string, className = "") => <div contentEditable suppressContentEditableWarning className={`viewer-overview-edit ${className}`} onBlur={(event) => save(label, event.currentTarget.textContent?.trim() ?? "")}>{value || "입력 필요"}</div>;
 
-  return <table className="viewer-overview-table" style={{ width: "100%", marginBottom: 18, borderCollapse: "collapse", tableLayout: "fixed", color: "#111827", fontSize: 13 }}>
+  return <table className="viewer-overview-table" style={{ width: "100%", marginBottom: 18, borderCollapse: "collapse", tableLayout: "fixed", color: "#111827", fontSize: `${DATA_TABLE.fontSize}pt` }}>
     <tbody>
-      <tr><th colSpan={4} style={{ ...labelStyle, background: "#d6e0f4", color: "#111827", fontSize: 15 }}>제품 및 서비스 개요</th></tr>
+      <tr><th colSpan={4} style={{ ...labelStyle, background: palette.title, color: "#111827" }}>제품 및 서비스 개요</th></tr>
       <tr><th style={labelStyle}>서비스 명</th><td colSpan={3} style={valueStyle}>{editable("서비스 명", fields.serviceName)}</td></tr>
       <tr><th style={labelStyle}>서비스 요약</th><td colSpan={3} style={valueStyle}>{editable("서비스 요약", fields.summary, "is-left")}</td></tr>
       <tr><th style={labelStyle}>사업 영역</th><td style={valueStyle}>{editable("사업 영역", fields.businessArea)}</td><th style={labelStyle}>산업 분야</th><td style={valueStyle}>{editable("산업 분야", fields.industry)}</td></tr>
@@ -319,7 +326,8 @@ export function BlockView({
   if (block.kind === "heading") {
     const saveHeading = (event: FocusEvent<HTMLElement>) => {
       const text = event.currentTarget.textContent?.trim() ?? "";
-      if (text && text !== block.text) onChange({ ...block, text });
+      // 척도 주석은 문항 원문에서 도출한 값이라, 문항을 고치면 같이 다시 뽑아야 한다.
+      if (text && text !== block.text) onChange({ ...block, text, note: scaleNoteFromQuestion(text) ?? undefined });
     };
     // id: 목차의 소제목 클릭 → 여기로 직접 스크롤(TableOfContents 참고). scroll-mt-24는
     // studio 헤더(sticky)에 상단이 가려지지 않게 하는 여백이다.
@@ -336,16 +344,19 @@ export function BlockView({
     }
     if (block.variant === "question") {
       return (
-        <div id={block.id} className="mb-5 mt-7 scroll-mt-24 border-b-[3px] border-[#4fc8e8] pb-2.5">
+        // 원본 37쪽: 문항 → (오른쪽 정렬) 척도 주석 → 시안 밑줄 순서. 밑줄 두께·색은 실측 토큰.
+        <div id={block.id} className="mb-5 mt-7 scroll-mt-24 pb-2.5" style={{ borderBottom: `${REPORT_TEXT.questionUnderlineWidth}pt solid ${REPORT_TEXT.questionUnderlineColor}` }}>
           <h3 className="text-[18px] font-medium leading-[1.5] tracking-[-0.035em] text-[#111827]">
             {block.number ? `${block.number}. ` : ""}
             <span contentEditable suppressContentEditableWarning onBlur={saveHeading} className="outline-none focus:bg-[#f8fbff]">{block.text}</span>
           </h3>
+          {block.note && <p className="mt-1 text-right text-[#111827]" style={{ fontSize: `${REPORT_TEXT.noteFontSize}pt` }}>{block.note}</p>}
         </div>
       );
     }
     return <h3 id={block.id} contentEditable suppressContentEditableWarning onBlur={saveHeading} className="mb-3 mt-6 scroll-mt-24 text-[21px] font-semibold tracking-[-0.035em] text-[#111827] outline-none focus:bg-[#f8fbff]">{block.text}</h3>;
   }
+  // row-group도 원본 표 서식 토큰을 쓴다 — 예전엔 회색 테두리(#d4d4d8)라 다른 표와 어긋났다.
   // row-group: 원본 "항목 | 주요 의견" 표 전체를 진짜 <table>로 그린다. 오른쪽 칸에 인터랙티브
   // 차트가 들어가는 행이 있어 정적 HTML 표로는 못 만들지만, <td> 안에 React 자식 블록을 그리면
   // 테두리는 표 하나로 이어진다(sections.ts의 ReportRowGroupBlock 주석 참고).
@@ -361,7 +372,7 @@ export function BlockView({
           <thead>
             <tr>
               {block.headers.map((header, index) => (
-                <th key={header} className={`border border-[#d4d4d8] bg-[#d0dcf3] p-2 text-center font-bold ${index === 0 ? "w-[18%]" : ""}`}>{header}</th>
+                <th key={header} style={rowGroupCell(tablePalette(0).title)} className={`p-2 text-center font-bold ${index === 0 ? "w-[18%]" : ""}`}>{header}</th>
               ))}
             </tr>
           </thead>
@@ -369,8 +380,8 @@ export function BlockView({
         <tbody>
           {block.rows.map((row) => (
             <tr key={row.id}>
-              <td className="w-[18%] border border-[#d4d4d8] bg-[#dfe7f6] p-2 text-center align-middle font-bold">{row.label}</td>
-              <td className="border border-[#d4d4d8] p-3 align-top">
+              <td style={rowGroupCell(tablePalette(0).header)} className="w-[18%] p-2 text-center align-middle font-bold">{row.label}</td>
+              <td style={rowGroupCell()} className="p-3 align-top">
                 <div className="space-y-3">
                   {row.blocks.map((child) => (
                     <div
@@ -404,6 +415,8 @@ export function BlockView({
     );
   }
   if (block.kind === "chart") return <EditableBarChart block={block} />;
+  if (block.kind === "journey-line") return <EditableJourneyLineChart block={block} />;
+  if (block.kind === "waterfall") return <EditableWaterfallChart block={block} />;
   if (block.kind === "rank-composition") return <EditableRankCompositionChart block={block} />;
   if (block.kind === "stacked-bar") return <EditableStackedBarChart block={block} />;
   if (block.kind === "grouped-bar") return <EditableGroupedBarChart block={block} />;

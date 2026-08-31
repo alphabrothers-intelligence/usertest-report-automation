@@ -29,7 +29,7 @@ export function filterWallaResponseRows(dataRows: unknown[][]): unknown[][] {
  * "실시간 거점형" ↔ "실시간 위치 기반 거점형 콘텐츠"). 순위 응답값의 모든 어절이 후보
  * 기능명에 부분 문자열로 포함되면 같은 기능으로 정렬한다.
  */
-function alignToFeatureName(raw: string, featureNames: string[]): string {
+export function alignToFeatureName(raw: string, featureNames: string[]): string {
   if (featureNames.includes(raw)) return raw;
 
   let best: { name: string; tokenCount: number } | null = null;
@@ -54,7 +54,7 @@ function alignToFeatureName(raw: string, featureNames: string[]): string {
  * rank 등 하위 전체에서 쓰이는 유일한 기준명이 된다 — golden 체크 기대값도 이 긴 이름
  * 기준으로 맞춰야 한다.
  */
-function resolveFeatureDisplayNames(shortNames: string[], dataRows: unknown[][], rankCols: number[]): string[] {
+export function resolveFeatureDisplayNames(shortNames: string[], dataRows: unknown[][], rankCols: number[]): string[] {
   const longest = new Map<string, string>(shortNames.map((n) => [n, n]));
   for (const row of dataRows) {
     for (const col of rankCols) {

@@ -170,6 +170,8 @@ function blockLines(block: ReportBlock): string[] {
     case "rich-static": return htmlToText(block.html).split("\n");
     case "table": return [block.title ?? "", block.headers.join(" | "), ...block.rows.map((row) => row.join(" | "))].filter(Boolean);
     case "chart": return [block.title, ...block.items.map((item) => `${item.label}: ${item.value}${block.unit}`)];
+    case "journey-line": return [block.title, ...block.points.map((point) => `${point.label}: ${point.value.toFixed(2)}${block.unit}`)];
+    case "waterfall": return [block.title, ...block.steps.map((step) => `${step.label}: ${step.delta > 0 ? "+" : ""}${step.delta.toFixed(2)}${block.unit}`)];
     case "rank-composition": return [block.title, ...block.rows.map((row) => `${row.rank}순위: ${row.segments.map((item) => `${item.name} ${item.percentage}%`).join(" · ")}`)];
     case "stacked-bar": return [block.title, ...block.rows.map((row) => `${row.label}: ${row.segments.map((item) => `${item.name} ${item.value}${block.unit}`).join(" · ")}`)];
     case "grouped-bar": return [block.title, ...block.categories.map((item) => `${item.label}: ${item.values.map((value) => `${value.series} ${value.value}${block.unit}`).join(" · ")}`)];

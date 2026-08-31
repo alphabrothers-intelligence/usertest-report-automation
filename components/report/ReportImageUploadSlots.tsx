@@ -43,7 +43,9 @@ export function ReportImageUploadSlots({
 
   const hasImages = images.length > 0;
   const canAdd = images.length < maxImages;
-  return <div className={`rivalabs-image-slots rivalabs-image-slots--${variant}`} data-count={Math.min(images.length, maxImages)} data-copy-ignore>
+  // data-print-keep: 담당자가 붙인 이미지(워드클라우드·제품 사진)는 보고서 내용이므로 인쇄된다.
+  // 첨부/삭제 컨트롤만 인쇄에서 빠진다(globals.css 인쇄 규칙) — 복사 제외와 인쇄 제외는 다르다.
+  return <div className={`rivalabs-image-slots rivalabs-image-slots--${variant}`} data-count={Math.min(images.length, maxImages)} data-copy-ignore data-print-keep>
     {images.map((image, index) => <figure key={image} className="rivalabs-image-preview">
       <img src={image} alt={`첨부 이미지 ${index + 1}`} />
       <button type="button" className="rivalabs-image-remove" onClick={() => save(images.filter((_, imageIndex) => imageIndex !== index))} aria-label={`${index + 1}번 이미지 삭제`}>×</button>

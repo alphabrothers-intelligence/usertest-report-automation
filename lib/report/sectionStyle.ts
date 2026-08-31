@@ -75,6 +75,37 @@ export function tablePalette(groupIndex: number | undefined): TablePalette {
   return TABLE_PALETTES[(groupIndex ?? 0) % TABLE_PALETTES.length];
 }
 
+/**
+ * rich-static HTML 문자열로 그리는 표(workspace*.ts 30여 곳)가 `EditableTable`과 같은 서식을
+ * 쓰도록 하는 인라인 CSS 조각. 그쪽은 React 컴포넌트가 아니라 문자열이라 토큰 값을 그대로
+ * 못 쓰고 `style="..."` 문자열이 필요하다.
+ *
+ * 원본 3쪽·37쪽 실측 확인(2026-08-25): 개요 표든 문항 표든 테두리는 전부 팔레트 색
+ * (#6182d6)이고 회색(#d4d4d8)이 아니다. 배경색은 표마다 다르지만(제목행 #c0cdef 또는
+ * #dfe6f7) 테두리·글자 크기·행 높이는 문서 전체가 같다.
+ */
+export function dataTableCss(paletteIndex = 0) {
+  const palette = tablePalette(paletteIndex);
+  const base = `border:${DATA_TABLE.borderWidth}pt solid ${palette.border};height:${DATA_TABLE.rowHeight}pt;padding:3pt 6pt;font-size:${DATA_TABLE.fontSize}pt`;
+  return {
+    palette,
+    /** 표가 아닌 박스(감정분석 패널 등)도 같은 테두리를 쓸 때 */
+    border: `${DATA_TABLE.borderWidth}pt solid ${palette.border}`,
+    /** `<table style="...">` */
+    table: "border-collapse:collapse;width:100%;color:#111827",
+    /** 표 첫 행(제목). 원본은 제목을 표 바깥 박스가 아니라 표의 첫 행으로 쓴다. */
+    title: `${base};background-color:${palette.title};text-align:center;font-weight:700`,
+    /** 머리글 행 / 라벨 열 */
+    header: `${base};background-color:${palette.header};text-align:center;font-weight:700;vertical-align:middle`,
+    /** 값 칸(가운데 정렬) */
+    cell: `${base};text-align:center;vertical-align:middle`,
+    /** 서술형 칸(왼쪽 정렬) */
+    cellLeft: `${base};text-align:left;vertical-align:top;line-height:1.6`,
+    /** 배경색만 바꿔 쓰는 경우(극성 표의 긍정/부정/중립 등) */
+    cellWith: (background: string) => `${base};text-align:center;vertical-align:middle;background-color:${background}`,
+  } as const;
+}
+
 const ROMAN_GLYPHS: Record<string, string> = {
   I: "Ⅰ", II: "Ⅱ", III: "Ⅲ", IV: "Ⅳ", V: "Ⅴ",
   VI: "Ⅵ", VII: "Ⅶ", VIII: "Ⅷ", IX: "Ⅸ",

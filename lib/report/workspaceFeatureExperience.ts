@@ -1,5 +1,6 @@
 import type { QuestionWithApprovedCategories } from "@/lib/db/reports";
 import type { QuantStats } from "@/lib/quant/compute";
+import { quadrantItems } from "@/lib/report/quadrantItems";
 import { meanChart, workspaceSlug } from "@/lib/report/workspaceCharts";
 import {
   headingBlock,
@@ -105,6 +106,24 @@ function buildFeatureAnalysisText(
   return parts.join("");
 }
 
+/**
+ * 중요도-만족도 사분면(L6)과 영역별 참고 지표(L6a). **그릴 수 있을 때만 낸다.**
+ * 성립 조건은 `quadrantItems()` 한 곳에 있다(Ⅸ장 결과 요약도 같은 함수를 쓴다).
+ */
+function quadrantBlocks(stats: QuantStats): ReportBlock[] {
+  const items = quadrantItems(stats);
+  if (items.length === 0) return [];
+
+  return [
+    quadrantBlock({
+      id: "feature-importance-satisfaction-quadrant",
+      title: "기능별 상대 중요도-만족도 그래프",
+      items: items.map((item) => ({ id: workspaceSlug(item.name), ...item })),
+    }),
+    priorityReferenceBlock({ id: "feature-priority-reference", title: "영역별 참고 지표" }),
+  ];
+}
+
 export function buildFeatureSection(
   stats: QuantStats,
   qualitative: QuestionWithApprovedCategories[],
@@ -143,17 +162,7 @@ export function buildFeatureSection(
       headers: ["순위", "기능", "상대 중요도"],
       rows: rankedImportance.map((item, index) => [`${index + 1}위`, item.name, item.score]),
     }),
-    quadrantBlock({
-      id: "feature-importance-satisfaction-quadrant",
-      title: "기능별 상대 중요도-만족도 그래프",
-      items: rankedImportance.map((item) => ({
-        id: workspaceSlug(item.name),
-        name: item.name,
-        importance: item.score,
-        satisfaction: stats.featureSatisfaction.find((feature) => feature.name === item.name)?.mean ?? 0,
-      })),
-    }),
-    priorityReferenceBlock({ id: "feature-priority-reference", title: "영역별 참고 지표" }),
+    ...quadrantBlocks(stats),
     headingBlock({ id: "feature-analysis-heading", variant: "numbered", number: "2", text: "기능별 고객 경험 분석" }),
     richStaticBlock({
       id: "feature-analysis-summary",

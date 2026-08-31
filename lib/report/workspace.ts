@@ -5,6 +5,7 @@ import type { QuantStats } from "@/lib/quant/compute";
 // 컴파일 시 제거되므로 클라이언트 번들에 DB 클라이언트가 딸려오지 않는다.
 import type { QuestionWithApprovedCategories, CategoryRow, RecommendationRow, SectionAnalyses } from "@/lib/db/reports";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
+import type { SectionPlan } from "@/lib/agent/sectionPlan";
 import { parseFourValueItemTexts } from "@/lib/pipeline/sectionAnalysis";
 import { decodeImprovementLabel } from "@/lib/pipeline/stage2";
 import { buildConclusionSection } from "@/lib/report/workspaceConclusion";
@@ -15,10 +16,13 @@ import { buildCorePurchaseFactorSection } from "@/lib/report/workspaceCorePurcha
 import { buildFourValuesSection } from "@/lib/report/workspaceFourValues";
 import { buildUxQualitySection } from "@/lib/report/workspaceUxQuality";
 import { buildCrossAnalysisSection } from "@/lib/report/workspaceCrossAnalysis";
+import { buildJourneySection } from "@/lib/report/workspaceJourney";
 import { buildNpsSection } from "@/lib/report/workspaceNps";
 import { donutSvg, satisfactionHistogramSvg } from "@/lib/report/chartSvg";
+import { dataTableCss } from "@/lib/report/sectionStyle";
 import {
   headingBlock,
+  isFullQuestionText,
   textBlock,
   richStaticBlock,
   PENDING_QUALITATIVE_NOTICE,
@@ -35,6 +39,8 @@ import {
 // 배너 색상은 원본 이미지 기준: 긍정 연보라(#c0cdef, PDF chartBannerBg와 동일), 부정 연주황,
 // 중립 연회색. RichReportEditor(contenteditable)가 인라인 style을 그대로 렌더링하고,
 // domClipboard가 계산된 스타일을 굳혀 한글 붙여넣기에도 배경색이 유지된다.
+/** 표 서식은 문서 전체가 같은 토큰을 쓴다(sectionStyle.ts). 색·크기 리터럴을 다시 쓰지 말 것. */
+const CSS = dataTableCss();
 const POLARITY_ORDER = ["positive", "negative", "neutral"] as const;
 const POLARITY_LABEL: Record<string, string> = { positive: "긍정", negative: "부정", neutral: "중립" };
 type PolaritySummaryText = Partial<Record<"positive" | "negative" | "neutral" | "combined", string>>;
@@ -128,10 +134,9 @@ function polarityTableHtml(counts: Record<string, number>): string {
   const total = counts.positive + counts.negative + counts.neutral;
   const pct = (n: number) => (total ? ((n / total) * 100).toFixed(1) : "0.0");
   const head = (bg: string, text: string) =>
-    `<td style="border:0.75pt solid #d4d4d8;padding:3pt 10pt;text-align:center;background-color:${bg};font-weight:700">${text}</td>`;
-  const body = (n: number) =>
-    `<td style="border:0.75pt solid #d4d4d8;padding:3pt 10pt;text-align:center">${pct(n)}%<br>(${n}건)</td>`;
-  return `<table style="border-collapse:collapse;margin:4pt auto 8pt"><tbody><tr>${head("#c0cdef", "긍정")}${head("#fde4d0", "부정")}${head("#e8e8e8", "중립")}</tr><tr>${body(counts.positive)}${body(counts.negative)}${body(counts.neutral)}</tr></tbody></table>`;
+    `<td style="${CSS.cellWith(bg)};font-weight:700">${text}</td>`;
+  const body = (n: number) => `<td style="${CSS.cell}">${pct(n)}%<br>(${n}건)</td>`;
+  return `<table style="${CSS.table};width:auto;margin:4pt auto 8pt"><tbody><tr>${head(CSS.palette.title, "긍정")}${head("#fde4d0", "부정")}${head("#e8e8e8", "중립")}</tr><tr>${body(counts.positive)}${body(counts.negative)}${body(counts.neutral)}</tr></tbody></table>`;
 }
 
 /** 극성별 응답 요약([긍정/부정/중립 의견 요약])을 원본 "응답 요약" 박스 형식 HTML로 만든다. */
@@ -188,8 +193,8 @@ function findFeatureSurveyQuestion(stats: QuantStats, featureName: string): { qn
 function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions: QuestionWithApprovedCategories[]): ReportBlock[] {
   const blocks: ReportBlock[] = [];
   let qi = 0;
-  const border = "1px solid #d4d4d8";
-  const panelHead = (title: string) => `<td style="width:50%;vertical-align:top;border:${border};padding:0"><p style="margin:0;background-color:#dfe6f7;color:#315c9c;font-weight:700;text-align:center;padding:5pt">${escapeHtml(title)}</p><div style="padding:6pt">`;
+  const border = CSS.border;
+  const panelHead = (title: string) => `<td style="width:50%;vertical-align:top;border:${border};padding:0"><p style="margin:0;background-color:${CSS.palette.header};color:#315c9c;font-weight:700;text-align:center;padding:5pt">${escapeHtml(title)}</p><div style="padding:6pt">`;
 
   // **이 페이지의 주인은 정량(기능)이고 정성은 있으면 얹는다**(2026-08-25 원본 재대조로 수정).
   // 예전에는 정성 문항을 순회해서 `categories.length === 0`이면 문항을 통째로 건너뛰었는데,
@@ -212,28 +217,28 @@ function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions
     if (q) for (const c of q.categories) if (c.polarity) counts[c.polarity] += c.clause_count;
 
     // (1) Q번호 질문 헤딩(시안 밑줄). 원본은 "Q7. '펫 성장 시스템' 기능의 만족도는 몇 점입니까?"
-    // 형식의 완전한 문장이다 — raw data 헤더는 짧은 라벨("… 기능 만족도")이라, Q번호는 설문
-    // 표에서 도출하되 문장은 정식 표시명(feature.name)으로 표준 형식을 구성한다.
+    // 형식의 완전한 문장이다. raw data 헤더가 전체 문항이면 **그것을 그대로 쓰고**(원문 우선),
+    // 리바랩스처럼 짧은 라벨("… 기능 만족도")이면 정식 표시명으로 표준 문장을 만든다.
     blocks.push(headingBlock({
       id: `${idPrefix}-q${qi}-heading`,
       variant: "question",
       number: survey ? `Q${survey.qno}` : undefined,
-      text: `'${feature.name}' 기능의 만족도는 몇 점입니까?`,
+      text: isFullQuestionText(survey?.question) ? survey!.question : `'${feature.name}' 기능의 만족도는 몇 점입니까?`,
     }));
 
     // (2) 만족도 점수 평균/표준편차 배너 + 만족도 분포도(전체 폭). 원본은 옆에 "주요 키워드
     // 도출" 워드클라우드가 있었지만 사용자 요청으로 제외했다(2026-07-28).
     const meanSdBanner =
-      `<table style="border-collapse:collapse;width:100%;margin:0 0 8pt;font-size:13px"><tbody><tr>` +
-        `<td style="width:66%;background-color:#dfe6f7;text-align:center;font-weight:700;padding:6pt;border:${border}">만족도 점수 평균 : ${feature.mean.toFixed(2)} / 10</td>` +
-        `<td style="background-color:#dfe6f7;text-align:center;font-weight:700;padding:6pt;border:${border}">표준편차 : ${feature.sd.toFixed(2)}</td>` +
+      `<table style="${CSS.table};margin:0 0 8pt"><tbody><tr>` +
+        `<td style="${CSS.header};width:66%">만족도 점수 평균 : ${feature.mean.toFixed(2)} / 10</td>` +
+        `<td style="${CSS.header}">표준편차 : ${feature.sd.toFixed(2)}</td>` +
         `</tr></tbody></table>`;
     const histogram = feature.scoreDistribution ? satisfactionHistogramSvg(feature.scoreDistribution) : `<p style="margin:0;color:#9ca3af;text-align:center">분포 데이터 없음</p>`;
     blocks.push(richStaticBlock({
       id: `${idPrefix}-q${qi}-scorebox`,
       html: meanSdBanner +
-        `<table style="border-collapse:collapse;width:100%;margin:0 0 10pt"><tbody><tr>` +
-        `<td style="vertical-align:top;border:${border};padding:0"><p style="margin:0;background-color:#dfe6f7;color:#315c9c;font-weight:700;text-align:center;padding:5pt">만족도 분포도</p><div style="padding:6pt;text-align:center">${histogram}</div></td>` +
+        `<table style="${CSS.table};margin:0 0 10pt"><tbody><tr>` +
+        `<td style="vertical-align:top;border:${border};padding:0"><p style="margin:0;background-color:${CSS.palette.header};color:#315c9c;font-weight:700;text-align:center;padding:5pt">만족도 분포도</p><div style="padding:6pt;text-align:center">${histogram}</div></td>` +
         `</tr></tbody></table>`,
     }));
 
@@ -252,7 +257,7 @@ function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions
     const donut = donutSvg(counts);
     blocks.push(richStaticBlock({
       id: `${idPrefix}-q${qi}-emotionbox`,
-      html: `<table style="border-collapse:collapse;width:100%;margin:0 0 10pt"><tbody><tr>` +
+      html: `<table style="${CSS.table};margin:0 0 10pt"><tbody><tr>` +
         `${panelHead("주관식 응답 감정 분석")}${donut ? `<div style="text-align:center">${donut}</div>` : ""}${polarityTableHtml(counts)}</div></td>` +
         `${panelHead("응답 요약")}${responseSummaryHtml(q.polarity_summaries, q.question_key)}</div></td>` +
         `</tr></tbody></table>`,
@@ -376,7 +381,7 @@ function valueOpinionColumnHtml(title: string, background: string, categories: C
   const body = categories.length
     ? categories.map((category) => categoryHtml(category, questionKey).join("")).join("")
     : `<p style="margin:0;color:#6b7280">분석된 ${title} 의견이 없습니다.</p>`;
-  return `<td data-quote-section="${escapeHtml(title)} 의견" style="width:50%;vertical-align:top;border:0.75pt solid #9db6e4;padding:10pt;background-color:#ffffff">
+  return `<td data-quote-section="${escapeHtml(title)} 의견" style="width:50%;vertical-align:top;border:${CSS.border};padding:10pt;background-color:#ffffff">
     <p style="margin:0 0 8pt;padding:5pt 8pt;background-color:${background};font-weight:700;text-align:center">${title} 의견</p>
     ${body}
   </td>`;
@@ -400,11 +405,10 @@ function findSurveyQuestion(stats: QuantStats, stage: string, occurrenceIndex: n
 
 /** 원본 32~35쪽 "평균|표준편차" 2열 미니 표. */
 function valueMeanSdTableHtml(mean: number, sd: number): string {
-  const border = "1px solid #d4d4d8";
   return (
-    `<table style="border-collapse:collapse;width:100%;margin:6pt 0 10pt;font-size:13px">` +
-    `<thead><tr><th style="background-color:#dfe6f7;padding:6pt;border:${border}">평균</th><th style="background-color:#dfe6f7;padding:6pt;border:${border}">표준편차</th></tr></thead>` +
-    `<tbody><tr><td style="text-align:center;padding:6pt;border:${border}">전체 ${mean.toFixed(2)}</td><td style="text-align:center;padding:6pt;border:${border}">${sd.toFixed(2)}</td></tr></tbody>` +
+    `<table style="${CSS.table};margin:6pt 0 10pt">` +
+    `<thead><tr><th style="${CSS.header}">평균</th><th style="${CSS.header}">표준편차</th></tr></thead>` +
+    `<tbody><tr><td style="${CSS.cell}">전체 ${mean.toFixed(2)}</td><td style="${CSS.cell}">${sd.toFixed(2)}</td></tr></tbody>` +
     `</table>`
   );
 }
@@ -436,9 +440,9 @@ export function valueSummaryBoxHtml(label: string, summaries: PolaritySummaryTex
     ? `<button type="button" data-copy-ignore contenteditable="false" data-ai-summary="${escapeHtml(questionKey)}" style="float:right;border:1px solid #315c9c;border-radius:3pt;background:#ffffff;color:#315c9c;padding:3pt 7pt;font-size:9pt;font-weight:700;cursor:pointer">AI 요약 생성</button>`
     : "";
   return (
-    `<table style="border-collapse:collapse;width:100%;margin:0 0 14pt"><tbody>` +
-    `<tr><td style="background-color:#dfe6f7;color:#000000;font-weight:700;text-align:center;padding:6pt;border:1px solid #d4d4d8">${action}[ ${escapeHtml(label)} 조사 결과 ]</td></tr>` +
-    `<tr><td style="padding:8pt;border:1px solid #d4d4d8;line-height:1.6">${text ? formattedText : "정성 요약이 아직 없습니다. 이 박스의 AI 요약 생성 버튼으로 채울 수 있습니다."}</td></tr>` +
+    `<table style="${CSS.table};margin:0 0 14pt"><tbody>` +
+    `<tr><td style="${CSS.header};color:#000000">${action}[ ${escapeHtml(label)} 조사 결과 ]</td></tr>` +
+    `<tr><td style="${CSS.cellLeft};padding:8pt">${text ? formattedText : "정성 요약이 아직 없습니다. 이 박스의 AI 요약 생성 버튼으로 채울 수 있습니다."}</td></tr>` +
     `</tbody></table>`
   );
 }
@@ -470,7 +474,7 @@ function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questio
       const negative = question.categories.filter((category) => category.polarity === "negative");
       blocks.push(richStaticBlock({
         id: `${idPrefix}-opinion-box-${index + 1}`,
-        html: `${quoteGroupStart(question.question_key, "긍정·부정 의견")}<table style="width:100%;border-collapse:collapse;margin:0 0 10pt"><tbody><tr>${valueOpinionColumnHtml("긍정", "#dce7fa", positive, question.question_key)}${valueOpinionColumnHtml("부정", "#fde4d0", negative, question.question_key)}</tr></tbody></table></div>`,
+        html: `${quoteGroupStart(question.question_key, "긍정·부정 의견")}<table style="${CSS.table};margin:0 0 10pt"><tbody><tr>${valueOpinionColumnHtml("긍정", "#dce7fa", positive, question.question_key)}${valueOpinionColumnHtml("부정", "#fde4d0", negative, question.question_key)}</tr></tbody></table></div>`,
       }));
       blocks.push(richStaticBlock({
         id: `${idPrefix}-summary-${index + 1}`,
@@ -585,7 +589,7 @@ function questionText(stats: QuantStats, questionNo: number, fallback: string): 
 function originalAnalysisPanelHtml(title: string, content: string, actionHtml = ""): string {
   return [
     `<div style="margin:6pt 0 12pt;border:0.75pt solid #8ea7de;border-top:3pt solid #4fc8e8;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.8pt;line-height:1.75;color:#111827">`,
-    `<p style="margin:0;padding:7pt 10pt;text-align:center;background-color:#bdcbed;border-bottom:0.75pt solid #8ea7de;font-weight:700;color:#111827">${actionHtml}[ ${escapeHtml(title)} ]</p>`,
+    `<p style="margin:0;padding:7pt 10pt;text-align:center;background-color:${CSS.palette.title};border-bottom:${CSS.border};font-weight:700;color:#111827">${actionHtml}[ ${escapeHtml(title)} ]</p>`,
     `<div style="padding:10pt 14pt">${content}</div>`,
     `</div>`,
   ].join("");
@@ -635,6 +639,24 @@ export function sectionAnalysisPanelHtml(section: SectionAnalysisRegenKey, analy
 }
 
 /** 저장된 raw data 정량 결과와 이미 생성된 결과 요약을 편집 가능한 웹 섹션 콘텐츠로 변환한다. */
+/**
+ * 옛 고정 목차(리바랩스 기준 9장)의 출력 번호 → 표준목차 시트 식별자.
+ *
+ * 둘은 **같지 않다**. 시트에는 조건부 장인 `IV 고객 여정`이 네 번째 자리에 있어서, 리바랩스처럼
+ * 그 장이 없는 데이터는 다섯 번째 장(핵심구매요소)이 출력 번호로는 Ⅳ가 된다. 옛 경로는 이
+ * 어긋남 없이 번호를 그대로 키로 썼으므로, 새 키(식별자)로 옮기면서 한 번만 변환한다.
+ *
+ * ponytail: 옛 고정 목차(`buildReportPlan`)가 지워지면 이 표도 같이 지운다.
+ */
+const LEGACY_ID_BY_NUMERAL: Record<string, string> = {
+  IV: "V", // 핵심구매요소
+  V: "VI", // 4대 가치 만족도
+  VI: "VII", // 사용자 경험 품질 평가
+  VII: "VIII", // 교차 분석
+  VIII: "IX", // 종합 만족도 및 NPS 지수
+  IX: "X", // 종합 결과 및 제언
+};
+
 export function buildReportWorkspaceSeed(input: {
   quantStats: QuantStats;
   productInfo?: ProductInfo | null;
@@ -646,6 +668,12 @@ export function buildReportWorkspaceSeed(input: {
   recommendations?: RecommendationRow[] | null;
   /** DB에 저장된 섹션 단위 정성 분석(Ⅲ.2·Ⅳ·Ⅴ.2·Ⅵ.2). 없으면 규칙 기반 fallback/대기 표시. */
   sectionAnalyses?: SectionAnalyses | null;
+  /**
+   * 역할 분류 에이전트가 만든 장 목록(PRD 2.2.2절 3단계). 주면 **그 데이터에 실제로 있는
+   * 장만** 그 순서·번호로 나온다(케어클은 고객 여정 장이 생기고, 정리습관은 가치·UX 장이
+   * 빠진다). 없으면 예전처럼 리바랩스 기준 9장 고정 목차를 쓴다.
+   */
+  sectionPlan?: SectionPlan | null;
 }): ReportWorkspaceSeed {
   const { productInfo, fileName, resultSummary } = input;
   const stats = normalizeQuantStats(input.quantStats);
@@ -654,9 +682,12 @@ export function buildReportWorkspaceSeed(input: {
   const sa = input.sectionAnalyses ?? {};
   const plan = buildReportPlan(stats.featureSatisfaction.map((f) => f.name));
 
-  const blocksByNumeral: Record<string, ReportBlock[]> = {
+  // 키는 **표준목차 시트의 고정 식별자**(I~X)다. 출력 번호(numeral)는 생성된 장에만 순서대로
+  // 붙으므로 키로 쓰면 안 된다 — 이젠오토는 교차 분석이 여섯 번째 장이지만 식별자는 VIII이다.
+  const blocksById: Record<string, ReportBlock[]> = {
     I: buildOverviewSection(stats, productInfo, fileName),
     II: buildDemographicsSection(stats),
+    IV: buildJourneySection(stats),
     III: buildFeatureSection(stats, qual, sa.featureExperience, {
       featureQualitativeBlocks,
       questionsByKeyPrefix,
@@ -666,13 +697,13 @@ export function buildReportWorkspaceSeed(input: {
       originalAnalysisPanelHtml,
       sectionAiRegenerateButtonHtml: () => sectionAiRegenerateButtonHtml("featureExperience"),
     }),
-    IV: buildCorePurchaseFactorSection(stats, sa.corePurchaseFactor, {
+    V: buildCorePurchaseFactorSection(stats, sa.corePurchaseFactor, {
       questionText,
       sectionAnalysisPanelHtml: (analysis) => sectionAnalysisPanelHtml("corePurchaseFactor", analysis),
       originalAnalysisPanelHtml,
       sectionAiRegenerateButtonHtml: () => sectionAiRegenerateButtonHtml("corePurchaseFactor"),
     }),
-    V: buildFourValuesSection(stats, qual, sa.fourValues, sa.fourValueItems, {
+    VI: buildFourValuesSection(stats, qual, sa.fourValues, sa.fourValueItems, {
       fourValueQualitativeBlocks,
       questionsByKeyPrefix,
       sectionAnalysisPanelHtml: (analysis) => sectionAnalysisPanelHtml("fourValues", analysis),
@@ -680,25 +711,33 @@ export function buildReportWorkspaceSeed(input: {
       originalAnalysisPanelHtml,
       sectionAiRegenerateButtonHtml: () => sectionAiRegenerateButtonHtml("fourValues"),
     }),
-    VI: buildUxQualitySection(stats, sa.uxQuality, {
+    VII: buildUxQualitySection(stats, sa.uxQuality, {
       sectionAnalysisPanelHtml: (analysis) => sectionAnalysisPanelHtml("uxQuality", analysis),
       originalAnalysisPanelHtml,
       sectionAiRegenerateButtonHtml: () => sectionAiRegenerateButtonHtml("uxQuality"),
     }),
-    VII: buildCrossAnalysisSection(stats, sa.crossAnalysis),
-    VIII: buildNpsSection(stats, qual, {
+    VIII: buildCrossAnalysisSection(stats, sa.crossAnalysis),
+    IX: buildNpsSection(stats, qual, {
       questionsByKeys,
       findSurveyQuestion,
       qualitativeBlock,
     }),
-    IX: buildConclusionSection(stats, resultSummary, qual, recommendations),
+    X: buildConclusionSection(stats, resultSummary, qual, recommendations),
   };
 
-  const sections: ReportSectionContent[] = plan.map((section) => ({
-    numeral: section.numeral,
-    title: section.title,
-    blocks: blocksByNumeral[section.numeral] ?? [],
-  }));
+  // 에이전트 목차가 있으면 **그 데이터에 실제로 있는 장만** 그 순서·번호로 낸다.
+  // 없으면 예전처럼 리바랩스 기준 9장 고정 목차(numeral이 곧 식별자였다).
+  const sections: ReportSectionContent[] = input.sectionPlan
+    ? input.sectionPlan.chapters.map((chapter) => ({
+      numeral: chapter.numeral,
+      title: chapter.title,
+      blocks: blocksById[chapter.id] ?? [],
+    }))
+    : plan.map((section) => ({
+      numeral: section.numeral,
+      title: section.title,
+      blocks: blocksById[LEGACY_ID_BY_NUMERAL[section.numeral] ?? section.numeral] ?? [],
+    }));
 
   return { quantStats: stats, productInfo, resultSummary, sections };
 }

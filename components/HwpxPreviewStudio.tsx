@@ -186,7 +186,7 @@ export function HwpxPreviewStudio({
 
           <A4Page className="p-[15mm]" id="preview-analysis">
             <div className="border-t-4 border-[#48c1e0] border-x border-b border-[#89a3dd]">
-              <p className="bg-[#bdcbed] px-5 py-3 text-center text-xl font-bold">[ 기능별 중요 순위 및 만족도 종합 해석 ]</p>
+              <p className="bg-[#c0cdef] px-5 py-3 text-center text-xl font-bold">[ 기능별 중요 순위 및 만족도 종합 해석 ]</p>
               <div className="p-8" data-hwpx-edit-key="feature:analysis" contentEditable suppressContentEditableWarning>
                 {analysisHtml ? <div className="report-rich-static leading-8" dangerouslySetInnerHTML={{ __html: analysisHtml }} /> : <p className="text-[#6c7c90]">정성 분석 결과가 저장되면 이 영역에 반영됩니다.</p>}
               </div>

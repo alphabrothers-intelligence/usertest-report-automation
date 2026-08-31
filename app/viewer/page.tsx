@@ -9,7 +9,7 @@ const VALID_NUMERALS = new Set(["I", "II", "III", "IV", "V", "VI", "VII", "VIII"
 export default async function ViewerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ pdf?: string | string[]; source?: string | string[]; section?: string | string[] }>;
+  searchParams: Promise<{ pdf?: string | string[]; source?: string | string[]; section?: string | string[]; dataset?: string | string[] }>;
 }) {
   const params = await searchParams;
   const pdfUrl = typeof params.pdf === "string" && params.pdf.startsWith("/api/download?")
@@ -25,5 +25,8 @@ export default async function ViewerPage({
     : undefined;
   // source 없이 스튜디오를 열었을 때도 빈 화면이 아니라, 사용자가 즉시 양식·차트·복사를
   // 검토할 수 있도록 리바랩스 정량 예시를 기본으로 연다.
-  return <ReportStudio pdfUrl={pdfUrl} sourceFileUrl={sourceFileUrl} initialSection={initialSection} demo={!sourceFileUrl} />;
+  // ?dataset=carecl 처럼 다른 예시 raw data로 열 수 있다(리바랩스 외 4종). 목차·도표가 데이터마다
+  // 어떻게 달라지는지 원본과 나란히 보기 위한 통로다.
+  const demoDataset = typeof params.dataset === "string" ? params.dataset : undefined;
+  return <ReportStudio pdfUrl={pdfUrl} sourceFileUrl={sourceFileUrl} initialSection={initialSection} demo={!sourceFileUrl} demoDataset={demoDataset} />;
 }

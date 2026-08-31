@@ -38,7 +38,10 @@ body {
   font-family: "맑은 고딕", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
 }
 
-/* 리바랩스 원본 HWPX(section1.xml)의 표 비율·색상값을 그대로 기준으로 한 /hwpx-preview 전용 규칙 */
+/* 리바랩스 원본 HWPX(section1.xml)의 표 비율·색상값을 그대로 기준으로 한 /hwpx-preview 전용 규칙.
+   테두리 #6182d6 · 제목행 #c0cdef · 머리글 #dfe6f7은 lib/report/sectionStyle.ts의
+   TABLE_PALETTES와 같은 값이다(원본 8쪽 픽셀 샘플링으로 확인, 2026-08-25). CSS라 토큰을
+   직접 못 읽으므로 값을 옮겨 적었다 — 팔레트를 바꾸면 여기도 같이 고칠 것. */
 .rivalabs-reference-page {
   font-family: "맑은 고딕", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   font-size: 11.5pt;
@@ -101,19 +104,19 @@ body {
 .rivalabs-score-strip {
   display: grid;
   grid-template-columns: 2fr 1fr;
-  border-top: 1px solid #6b87d6;
-  border-bottom: 1px solid #6b87d6;
+  border-top: 1px solid #6182d6;
+  border-bottom: 1px solid #6182d6;
   background: #dfe6f7;
   text-align: center;
   font-size: 12pt;
 }
 .rivalabs-score-strip > * { display: grid; place-content: center; min-height: 13mm; padding: 2mm; }
-.rivalabs-score-strip > span { border-left: 1px solid #6b87d6; }
+.rivalabs-score-strip > span { border-left: 1px solid #6182d6; }
 .rivalabs-score-strip small { margin-top: 1mm; font-size: 8.5pt; font-style: italic; font-weight: 400; text-align: right; }
 .rivalabs-overview-table { width: 100%; margin: 6mm 0 9mm; border-collapse: collapse; table-layout: fixed; font-size: 11.5pt; }
-.rivalabs-overview-table th, .rivalabs-overview-table td { border: 1px solid #6b87d6; padding: 2.6mm 3mm; vertical-align: middle; }
+.rivalabs-overview-table th, .rivalabs-overview-table td { border: 1px solid #6182d6; padding: 2.6mm 3mm; vertical-align: middle; }
 .rivalabs-overview-table th { background: #dfe6f7; text-align: center; font-weight: 700; }
-.rivalabs-overview-table > tbody > tr:first-child > th { background: #d6e0f4; color: #111827; font-size: 15pt; }
+.rivalabs-overview-table > tbody > tr:first-child > th { background: #c0cdef; color: #111827; font-size: 15pt; }
 .rivalabs-overview-table > tbody > tr > th:first-child { width: 18%; }
 .rivalabs-overview-table td[contenteditable="true"] { outline: none; }
 .rivalabs-overview-table td[contenteditable="true"]:focus { background: #f8fbff; box-shadow: inset 0 0 0 2px #8eb5ec; }
@@ -137,17 +140,17 @@ body {
 .rivalabs-image-add--overlay > span, .rivalabs-image-add--overlay small { display: none; }
 .rivalabs-image-add--overlay strong { font-size: 8pt; }
 .rivalabs-image-slots--wordcloud .rivalabs-image-add { min-height: 59mm; }
-.rivalabs-two-column { display: grid; grid-template-columns: 2fr 1fr; border: 1px solid #6b87d6; }
-.rivalabs-cell + .rivalabs-cell { border-left: 1px solid #6b87d6; }
-.rivalabs-cell-title { margin: 0; padding: 2.3mm 2mm; border-bottom: 1px solid #6b87d6; background: #bdcbed; text-align: center; font-size: 14pt; font-weight: 700; }
+.rivalabs-two-column { display: grid; grid-template-columns: 2fr 1fr; border: 1px solid #6182d6; }
+.rivalabs-cell + .rivalabs-cell { border-left: 1px solid #6182d6; }
+.rivalabs-cell-title { margin: 0; padding: 2.3mm 2mm; border-bottom: 1px solid #6182d6; background: #c0cdef; text-align: center; font-size: 14pt; font-weight: 700; }
 .rivalabs-chart-slot { min-height: 59mm; overflow: hidden; padding: 3mm; }
 .rivalabs-chart-slot > table { width: 100% !important; margin: 0 !important; }
 .rivalabs-chart-slot > table td { border: 0 !important; padding: 0 !important; }
 .rivalabs-chart-slot svg { width: 100%; height: 53mm; }
-.rivalabs-emotion-frame { margin: 0; overflow: hidden; border: 1px solid #6b87d6; }
+.rivalabs-emotion-frame { margin: 0; overflow: hidden; border: 1px solid #6182d6; }
 .rivalabs-emotion-frame > table, .rivalabs-emotion-frame > div > div > table { width: 100% !important; margin: 0 !important; border-collapse: collapse !important; table-layout: fixed !important; }
 .rivalabs-emotion-frame > table > tbody > tr > td, .rivalabs-emotion-frame > div > div > table > tbody > tr > td { width: 50% !important; padding: 0 !important; vertical-align: top; }
-.rivalabs-emotion-frame > table > tbody > tr > td + td, .rivalabs-emotion-frame > div > div > table > tbody > tr > td + td { border-left: 1px solid #6b87d6 !important; }
+.rivalabs-emotion-frame > table > tbody > tr > td + td, .rivalabs-emotion-frame > div > div > table > tbody > tr > td + td { border-left: 1px solid #6182d6 !important; }
 .rivalabs-emotion-frame p { font-family: inherit !important; }
 .rivalabs-emotion-frame svg { display: block; width: min(100%, 92mm) !important; max-width: 100%; height: auto; margin: 4mm auto 0; }
 .rivalabs-emotion-frame td table { width: 100% !important; margin: 4mm 0 0 !important; border-collapse: collapse !important; }
@@ -168,10 +171,10 @@ body {
 .rivalabs-opinion-detail { outline: none; }
 .rivalabs-opinion-detail > div > p:first-child { margin-top: 0; }
 .rivalabs-opinion-detail p { font-family: inherit !important; }
-.rivalabs-conclusion-table { display: grid; grid-template-columns: 33mm 1fr; border: 1px solid #6b87d6; }
-.rivalabs-conclusion-label, .rivalabs-conclusion-head, .rivalabs-conclusion-body { border-right: 1px solid #6b87d6; border-bottom: 1px solid #6b87d6; }
+.rivalabs-conclusion-table { display: grid; grid-template-columns: 33mm 1fr; border: 1px solid #6182d6; }
+.rivalabs-conclusion-label, .rivalabs-conclusion-head, .rivalabs-conclusion-body { border-right: 1px solid #6182d6; border-bottom: 1px solid #6182d6; }
 .rivalabs-conclusion-label { display: grid; place-items: center; padding: 4mm 2mm; background: #dfe6f7; text-align: center; font-weight: 700; }
-.rivalabs-conclusion-head { padding: 4mm; background: #bdcbed; text-align: center; font-weight: 700; }
+.rivalabs-conclusion-head { padding: 4mm; background: #c0cdef; text-align: center; font-weight: 700; }
 .rivalabs-conclusion-body { min-width: 0; padding: 5mm; }
 .rivalabs-conclusion-table > :nth-last-child(-n+2) { border-bottom: 0; }
 .rivalabs-conclusion-table > :nth-child(2n) { border-right: 0; }
@@ -189,8 +192,8 @@ body {
 .rivalabs-generic-rich { margin: 4mm 0 7mm; outline: none; }
 .rivalabs-generic-rich table { width: 100% !important; max-width: 100%; font-family: inherit !important; }
 .rivalabs-generic-rich p { font-family: inherit !important; }
-.rivalabs-data-table, .rivalabs-data-chart, .rivalabs-nps, .rivalabs-polarity { margin: 5mm 0 8mm; border: 1px solid #6b87d6; }
-.rivalabs-data-table > p, .rivalabs-data-chart > p, .rivalabs-data-chart > figcaption, .rivalabs-nps > p, .rivalabs-polarity > p { margin: 0; padding: 2.4mm; background: #bdcbed; text-align: center; font-weight: 700; }
+.rivalabs-data-table, .rivalabs-data-chart, .rivalabs-nps, .rivalabs-polarity { margin: 5mm 0 8mm; border: 1px solid #6182d6; }
+.rivalabs-data-table > p, .rivalabs-data-chart > p, .rivalabs-data-chart > figcaption, .rivalabs-nps > p, .rivalabs-polarity > p { margin: 0; padding: 2.4mm; background: #c0cdef; text-align: center; font-weight: 700; }
 .rivalabs-data-table table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .rivalabs-data-table th { background: #dfe6f7; font-weight: 700; }
 .rivalabs-data-table th, .rivalabs-data-table td { overflow-wrap: anywhere; border: 1px solid #a5b4d8; padding: 2.5mm; text-align: center; vertical-align: middle; }
@@ -288,6 +291,17 @@ body {
   @page { size: A4 portrait; margin: 0; }
   html, body { width: 210mm; background: #fff !important; }
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* 화면 전용 편집 컨트롤은 인쇄물에 찍히면 안 된다("PNG 다운로드", "클릭하면 바로 내용을
+     수정할 수 있습니다", "AI 요약 생성" 등). 이 요소들은 이미 `data-copy-ignore`로 "보고서
+     내용이 아님"이라고 표시돼 있는데, 그 표시는 클립보드에만 적용되고 인쇄에는 적용되지
+     않았다(2026-08-25 실측).
+
+     다만 **복사 제외와 인쇄 제외는 다른 문제다** — 페이지 푸터와 담당자가 붙인 이미지는
+     한글로 복사되면 안 되지만 인쇄는 돼야 한다. 그래서 `data-print-keep`으로 되살리고,
+     그 안의 첨부/삭제 버튼만 다시 숨긴다. */
+  [data-copy-ignore]:not([data-print-keep]) { display: none !important; }
+  [data-print-keep] button, [data-print-keep] label { display: none !important; }
   [data-hwpx-preview] { background: #fff !important; }
   .hwpx-preview-toolbar, .hwpx-preview-nav { display: none !important; }
   [data-hwpx-preview] > div { display: block !important; max-width: none !important; padding: 0 !important; }
@@ -330,7 +344,10 @@ body {
     width: 210mm !important;
     max-width: none !important;
     min-height: 297mm !important;
-    padding: 18mm !important;
+    /* 아래쪽이 넓은 이유는 푸터(L15) 자리다. ReportWebDocument.tsx의 pt-/pb- 클래스와
+       useLayoutEffect의 pageContentHeight 계산을 같은 값으로 유지할 것 — 어긋나면 본문이
+       쪽 아래로 넘쳐 브라우저가 이 박스를 인쇄에서 다시 쪼개고 푸터가 다음 쪽으로 밀린다. */
+    padding: 18mm 18mm 26mm !important;
     margin: 0 !important;
     border: 0 !important;
     box-shadow: none !important;

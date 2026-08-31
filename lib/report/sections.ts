@@ -61,6 +61,37 @@ export type ReportGroupedBarBlock = {
   categories: { label: string; values: { series: string; value: number }[] }[];
 };
 
+/**
+ * 고객 여정 시점별 평균 만족도 추이 꺾은선(레이아웃 L13, 단계 S4).
+ *
+ * **`points` 순서는 raw data 컬럼 순서 = 시간 순서다. 만족도순으로 정렬하면 안 된다**
+ * (카탈로그 생성 조건). 케어클 원본 34쪽처럼 점마다 값 라벨을 붙인다.
+ */
+export type ReportJourneyLineBlock = {
+  id: string;
+  kind: "journey-line";
+  title: string;
+  unit: string;
+  axisMin: number;
+  axisMax: number;
+  points: { label: string; value: number }[];
+};
+
+/**
+ * 여정 구간별 만족도 증감 워터폴(레이아웃 L13a, 단계 S4).
+ *
+ * L13을 만들면 항상 같이 만든다 — 꺾은선은 "수준", 이건 "어느 구간에서 얼마나 떨어졌는지"를
+ * 보여준다. 순서는 구간 순서로 고정한다(증감 크기순 정렬 금지). 구간 구성 규칙은
+ * `waterfallBlock()` 주석 참고 — **증감이 0인 구간은 막대를 그리지 않는다.**
+ */
+export type ReportWaterfallBlock = {
+  id: string;
+  kind: "waterfall";
+  title: string;
+  unit: string;
+  steps: { label: string; delta: number }[];
+};
+
 /** 사용자 경험 품질 평가의 전체/영역별 방사형 차트. */
 export type ReportRadarBlock = {
   id: string;
@@ -138,6 +169,8 @@ export type ReportHeadingBlock = {
   variant: "numbered" | "question" | "subheading";
   text: string;
   number?: string;
+  /** 문항 척도 주석(`* 불편하다: 0점 / 편하다:10점`). `headingBlock()`이 문항 원문에서 도출한다. */
+  note?: string;
   /** 목차 쪽수 수동 보정값. 비어 있으면 웹의 실제 A4 페이지 묶음에서 자동 계산한다. */
   tocPageOverride?: string;
   /** 웹 A4 레이아웃 측정으로 계산된 쪽수. 내보내기용이며 사용자가 직접 편집하지 않는다. */
@@ -154,6 +187,13 @@ export type ReportTableBlock = {
   headers: string[];
   /** 숫자 셀만 편집 가능 — 문자열 셀(라벨 등)은 읽기 전용으로 렌더링한다. */
   rows: (string | number)[][];
+  /** 전치 표(행이 항목, 열이 순위)처럼 **첫 열이 값이 아니라 행 이름**일 때 켠다.
+   * 켜면 첫 열을 머리글과 같은 배경으로 칠한다. 켜지 않으면 머리글이 빈 표만 자동 판정한다. */
+  labelColumn?: boolean;
+  /** 레이아웃 L27(핵심구매요소별 평균 만족도). 숫자 셀 배경을 최고·최저가 아니라
+   * **NPS 치환 구간**으로 칠하고 표 아래에 원본 범례를 붙인다 — 값에서 바로 나오는
+   * 기준이라 어떤 raw data 든 그대로 쓴다(투블럭 원본 19쪽 실측). */
+  npsBands?: boolean;
 };
 
 export type ReportTextBlock = {
@@ -200,7 +240,7 @@ export type ReportRowGroupBlock = {
   rows: { id: string; label: string; blocks: ReportBlock[] }[];
 };
 
-export type ReportBlock = ReportChartBlock | ReportRankCompositionBlock | ReportStackedBarBlock | ReportGroupedBarBlock | ReportRadarBlock | ReportNpsBlock | ReportQuadrantBlock | ReportPriorityReferenceBlock | ReportPolarityBlock | ReportHeadingBlock | ReportTableBlock | ReportTextBlock | ReportRichStaticBlock | ReportRowGroupBlock;
+export type ReportBlock = ReportChartBlock | ReportJourneyLineBlock | ReportWaterfallBlock | ReportRankCompositionBlock | ReportStackedBarBlock | ReportGroupedBarBlock | ReportRadarBlock | ReportNpsBlock | ReportQuadrantBlock | ReportPriorityReferenceBlock | ReportPolarityBlock | ReportHeadingBlock | ReportTableBlock | ReportTextBlock | ReportRichStaticBlock | ReportRowGroupBlock;
 
 export type ReportSectionContent = {
   numeral: string;
@@ -244,8 +284,36 @@ export function chartBlock(params: {
   };
 }
 
-export function tableBlock(params: { id: string; title?: string; paletteIndex?: number; headers: string[]; rows: (string | number)[][] }): ReportTableBlock {
-  return { id: params.id, kind: "table", title: params.title, paletteIndex: params.paletteIndex, headers: params.headers, rows: params.rows };
+export function tableBlock(params: { id: string; title?: string; paletteIndex?: number; headers: string[]; rows: (string | number)[][]; labelColumn?: boolean; npsBands?: boolean }): ReportTableBlock {
+  return { id: params.id, kind: "table", title: params.title, paletteIndex: params.paletteIndex, headers: params.headers, rows: params.rows, labelColumn: params.labelColumn, npsBands: params.npsBands };
+}
+
+/**
+ * 레이아웃 L27 — 핵심구매요소별 평균 만족도 표(투블럭 원본 19쪽).
+ *
+ * 전치 표라 `tableBlock`과 데이터 모양이 달라 보이지만 실제로는 같다(머리글=순위, 행=항목).
+ * 그래서 새 블록 종류를 만들지 않고 **만족도 내림차순 정렬 + 순위 머리글 구성**만 여기서
+ * 해준다 — 카탈로그가 정한 정렬 규칙(동점은 원본 컬럼 순서로 안정 정렬)을 호출부마다
+ * 다시 쓰지 않게 하려는 것이다.
+ */
+export function purchaseFactorSatisfactionBlock(params: {
+  id: string;
+  items: { name: string; mean: number }[];
+  title?: string;
+}): ReportTableBlock {
+  // sort는 안정 정렬이므로 동점이면 넘겨준 순서(=원본 컬럼 순서)가 유지된다.
+  const ranked = [...params.items].sort((a, b) => b.mean - a.mean);
+  return tableBlock({
+    id: params.id,
+    title: params.title ?? "핵심구매요소별 평균 만족도",
+    headers: ["순위", ...ranked.map((_, index) => `${index + 1}위`)],
+    rows: [
+      ["핵심구매요소", ...ranked.map((item) => item.name)],
+      ["평균 만족도", ...ranked.map((item) => round2(item.mean))],
+    ],
+    labelColumn: true,
+    npsBands: true,
+  });
 }
 
 /** PDF `RankCompositionChart`와 웹 렌더러가 공유하는 순위구성 데이터 계약. */
@@ -304,6 +372,62 @@ export function groupedBarBlock(params: {
     axisMax: params.axisMax ?? 10,
     series: params.series.map((series) => ({ ...series })),
     categories: params.categories.map((category) => ({ ...category, values: category.values.map((value) => ({ ...value, value: round2(value.value) })) })),
+  };
+}
+
+/**
+ * 고객 여정 추이 꺾은선(L13). 시점 순서는 넘겨준 순서를 그대로 유지한다 — 정렬하지 않는다.
+ * 축은 척도 상한(기본 10점)을 그대로 쓴다: 케어클 원본 34쪽이 0~10 정수 눈금이고, 여정
+ * 추이는 "구간별 차이"가 아니라 "수준"을 보는 그래프라 확대 축이 오히려 오해를 만든다
+ * (구간별 차이는 짝인 워터폴 L13a가 보여준다).
+ */
+export function journeyLineBlock(params: {
+  id: string;
+  title: string;
+  points: { label: string; value: number }[];
+  unit?: string;
+  scaleMax?: number;
+}): ReportJourneyLineBlock {
+  return {
+    id: params.id,
+    kind: "journey-line",
+    title: params.title,
+    unit: params.unit ?? "점",
+    axisMin: 0,
+    axisMax: params.scaleMax ?? 10,
+    points: params.points.map((point) => ({ label: point.label, value: round2(point.value) })),
+  };
+}
+
+/**
+ * 여정 구간별 증감 워터폴(L13a). **시점 목록에서 구간을 계산해 만든다** — 호출부가 증감을
+ * 따로 넘기게 하면 꺾은선과 어긋날 수 있다(같은 화면에 나란히 놓이는 짝이라 더 위험하다).
+ *
+ * **증감이 0인 구간은 막대를 그리지 않는다**(2026-08-25 담당자 확인). 케어클 원본 34쪽은
+ * 시점이 6개인데 막대가 4개다 — 첫인상(9.08)→개봉(9.08) 구간이 변화가 없어 빠졌고, 같은 쪽
+ * 위의 표에서도 그 칸만 증감이 `(-)`로 찍혀 있다. 카탈로그(`STAGE_MAPPING.xlsx`
+ * 레이아웃 시트 L13a)에는 "시점이 N개면 막대는 N-1개"로 적혀 있으니 시트도 같이 고칠 것.
+ *
+ * 다만 모든 구간이 0이면(만족도가 처음부터 끝까지 그대로) 그래프가 통째로 비어버리므로,
+ * 그때는 거르지 않고 전부 남긴다 — 빈 그래프보다 "변화 없음"이 보이는 편이 낫다.
+ */
+export function waterfallBlock(params: {
+  id: string;
+  title: string;
+  points: { label: string; value: number }[];
+  unit?: string;
+}): ReportWaterfallBlock {
+  const steps = params.points.slice(1).map((point, index) => ({
+    label: `${params.points[index].label}→${point.label}`,
+    delta: round2(point.value - params.points[index].value),
+  }));
+  const changed = steps.filter((step) => step.delta !== 0);
+  return {
+    id: params.id,
+    kind: "waterfall",
+    title: params.title,
+    unit: params.unit ?? "점",
+    steps: changed.length > 0 ? changed : steps,
   };
 }
 
@@ -393,8 +517,43 @@ export function polarityBlock(params: Omit<ReportPolarityBlock, "kind">): Report
   };
 }
 
+/**
+ * 원본 37쪽 문항 헤더(L10b)는 문항 아래 오른쪽에 척도 주석을 단다:
+ * `Q18. 캣독런의 조작은 [불편하다 / 편하다]` → `* 불편하다: 0점 / 편하다:10점`.
+ *
+ * 이 문구를 따로 입력받지 않고 **문항 원문의 대괄호에서 그대로 도출**한다 — 척도의 양 끝은
+ * 문항 자체에 이미 적혀 있고("raw data가 ground truth"), 그래야 다른 raw data에도 맞는다.
+ * 대괄호가 없는 문항(요약 라벨식 헤더, 인적사항 등)은 척도를 알 수 없으므로 주석을 안 단다 —
+ * 없는 척도를 지어내는 것보다 비우는 게 맞다.
+ */
+export function scaleNoteFromQuestion(text: string): string | null {
+  const match = text.match(/\[\s*([^[\]/]+?)\s*\/\s*([^[\]/]+?)\s*\]/);
+  return match ? `* ${match[1]}: 0점 / ${match[2]}:10점` : null;
+}
+
+/**
+ * raw data 헤더가 **문항 원문**인지(그대로 제목으로 쓸 수 있는지) 판정한다.
+ *
+ * 리바랩스처럼 헤더가 요약 라벨("'펫 꾸미기' 기능 만족도", "실용성1) 조작 편의성")인 raw data가
+ * 있는가 하면, 담당자가 권장대로 전체 문항을 넣은 raw data도 있다(PRD 5.1절, 2026-07-23
+ * 검증 완화). 후자면 원문이 항상 우선이고, 전자면 장별 표준 문장으로 만든다 — 요약 라벨을
+ * 문항 제목 자리에 그대로 넣으면 원본과 형태가 달라진다.
+ */
+export function isFullQuestionText(text: string | undefined | null): boolean {
+  if (!text) return false;
+  return text.trim().endsWith("?") || scaleNoteFromQuestion(text) !== null;
+}
+
 export function headingBlock(params: { id: string; variant: ReportHeadingBlock["variant"]; text: string; number?: string }): ReportHeadingBlock {
-  return { id: params.id, kind: "heading", variant: params.variant, text: params.text, number: params.number };
+  return {
+    id: params.id,
+    kind: "heading",
+    variant: params.variant,
+    text: params.text,
+    number: params.number,
+    // 모든 장의 문항 헤더가 같이 얻도록 호출부가 아니라 여기서 한 번에 도출한다.
+    note: params.variant === "question" ? scaleNoteFromQuestion(params.text) ?? undefined : undefined,
+  };
 }
 
 export function textBlock(params: { id: string; label: string; html: string; pending?: boolean; styled?: boolean }): ReportTextBlock {

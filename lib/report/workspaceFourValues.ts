@@ -1,5 +1,6 @@
 import type { QuestionWithApprovedCategories } from "@/lib/db/reports";
 import type { QuantStats } from "@/lib/quant/compute";
+import { genericOf } from "@/lib/report/genericStats";
 import { meanChart } from "@/lib/report/workspaceCharts";
 import {
   headingBlock,
@@ -55,12 +56,13 @@ export function buildFourValuesSection(
   itemsText: string | undefined,
   services: FourValuesServices,
 ): ReportBlock[] {
-  const rows: { label: string; mean: number; sd: number }[] = [
-    { label: "기능적 가치", mean: stats.fourValues.functional.mean, sd: stats.fourValues.functional.sd },
-    { label: "심미적 가치", mean: stats.fourValues.aesthetic.mean, sd: stats.fourValues.aesthetic.sd },
-    { label: "경제적 가치", mean: stats.fourValues.economic.mean, sd: stats.fourValues.economic.sd },
-    { label: "사회·공공적 가치", mean: stats.fourValues.social.mean, sd: stats.fourValues.social.sd },
-  ];
+  // **축 이름은 raw data 헤더에서, 개수는 방법론에서.** "4대 가치"는 이 조사가 항상 쓰는
+  // 틀의 이름이라 세어서 만들지 않는다(담당자 확인 2026-08-28) — 오분류 하나로 장 제목이
+  // "3대 가치 만족도"가 되면 안 된다. 이름만 데이터에서 오므로 프로젝트마다 문구는 달라진다.
+  const rows = genericOf(stats).valueAxes.map((axis) => ({ label: axis.name, mean: axis.mean, sd: axis.sd }));
+  // 가치 문항을 아예 안 받은 raw data가 있다(정리습관). 그 장은 목차에서 드롭되지만, 빌더는
+  // 목차와 무관하게 먼저 실행되므로 여기서 막지 않으면 빈 배열에 `[0]`을 찍어 죽는다.
+  if (rows.length === 0) return [];
   return [
     headingBlock({ id: "values-result-heading", variant: "numbered", number: "1", text: "4대 가치 만족도 조사 결과" }),
     ...services.fourValueQualitativeBlocks(stats, "four-values-qualitative", services.questionsByKeyPrefix(qualitative, "values:"), itemsText),

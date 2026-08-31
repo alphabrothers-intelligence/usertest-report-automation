@@ -2,7 +2,12 @@ import type { QuestionWithApprovedCategories, RecommendationRow } from "@/lib/db
 import { splitOverallDirection } from "@/lib/pdf/sectionsQualitative";
 import type { QuantStats } from "@/lib/quant/compute";
 import { richTextToHtml } from "@/lib/report/richText";
+import { quadrantItems } from "@/lib/report/quadrantItems";
 import { headingBlock, quadrantBlock, richStaticBlock, rowGroupBlock, type ReportBlock } from "@/lib/report/sections";
+import { dataTableCss, REPORT_TEXT } from "@/lib/report/sectionStyle";
+
+/** 표 서식은 문서 전체가 같은 토큰을 쓴다(sectionStyle.ts). */
+const CSS = dataTableCss();
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -44,20 +49,24 @@ function conclusionFeatureTableHtml(
   const minSatisfaction = Math.min(...rows.map((row) => row.satisfaction));
   const maxImportance = Math.max(...rows.map((row) => row.importance));
   const minImportance = Math.min(...rows.map((row) => row.importance));
+  // 정성 분석 전에는 극성 비율이 전부 0이라 `=== max`가 모든 행에 걸린다 — 값이 없는데
+  // "이게 제일 좋다"고 열 전체를 칠하는 표시가 되므로 max>0일 때만 강조한다(PDF 렌더러가
+  // 겪은 것과 같은 버그, CLAUDE.md 참고).
   const maxPositive = Math.max(...rows.map((row) => row.positive));
   const maxNeutral = Math.max(...rows.map((row) => row.neutral));
   const maxNegative = Math.max(...rows.map((row) => row.negative));
   const cell = (value: string | number, tone?: "best" | "worst" | "neutral") => {
     const background = tone === "best" ? "#dce7f9" : tone === "worst" ? "#fde4d0" : tone === "neutral" ? "#e7e7e7" : "#ffffff";
-    return `<td style="border:0.75pt solid #d4d4d8;padding:5pt 4pt;text-align:center;background-color:${background}">${value}</td>`;
+    return `<td style="${CSS.cellWith(background)}">${value}</td>`;
   };
+  const head = (label: string) => `<th style="${CSS.header}">${label}</th>`;
 
   return [
-    `<table style="border-collapse:collapse;width:100%;table-layout:fixed;margin:0 0 10pt;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:9.5pt;line-height:1.35">`,
-    `<thead><tr style="background-color:#f4f4f5">`,
-    `<th style="border:0.75pt solid #d4d4d8;padding:5pt 3pt">기능명</th><th style="border:0.75pt solid #d4d4d8;padding:5pt 3pt">평균 만족도<br>(점)</th><th style="border:0.75pt solid #d4d4d8;padding:5pt 3pt">상대 중요도</th><th style="border:0.75pt solid #d4d4d8;padding:5pt 3pt">긍정 비율<br>(%)</th><th style="border:0.75pt solid #d4d4d8;padding:5pt 3pt">중립 비율<br>(%)</th><th style="border:0.75pt solid #d4d4d8;padding:5pt 3pt">부정 의견<br>(%)</th>`,
+    `<table style="${CSS.table};table-layout:fixed;margin:0 0 10pt;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;line-height:1.35">`,
+    `<thead><tr>`,
+    head("기능명") + head("평균 만족도<br>(점)") + head("상대 중요도") + head("긍정 비율<br>(%)") + head("중립 비율<br>(%)") + head("부정 의견<br>(%)"),
     `</tr></thead><tbody>`,
-    ...rows.map((row) => `<tr>${cell(escapeHtml(row.name))}${cell(row.satisfaction.toFixed(2), row.satisfaction === maxSatisfaction ? "best" : row.satisfaction === minSatisfaction ? "worst" : undefined)}${cell(row.importance.toFixed(2), row.importance === maxImportance ? "best" : row.importance === minImportance ? "worst" : undefined)}${cell(row.positive.toFixed(1), row.positive === maxPositive ? "best" : undefined)}${cell(row.neutral.toFixed(1), row.neutral === maxNeutral ? "neutral" : undefined)}${cell(row.negative.toFixed(1), row.negative === maxNegative ? "worst" : undefined)}</tr>`),
+    ...rows.map((row) => `<tr>${cell(escapeHtml(row.name))}${cell(row.satisfaction.toFixed(2), row.satisfaction === maxSatisfaction ? "best" : row.satisfaction === minSatisfaction ? "worst" : undefined)}${cell(row.importance.toFixed(2), row.importance === maxImportance ? "best" : row.importance === minImportance ? "worst" : undefined)}${cell(row.positive.toFixed(1), maxPositive > 0 && row.positive === maxPositive ? "best" : undefined)}${cell(row.neutral.toFixed(1), maxNeutral > 0 && row.neutral === maxNeutral ? "neutral" : undefined)}${cell(row.negative.toFixed(1), maxNegative > 0 && row.negative === maxNegative ? "worst" : undefined)}</tr>`),
     `</tbody></table>`,
   ].join("");
 }
@@ -108,8 +117,8 @@ function conclusionStrategyTableHtml(stats: QuantStats, recommendations: Recomme
   const devPriority = recommendations.find((item) => item.section === "dev_priority");
   const overallDirection = recommendations.find((item) => item.section === "overall_direction");
   const featureRecommendations = recommendations.filter((item) => item.section.startsWith("feature_improvement:"));
-  const cell = "border:0.75pt solid #d4d4d8;padding:10pt 12pt;vertical-align:top";
-  const label = "border:0.75pt solid #d4d4d8;padding:10pt 7pt;vertical-align:middle;text-align:center;background-color:#dfe7f6;font-weight:700;width:18%";
+  const cell = `${CSS.cellLeft};padding:10pt 12pt`;
+  const label = `${CSS.header};padding:10pt 7pt;width:18%`;
   const priority = devPriority
     ? richTextToHtml(splitOverallDirection(devPriority.final ?? devPriority.draft).rest ?? devPriority.final ?? devPriority.draft)
     : `<p style="margin:0;color:#6b7280">개발 우선순위 제언은 정성 분석 승인 후 표시됩니다.</p>`;
@@ -122,7 +131,7 @@ function conclusionStrategyTableHtml(stats: QuantStats, recommendations: Recomme
       return `<p style="margin:9pt 0 3pt;font-weight:700"><strong>${index + 1}. ${escapeHtml(title.trim())}</strong></p>${richTextToHtml(body.join("\n"))}`;
     }).join("")
     : `<p style="margin:0;color:#6b7280">기능 개선 제언은 정성 분석 승인 후 표시됩니다.</p>`;
-  return `<table style="border-collapse:collapse;width:100%;margin:0 0 12pt;table-layout:fixed;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.5pt;line-height:1.65"><tbody><tr><td style="${label}">전반적 방향성</td><td style="${cell}">${overall}</td></tr><tr><td style="${label}">개발 우선순위 제언</td><td style="${cell}">${priority}</td></tr><tr><td style="${label}">기능 개선 제안</td><td style="${cell}">${features}</td></tr></tbody></table>`;
+  return `<table style="${CSS.table};margin:0 0 12pt;table-layout:fixed;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif"><tbody><tr><td style="${label}">전반적 방향성</td><td style="${cell}">${overall}</td></tr><tr><td style="${label}">개발 우선순위 제언</td><td style="${cell}">${priority}</td></tr><tr><td style="${label}">기능 개선 제안</td><td style="${cell}">${features}</td></tr></tbody></table>`;
 }
 
 function featureCustomerRecommendationsHtml(recommendations: RecommendationRow[]): string {
@@ -134,12 +143,12 @@ function featureCustomerRecommendationsHtml(recommendations: RecommendationRow[]
   } catch {
     return `<p style="margin:0;color:#b91c1c">기능별 고객 제언 데이터를 읽지 못했습니다.</p>`;
   }
-  const banner = "background-color:#dbe5f5;padding:6pt 8pt;font-weight:700;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.5pt;margin:12pt 0 0";
-  const cell = "border:0.75pt solid #d4d4d8;padding:7pt 10pt;vertical-align:middle;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.5pt";
-  const label = "border:0.75pt solid #d4d4d8;padding:7pt 10pt;vertical-align:middle;text-align:center;background-color:#f3f4f6;font-weight:700;width:18%";
+  const banner = `background-color:${CSS.palette.title};padding:6pt 8pt;font-weight:700;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:${REPORT_TEXT.bodyFontSize}pt;margin:12pt 0 0`;
+  const cell = `${CSS.cellLeft};padding:7pt 10pt;vertical-align:middle`;
+  const label = `${CSS.header};padding:7pt 10pt;width:18%`;
   return parsed.features.map((feature, featureIndex) => {
     const rows = feature.actions.map((action, actionIndex) => `<tr><td style="${label}">고객 제언 ${actionIndex + 1}</td><td style="${cell}">${escapeHtml(action)}</td></tr>`).join("");
-    return `<p style="${banner}">[기능 ${featureIndex + 1}] ${escapeHtml(feature.featureName)}</p><table style="border-collapse:collapse;width:100%;margin:4pt 0 0;table-layout:fixed"><tbody>${rows}</tbody></table>`;
+    return `<p style="${banner}">[기능 ${featureIndex + 1}] ${escapeHtml(feature.featureName)}</p><table style="${CSS.table};margin:4pt 0 0;table-layout:fixed"><tbody>${rows}</tbody></table>`;
   }).join("");
 }
 
@@ -150,6 +159,7 @@ export function buildConclusionSection(
   recommendations: RecommendationRow[],
 ): ReportBlock[] {
   const rankedImportance = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
+  const quadrantSummaryItems = quadrantItems(stats);
   return [
     headingBlock({ id: "conclusion-result-heading", variant: "numbered", number: "1", text: "사용성테스트 결과 요약" }),
     // 원본처럼 머리행부터 마지막 행까지 이어지는 표 하나. 기능별 고객 경험 평가 행만 차트를
@@ -162,16 +172,15 @@ export function buildConclusionSection(
           id: "conclusion-row-feature-experience",
           label: "기능별 고객 경험 평가",
           blocks: [
-            quadrantBlock({
-              id: "conclusion-importance-satisfaction-quadrant",
-              title: "기능별 상대 중요도-만족도 그래프",
-              items: rankedImportance.map((item) => ({
-                id: `conclusion-${slug(item.name)}`,
-                name: item.name,
-                importance: item.score,
-                satisfaction: stats.featureSatisfaction.find((feature) => feature.name === item.name)?.mean ?? 0,
-              })),
-            }),
+            // 사분면은 짝이 맞는 항목이 3개 이상일 때만 그린다(`quadrantItems`). 이젠오토처럼
+            // 순위 문항이 없는 데이터에서 **점이 하나도 없는 빈 격자**가 남던 문제를 막는다.
+            ...(quadrantSummaryItems.length > 0
+              ? [quadrantBlock({
+                id: "conclusion-importance-satisfaction-quadrant",
+                title: "기능별 상대 중요도-만족도 그래프",
+                items: quadrantSummaryItems.map((item) => ({ id: `conclusion-${slug(item.name)}`, ...item })),
+              })]
+              : []),
             richStaticBlock({ id: "conclusion-feature-summary-table", html: conclusionFeatureTableHtml(stats, qualitative, rankedImportance) }),
             richStaticBlock({
               id: "conclusion-feature-summary-bullets",

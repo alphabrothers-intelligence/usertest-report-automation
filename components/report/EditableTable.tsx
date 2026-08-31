@@ -5,7 +5,7 @@
  */
 import { useState } from "react";
 import type { ReportTableBlock } from "@/lib/report/sections";
-import { DATA_TABLE, tablePalette } from "@/lib/report/sectionStyle";
+import { DATA_TABLE, REPORT_TEXT, tablePalette } from "@/lib/report/sectionStyle";
 
 /**
  * 원본 37쪽 실측(2026-08-25)에 맞춘 데이터 표.
@@ -19,6 +19,39 @@ import { DATA_TABLE, tablePalette } from "@/lib/report/sectionStyle";
 function formatCell(value: string | number): string {
   if (typeof value !== "number" || Number.isInteger(value)) return String(value);
   return value.toFixed(2);
+}
+
+/**
+ * NPS 치환 구간 색(레이아웃 L27). 원본 범례 그대로 — 9~10점 긍정(파랑) / 8~7점 중립(흰색) /
+ * 0~6점 부정(주황). 최고·최저 강조가 아니라 **값 자체**로 결정되므로 raw data가 바뀌어도
+ * 같은 기준이 유지된다(투블럭 원본 19쪽 실측: 8.27은 중립이라 흰색이다).
+ */
+function npsBandColor(value: string | number): string | undefined {
+  if (typeof value !== "number") return undefined;
+  if (value >= 9) return "#dce7fa";
+  if (value >= 7) return undefined;
+  return "#fde4d0";
+}
+
+/** 원본 범례. "■"는 서브셋 폰트에 없어 텍스트로 넣으면 깨지므로 색 사각형을 직접 그린다
+ * (CLAUDE.md의 특수문자 사고와 같은 이유).
+ *
+ * 크기·간격을 Tailwind 클래스가 아니라 인라인 스타일로 준다 — 이 컴포넌트는 스타일시트가
+ * 없는 환경(검사 스크립트의 단독 HTML, PNG 내보내기)에서도 렌더되므로, 클래스에 기대면
+ * 스와치가 0×0으로 사라진다(2026-08-25 실측). */
+function NpsBandLegend() {
+  const items: [string, string][] = [["#dce7fa", "'긍정' (9-10점)"], ["#ffffff", "'중립' (8-7점)"], ["#fde4d0", "'부정' (0-6점)"]];
+  return (
+    <p style={{ margin: "4px 0 0", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: "3px 6px", fontSize: `${REPORT_TEXT.noteFontSize}pt`, color: "#111827" }}>
+      <span>*</span>
+      {items.map(([color, label], index) => (
+        <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: "3px" }}>
+          <span aria-hidden style={{ display: "inline-block", width: 9, height: 9, border: "1px solid #94a3b8", backgroundColor: color }} />
+          <span>: NPS 치환 {label}{index < items.length - 1 ? " /" : ""}</span>
+        </span>
+      ))}
+    </p>
+  );
 }
 
 export function EditableTable({ block, onChange }: { block: ReportTableBlock; onChange: (next: ReportTableBlock) => void }) {
@@ -60,11 +93,12 @@ export function EditableTable({ block, onChange }: { block: ReportTableBlock; on
                   const isNumeric = typeof cellValue === "number";
                   // 원본은 머리글이 빈 첫 열(= "전체" 같은 라벨 열)을 헤더와 같은 색으로 칠한다.
                   // 머리글이 있는 일반 표(순위/기능/평균 …)는 첫 열도 흰색 그대로다.
-                  const isLabelColumn = colIndex === 0 && block.headers[0] === "";
+                  const isLabelColumn = colIndex === 0 && (block.labelColumn || block.headers[0] === "");
+                  const band = block.npsBands && !isLabelColumn ? npsBandColor(cellValue) : undefined;
                   return (
                     <td
                       key={colIndex}
-                      style={isLabelColumn ? { ...cell, backgroundColor: palette.header } : cell}
+                      style={isLabelColumn ? { ...cell, backgroundColor: palette.header } : band ? { ...cell, backgroundColor: band } : cell}
                       className={`px-3 text-center align-middle${isLabelColumn ? " font-semibold" : ""}`}
                     >
                       {editingCell === cellId ? (
@@ -88,6 +122,7 @@ export function EditableTable({ block, onChange }: { block: ReportTableBlock; on
           </tbody>
         </table>
       </div>
+      {block.npsBands && <NpsBandLegend />}
     </div>
   );
 }

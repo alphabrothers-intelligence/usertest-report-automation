@@ -38,6 +38,13 @@ alter table reports add column if not exists report_name text;
 alter table reports add column if not exists workspace_draft jsonb;
 alter table reports add column if not exists workspace_draft_saved_at timestamptz;
 
+-- 역할 분류 에이전트(lib/agent/classify.ts)의 판정 결과 + 담당자가 확인 카드에서 고친 내용.
+-- **파일당 한 번만 분류한다**는 것이 이 컬럼의 존재 이유다. 같은 파일을 다시 열어도 처음
+-- 판정 그대로여서, 실행마다 답이 갈리던 흔들림이 실사용에서는 일어나지 않는다
+-- (docs/AGENT_PIPELINE_GUIDE.md 7장 보완책 1). 담당자 수정(overrides)도 같은 JSON에 들어가며
+-- 재분류해도 덮어쓰지 않는다.
+alter table reports add column if not exists role_plan jsonb;
+
 -- 마법사 1단계(제품유형 선택, 2026-08-03 신규)에서 사용자가 명시적으로 고른 값.
 -- null이면 lib/report/productType.ts의 detectProductType() 자동추정으로 폴백한다
 -- (레거시 report·마법사 이전에 만들어진 report 호환).

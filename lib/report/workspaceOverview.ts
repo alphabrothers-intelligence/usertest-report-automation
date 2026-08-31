@@ -1,14 +1,15 @@
 import type { ProductInfo } from "@/lib/productInfo/types";
 import type { QuantStats } from "@/lib/quant/compute";
 import { headingBlock, richStaticBlock, type ReportBlock } from "@/lib/report/sections";
+import { dataTableCss } from "@/lib/report/sectionStyle";
 
+// 원본 3쪽 실측(2026-08-25): 개요 표의 테두리도 문항 표와 같은 팔레트 색(#6182d6)이고,
+// 제목행·라벨 칸은 #dfe6f7, 설문 항목 표 머리글만 한 단계 진한 #c0cdef다. 색·크기는
+// dataTableCss()에서 가져오고 여기서는 원본이 다르게 쓰는 것(글자색·단계 칸)만 둔다.
+const CSS = dataTableCss();
 const OVERVIEW = {
-  labelBg: "#dfe6f7",
   navy: "#315c9c",
-  border: "#d4d4d8",
   subtext: "#52525b",
-  bannerBg: "#c0cdef",
-  stageBg: "#eef2fb",
 } as const;
 
 type OverviewCell = {
@@ -28,22 +29,21 @@ function reportName(productInfo?: ProductInfo | null, fileName?: string | null):
 }
 
 function overviewTableHtml(title: string, rows: OverviewCell[][]): string {
-  const border = `1px solid ${OVERVIEW.border}`;
   const cellHtml = (cell: OverviewCell, valueColSpan: number) => {
-    const labelCell = `<td style="width:110px;background:${OVERVIEW.labelBg};font-weight:700;text-align:center;vertical-align:middle;padding:8px 6px;border:${border}">${escapeHtml(cell.label)}</td>`;
-    const align = cell.alignLeft ? "left" : "center";
+    const labelCell = `<td style="${CSS.header};width:110px">${escapeHtml(cell.label)}</td>`;
+    const base = cell.alignLeft ? CSS.cellLeft : CSS.cell;
     const valign = cell.tall ? "top" : "middle";
     const extra = cell.tall ? "height:150px;" : "";
     const span = valueColSpan > 1 ? ` colspan="${valueColSpan}"` : "";
     const valueCell = cell.value
-      ? `<td${span} style="padding:8px 10px;border:${border};text-align:${align};vertical-align:${valign};line-height:1.5;${extra}">${escapeHtml(cell.value)}</td>`
-      : `<td${span} data-empty-placeholder="true" data-placeholder="입력 필요" style="padding:8px 10px;border:${border};text-align:${align};vertical-align:${valign};color:${OVERVIEW.subtext};${extra}">입력 필요</td>`;
+      ? `<td${span} style="${base};vertical-align:${valign};${extra}">${escapeHtml(cell.value)}</td>`
+      : `<td${span} data-empty-placeholder="true" data-placeholder="입력 필요" style="${base};vertical-align:${valign};color:${OVERVIEW.subtext};${extra}">입력 필요</td>`;
     return labelCell + valueCell;
   };
   const body = rows
     .map((cells) => `<tr>${cells.map((cell) => cellHtml(cell, cells.length === 1 ? 3 : 1)).join("")}</tr>`)
     .join("");
-  return `<table style="border-collapse:collapse;width:100%;border:${border};font-size:13px;color:#111827;margin:0 0 14px"><tbody><tr><td colspan="4" style="background:${OVERVIEW.labelBg};text-align:center;font-weight:700;color:${OVERVIEW.navy};padding:8px 5px;border:${border}">${escapeHtml(title)}</td></tr>${body}</tbody></table>`;
+  return `<table style="${CSS.table};margin:0 0 14px"><tbody><tr><td colspan="4" style="${CSS.header};color:${OVERVIEW.navy}">${escapeHtml(title)}</td></tr>${body}</tbody></table>`;
 }
 
 function overviewBulletsHtml(items: { label: string; value?: string | null }[]): string {
@@ -57,11 +57,10 @@ function overviewBulletsHtml(items: { label: string; value?: string | null }[]):
 }
 
 function surveyTableHtml(surveyQuestions: { stage: string; question: string }[]): string {
-  const border = `1px solid ${OVERVIEW.border}`;
   const headCell = (label: string, width?: string) =>
-    `<th style="${width ? `width:${width};` : ""}background:${OVERVIEW.bannerBg};color:${OVERVIEW.navy};font-weight:700;text-align:center;padding:8px 5px;border:${border}">${label}</th>`;
+    `<th style="${CSS.title};color:${OVERVIEW.navy}${width ? `;width:${width}` : ""}">${label}</th>`;
   if (!surveyQuestions.length) {
-    return `<table style="border-collapse:collapse;width:100%;border:${border};font-size:13px;color:#111827"><thead><tr>${headCell("단계", "120px")}${headCell("문항", "60px")}${headCell("주요 활동")}</tr></thead><tbody><tr><td colspan="3" style="padding:12px;text-align:center;color:${OVERVIEW.subtext};border:${border}">raw data 헤더를 확인하면 설문 문항이 표시됩니다.</td></tr></tbody></table>`;
+    return `<table style="${CSS.table}"><thead><tr>${headCell("단계", "120px")}${headCell("문항", "60px")}${headCell("주요 활동")}</tr></thead><tbody><tr><td colspan="3" style="${CSS.cell};color:${OVERVIEW.subtext}">raw data 헤더를 확인하면 설문 문항이 표시됩니다.</td></tr></tbody></table>`;
   }
   const stages = surveyQuestions.reduce<{ stage: string; questions: string[] }[]>((groups, row) => {
     const last = groups[groups.length - 1];
@@ -75,12 +74,12 @@ function surveyTableHtml(surveyQuestions: { stage: string; question: string }[])
     stage.questions.forEach((question, questionIndex) => {
       questionNumber += 1;
       const stageCell = questionIndex === 0
-        ? `<td rowspan="${stage.questions.length}" style="width:120px;background:${OVERVIEW.stageBg};font-weight:700;text-align:center;vertical-align:middle;padding:6px;border:${border}">${escapeHtml(stage.stage)}</td>`
+        ? `<td rowspan="${stage.questions.length}" style="${CSS.header};width:120px;color:${OVERVIEW.navy}">${escapeHtml(stage.stage)}</td>`
         : "";
-      bodyRows.push(`<tr>${stageCell}<td style="width:60px;font-weight:700;text-align:center;padding:6px 5px;border:${border}">Q${questionNumber}</td><td style="padding:6px 10px;border:${border};line-height:1.4">${escapeHtml(question)}</td></tr>`);
+      bodyRows.push(`<tr>${stageCell}<td style="${CSS.cell};width:60px;font-weight:700">Q${questionNumber}</td><td style="${CSS.cellLeft}">${escapeHtml(question)}</td></tr>`);
     });
   }
-  return `<table style="border-collapse:collapse;width:100%;border:${border};font-size:13px;color:#111827"><thead><tr>${headCell("단계", "120px")}${headCell("문항", "60px")}${headCell("주요 활동")}</tr></thead><tbody>${bodyRows.join("")}<tr><td colspan="3" style="background:${OVERVIEW.bannerBg};color:${OVERVIEW.navy};font-weight:700;text-align:center;padding:8px;border:${border}">총 ${questionNumber} 문항</td></tr></tbody></table>`;
+  return `<table style="${CSS.table}"><thead><tr>${headCell("단계", "120px")}${headCell("문항", "60px")}${headCell("주요 활동")}</tr></thead><tbody>${bodyRows.join("")}<tr><td colspan="3" style="${CSS.header};color:${OVERVIEW.navy}">총 ${questionNumber} 문항</td></tr></tbody></table>`;
 }
 
 export function buildOverviewSection(

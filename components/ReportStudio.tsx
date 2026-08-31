@@ -136,6 +136,7 @@ export function ReportStudio({
   sourceFileUrl,
   initialSection,
   demo = false,
+  demoDataset,
 }: {
   pdfUrl?: string | null;
   /** raw data URL. 저장된 정량 결과를 웹 편집 화면에 불러오는 키다. */
@@ -144,6 +145,8 @@ export function ReportStudio({
   initialSection?: string | null;
   /** source가 없는 직접 진입에서 리바랩스 정량 예시를 표시한다. */
   demo?: boolean;
+  /** ?dataset= 로 고른 예시 raw data(리바랩스 외 4종). 없으면 리바랩스. */
+  demoDataset?: string | null;
 }) {
   const router = useRouter();
   const [sections, setSections] = useState<ReportSectionContent[]>([]);
@@ -176,8 +179,9 @@ export function ReportStudio({
     let cancelled = false;
     const workspaceUrl = sourceFileUrl
       ? `/api/report-workspace?source=${encodeURIComponent(sourceFileUrl)}`
-      : "/api/report-workspace/demo";
-    const draftKey = sourceFileUrl ?? (demo ? "__rivalabs-demo__" : null);
+      : `/api/report-workspace/demo${demoDataset ? `?dataset=${encodeURIComponent(demoDataset)}` : ""}`;
+    // 예시마다 편집 초안을 따로 둔다 — 한 키를 공유하면 케어클 화면에 리바랩스 초안이 덮인다.
+    const draftKey = sourceFileUrl ?? (demo ? `__demo-${demoDataset ?? "rivalabs"}__` : null);
     void fetch(workspaceUrl, { cache: "no-store" })
       .then(async (response) => {
         const payload = await response.json() as {
@@ -222,7 +226,7 @@ export function ReportStudio({
     return () => {
       cancelled = true;
     };
-  }, [sourceFileUrl, demo, reloadNonce]);
+  }, [sourceFileUrl, demo, demoDataset, reloadNonce]);
 
   function retryWorkspaceLoad() {
     setWorkspaceStatus("loading");

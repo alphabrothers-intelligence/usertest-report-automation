@@ -2,6 +2,7 @@ import type { QuestionWithApprovedCategories } from "@/lib/db/reports";
 import type { QuantStats } from "@/lib/quant/compute";
 import { satisfactionHistogramSvg } from "@/lib/report/chartSvg";
 import { richTextToInlineHtml } from "@/lib/report/richText";
+import { dataTableCss } from "@/lib/report/sectionStyle";
 import {
   headingBlock,
   npsBlock,
@@ -19,9 +20,10 @@ export type NpsSectionServices = {
 
 function npsReferenceHtml(stats: QuantStats): string {
   const nps = stats.nps;
+  const css = dataTableCss();
   const rule = "border-top:1.25pt solid #6388e6";
-  const head = "background-color:#c0cdef;border:0.75pt solid #6f86b7;padding:6pt 4pt;text-align:center;font-weight:700";
-  const cell = "border:0.75pt solid #aeb7c9;padding:6pt 4pt;text-align:center";
+  const head = css.title;
+  const cell = css.cell;
   const npsDivider = "border-right:2pt double #4b5563";
   return [
     `<div style="margin:4pt 0 10pt;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:#111827;font-size:10.5pt;line-height:1.7">`,
@@ -39,7 +41,7 @@ function npsReferenceHtml(stats: QuantStats): string {
     `<p style="margin:0 0 4pt">− MVP TEST 내부 DB 분석 결과, NPS 지수가 음수가 나오면 시장성이 낮다고 판단함</p>`,
     `<p style="margin:0">− 실제 제품 사용 경험을 바탕으로 산정한 데이터가 아니기에 음수로 산정될 수 있으며, 지속해서 NPS 지수 추적 관리를 통해 PMF(제품시장적합도)를 높일 필요성이 있음</p>`,
     `</div>`,
-    `<table style="border-collapse:collapse;width:100%;margin:8pt 0 0;table-layout:fixed"><thead><tr>`,
+    `<table style="${css.table};margin:8pt 0 0;table-layout:fixed"><thead><tr>`,
     `<th style="${head}">평균 구매 의향</th><th style="${head};${npsDivider}">NPS 지수</th><th style="${head}">구매 고객<br>(PROMOTERS)</th><th style="${head}">중립 고객<br>(PASSIVES)</th><th style="${head}">비구매 고객<br>(DETRACTORS)</th>`,
     `</tr></thead><tbody><tr>`,
     `<td style="${cell}">${nps.rawMean.toFixed(2)}</td><td style="${cell};${npsDivider}">${nps.npsScore}</td><td style="${cell}">${nps.promoterPct} %</td><td style="${cell}">${nps.passivePct} %</td><td style="${cell}">${nps.detractorPct} %</td>`,
@@ -75,15 +77,16 @@ function overallSatisfactionResultHtml(stats: QuantStats): string {
   const hasDistribution = distribution.some((count) => count > 0);
   const total = distribution.reduce((sum, value) => sum + value, 0) || 1;
   const bracketPct = (start: number, end: number) => Math.round((distribution.slice(start, end + 1).reduce((sum, value) => sum + value, 0) / total) * 1000) / 10;
-  const border = "1px solid #9db6e4";
+  const css = dataTableCss();
+  const border = css.border;
   return [
     `<div style="font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:#111827;font-size:10.5pt;line-height:1.6">`,
     `<div style="border-top:4px solid #4fc8e8;border-left:${border};border-right:${border};border-bottom:${border};padding:0;margin:0 0 10pt">`,
-    `<p style="margin:0;background-color:#c0cdef;padding:5pt;text-align:center;font-weight:700">[ 전반적 만족도 조사 결과 ]</p>`,
+    `<p style="margin:0;background-color:${css.palette.title};padding:5pt;text-align:center;font-weight:700">[ 전반적 만족도 조사 결과 ]</p>`,
     `<div style="padding:7pt;text-align:center">${hasDistribution ? satisfactionHistogramSvg(distribution) : `<p style="margin:20pt 0;color:#64748b">원본 raw data에서 만족도 분포를 불러오는 중입니다.</p>`}</div></div>`,
-    `<table style="border-collapse:collapse;width:100%;margin:0 0 10pt"><thead><tr><th colspan="3" style="background-color:#c0cdef;border:${border};padding:5pt;text-align:center">종합만족도 평가</th></tr><tr><th style="background-color:#dfe6f7;border:${border};padding:5pt">구분</th><th style="background-color:#dfe6f7;border:${border};padding:5pt">평균 만족도</th><th style="background-color:#dfe6f7;border:${border};padding:5pt">표준편차</th></tr></thead><tbody><tr><td style="border:${border};padding:5pt;text-align:center">전체</td><td style="border:${border};padding:5pt;text-align:center">${stats.overallSatisfaction.mean.toFixed(2)}</td><td style="border:${border};padding:5pt;text-align:center">${stats.overallSatisfaction.sd.toFixed(2)}</td></tr></tbody></table>`,
+    `<table style="${css.table};margin:0 0 10pt"><thead><tr><th colspan="3" style="${css.title}">종합만족도 평가</th></tr><tr><th style="${css.header}">구분</th><th style="${css.header}">평균 만족도</th><th style="${css.header}">표준편차</th></tr></thead><tbody><tr><td style="${css.cell}">전체</td><td style="${css.cell}">${stats.overallSatisfaction.mean.toFixed(2)}</td><td style="${css.cell}">${stats.overallSatisfaction.sd.toFixed(2)}</td></tr></tbody></table>`,
     `<p style="margin:7pt 0 3pt;font-weight:700">[만족도 구간별 비율]</p>`,
-    `<table style="border-collapse:collapse;width:100%;margin:0"><thead><tr><th style="background-color:#fde4d0;border:${border};padding:5pt">부정 고객<br>(0~6점)</th><th style="background-color:#e8e8e8;border:${border};padding:5pt">중립 고객<br>(7~8점)</th><th style="background-color:#dce8fb;border:${border};padding:5pt">긍정 고객<br>(9~10점)</th></tr></thead><tbody><tr><td style="border:${border};padding:5pt;text-align:center">${bracketPct(0, 6)}%</td><td style="border:${border};padding:5pt;text-align:center">${bracketPct(7, 8)}%</td><td style="border:${border};padding:5pt;text-align:center">${bracketPct(9, 10)}%</td></tr></tbody></table>`,
+    `<table style="${css.table};margin:0"><thead><tr><th style="${css.cellWith("#fde4d0")};font-weight:700">부정 고객<br>(0~6점)</th><th style="${css.cellWith("#e8e8e8")};font-weight:700">중립 고객<br>(7~8점)</th><th style="${css.cellWith("#dce8fb")};font-weight:700">긍정 고객<br>(9~10점)</th></tr></thead><tbody><tr><td style="${css.cell}">${bracketPct(0, 6)}%</td><td style="${css.cell}">${bracketPct(7, 8)}%</td><td style="${css.cell}">${bracketPct(9, 10)}%</td></tr></tbody></table>`,
     `</div>`,
   ].join("");
 }

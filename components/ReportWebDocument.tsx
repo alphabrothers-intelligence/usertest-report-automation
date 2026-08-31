@@ -17,7 +17,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { QuoteCorrectionPanel } from "@/components/QuoteCorrectionPanel";
-import { ActionPanel, SectionBanner, TableOfContents } from "@/components/report-web-document/ReportDocumentChrome";
+import { ActionPanel, PageFooter, SectionBanner, TableOfContents } from "@/components/report-web-document/ReportDocumentChrome";
 import { ReportBackCoverPage, ReportCoverPage, ReportTocPage } from "@/components/report-web-document/ReportFrontMatter";
 import { AnalysisReferenceContent, QuoteSourceContent } from "@/components/report-web-document/EvidencePanelContent";
 import { BlockView } from "@/components/report-web-document/ReportBlockView";
@@ -143,8 +143,13 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
   useLayoutEffect(() => {
     const root = documentContainerRef.current;
     if (!root || sections.length === 0) return;
+    const measure = () => {
     const pxPerMm = 96 / 25.4;
-    const pageContentHeight = (297 - 36) * pxPerMm;
+    // 297mm에서 쪽 안쪽 여백을 뺀 값 — 아래는 푸터(L15) 자리라 위(18mm)보다 넓다.
+    // **본문 쪽 <section>의 pt-/pb- 클래스와 반드시 같이 고쳐야 한다.** 어긋나면 블록이
+    // 한 쪽 분량을 넘겨 담기고, 브라우저가 그 <section>을 인쇄에서 다시 쪼개면서
+    // 푸터가 다음 쪽으로 밀려난다(2026-08-25 실측).
+    const pageContentHeight = (297 - 18 - 26) * pxPerMm;
     const next: Record<string, string[][]> = {};
     for (const section of sections) {
       const pages: string[][] = [];
@@ -153,7 +158,12 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
       let used = 110;
       for (const block of section.blocks) {
         const element = root.querySelector<HTMLElement>(`[data-report-block-id="${CSS.escape(block.id)}"]`);
-        const height = element ? Math.ceil(element.getBoundingClientRect().height) + 8 : 0;
+        // 블록 사이 간격은 안쪽 요소의 margin-bottom인데, 그 여백은 테두리 없는 래퍼 밖으로
+        // 상쇄돼(margin collapsing) getBoundingClientRect에 안 잡힌다. 고정 8px로 어림하던
+        // 예전 코드는 블록마다 4~5mm씩 적게 세어 쪽이 넘쳤다 — 실제 값을 읽어 더한다.
+        const inner = element?.firstElementChild;
+        const gap = inner ? parseFloat(getComputedStyle(inner).marginBottom) || 0 : 0;
+        const height = element ? Math.ceil(element.getBoundingClientRect().height + Math.max(gap, 8)) : 0;
         if (current.length > 0 && used + height > pageContentHeight) {
           pages.push(current);
           current = [];
@@ -168,6 +178,15 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     setPageGroups((previous) => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
     // 계산 결과를 sections에 다시 기록하면 sections 변경 → 재측정 → setSections가 반복되는
     // 순환이 생긴다. 목차는 pageGroups에서 직접 쪽수를 계산하므로 측정 상태만 갱신한다.
+    };
+    measure();
+    // 이미지 첨부 슬롯·차트는 첫 레이아웃 뒤에 자리를 잡아 블록 높이가 나중에 커진다. 최초
+    // 1회만 재던 예전 코드는 그때의 작은 높이로 쪽을 묶어, 실제로는 322mm짜리 <section>이
+    // 만들어지고 인쇄에서 브라우저가 그 쪽을 다시 쪼개 푸터가 다음 쪽으로 밀렸다
+    // (2026-08-25 실측). 높이가 바뀌면 다시 묶는다 — 값이 같으면 위 JSON 비교에서 멈춘다.
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    return () => observer.disconnect();
   }, [sections]);
 
   if (!reportData || sections.length === 0) {
@@ -192,6 +211,14 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
       </div>
     );
   }
+
+  // 푸터 쪽번호는 표지(1)·목차(2) 다음부터 이어져야 하므로, 장 경계와 무관한 통짜 목록으로 편다.
+  const bodyPages = sections.flatMap((section) => {
+    const groups = pageGroups[section.numeral] ?? [section.blocks.map((block) => block.id)];
+    return groups.map((blockIds, pageIndex) => ({ section, blockIds, pageIndex }));
+  });
+  const footerBrand = productInfo.footerBrandName?.trim() || "Alphabrothers";
+  const footerYear = productInfo.coverDate?.trim().match(/\d{4}/)?.[0] || String(new Date().getFullYear());
 
   return (
     // minmax(0,1fr) 대신 minmax(520px,1fr)를 쓴다 — 0 바닥이면 사이드 패널(특히 분석 근거
@@ -253,9 +280,7 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
       <article ref={documentContainerRef} className="flex min-w-[210mm] flex-col items-start gap-10">
         <ReportCoverPage productInfo={productInfo} onChange={(next) => { checkpoint(); onProductInfoChange(next); }} />
         <ReportTocPage sections={sections} pageGroups={pageGroups} onSectionsChange={(next) => { checkpoint(); setSections(next); }} />
-        {sections.flatMap((section) => {
-          const groups = pageGroups[section.numeral] ?? [section.blocks.map((block) => block.id)];
-          return groups.map((blockIds, pageIndex) => (
+        {bodyPages.map(({ section, blockIds, pageIndex }, bodyIndex) => (
           <section
             key={`${section.numeral}-${pageIndex}`}
             id={pageIndex === 0 ? `section-${section.numeral}` : undefined}
@@ -266,7 +291,7 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
             }}
             data-section-page={section.numeral}
             data-a4-page
-            className="box-border h-auto min-h-[297mm] w-[210mm] scroll-mt-36 overflow-visible border border-[#dfe3e9] bg-white px-[18mm] py-[18mm] shadow-[0_12px_34px_rgba(28,39,55,.11)]"
+            className="relative box-border h-auto min-h-[297mm] w-[210mm] scroll-mt-36 overflow-visible border border-[#dfe3e9] bg-white px-[18mm] pb-[26mm] pt-[18mm] shadow-[0_12px_34px_rgba(28,39,55,.11)]"
           >
             {pageIndex === 0 ? <SectionBanner numeral={section.numeral} title={section.title} /> : null}
             {section.blocks.filter((block) => blockIds.includes(block.id)).map((block) => (
@@ -289,9 +314,9 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
                 />
               </div>
             ))}
+            <PageFooter page={bodyIndex + 3} brand={footerBrand} year={footerYear} />
           </section>
-          ));
-        })}
+        ))}
         <ReportBackCoverPage productInfo={productInfo} onChange={(next) => { checkpoint(); onProductInfoChange(next); }} />
       </article>
       <ActionPanel

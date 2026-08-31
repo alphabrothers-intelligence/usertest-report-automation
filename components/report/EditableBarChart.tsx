@@ -134,7 +134,9 @@ export function EditableBarChart({ block }: { block: ReportChartBlock }) {
 
   return (
     <div className="mb-4">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+      {/* 다른 차트 컴포넌트와 달리 이 툴바에만 data-copy-ignore가 빠져 있어, PNG 버튼이
+          한글 붙여넣기와 인쇄 PDF에 그대로 실렸다(2026-08-25 실측). */}
+      <div className="mb-2 flex flex-wrap items-center gap-2" data-copy-ignore>
         <button type="button" onClick={() => void handleDownload()} className="rounded border border-[#315c9c] px-2 py-1 text-xs font-semibold text-[#315c9c] hover:bg-[#edf3fc]">
           PNG 다운로드
         </button>
