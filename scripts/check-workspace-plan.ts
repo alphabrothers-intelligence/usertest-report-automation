@@ -17,6 +17,7 @@ import { toQuantStats } from "../lib/agent/toQuantStats";
 import { buildSectionPlan } from "../lib/agent/sectionPlan";
 import { toSectionPlanInput } from "../lib/agent/classify";
 import { buildReportWorkspaceSeed } from "../lib/report/workspace";
+import { findValueQuestion } from "../lib/report/workspaceFourValues";
 import { computeQuantStats } from "../lib/quant/compute";
 import { normalizeWallaRows } from "../lib/walla/normalize";
 import { defaultRole, loadStageAnswerKey, type StageCode } from "./stageAnswerKey";
@@ -100,13 +101,31 @@ for (const dataset of loadStageAnswerKey()) {
   const classification = classificationFromSheet(profiles, dataset.stages);
   const roleStats = computeRoleQuantStats(classification, profiles, dataRows);
   const plan = buildSectionPlan(toSectionPlanInput(classification, profiles, dataRows));
-  const seed = buildReportWorkspaceSeed({ quantStats: toQuantStats(roleStats), sectionPlan: plan });
+  const stats = toQuantStats(roleStats);
+  const seed = buildReportWorkspaceSeed({ quantStats: stats, sectionPlan: plan });
 
   console.log(`  ${dataset.name}: ${seed.sections.map((s) => `${s.numeral}.${s.title}`).join(" / ")}`);
   check(`${dataset.name} 목차 = 에이전트 장 목록`, seed.sections.map((s) => s.title), plan.chapters.map((c) => c.title));
   // **장 제목만 나오고 내용이 비면 배선이 끊긴 것이다** — 이 검사가 그걸 잡는다.
   const empty = seed.sections.filter((s) => s.blocks.length === 0).map((s) => s.title);
   check(`${dataset.name} 내용 없는 장`, empty, []);
+
+  // 가치 장의 **문항 목록**이 raw data 의 축을 그대로 따르는가. 예전엔 축이 네 개로 박혀
+  // 있어서, 케어클처럼 축 순서가 다른 데이터는 두 번째 문항에 경제적 가치 점수를 넣고
+  // "심미적 가치"라고 적었다(2026-08-31 실측). 바로 위 조사 결과 표는 이미 배열을 읽고
+  // 있었으므로 같은 장 안에서 표와 문항이 어긋나는 형태였다.
+  const axes = stats.generic?.valueAxes ?? [];
+  const valueSection = seed.sections.find((s) => s.title.includes("가치"));
+  if (axes.length > 0 && valueSection) {
+    const meanSdBlocks = valueSection.blocks.filter((b) => b.id.startsWith("four-values-qualitative-meansd-"));
+    check(`${dataset.name} 가치 문항 수 = 축 수`, meanSdBlocks.length, axes.length);
+    // 순서까지 본다 — 개수만 맞고 순서가 밀리면 값과 이름이 어긋난 채로 통과한다.
+    check(
+      `${dataset.name} 가치 문항 이름·순서`,
+      meanSdBlocks.map((b) => axes.findIndex((axis) => JSON.stringify(b).includes(axis.name))),
+      axes.map((_, i) => i),
+    );
+  }
 }
 
 // 케어클은 시점 문항이 5개라 고객 여정 장이 생긴다 — 리바랩스에는 없는 장이다.
@@ -122,6 +141,35 @@ const journey = cSeed.sections.find((s) => s.title.includes("고객 여정"));
 check("케어클에 고객 여정 장 생성", !!journey, true);
 check("고객 여정에 꺾은선", journey?.blocks.some((b) => b.kind === "journey-line"), true);
 check("고객 여정에 워터폴", journey?.blocks.some((b) => b.kind === "waterfall"), true);
+
+// ── ③ 가치 축 ↔ 정성 문항 잇기 — 문항 키가 경로마다 다르다 ──────────────────────
+// 옛 경로는 `values:functional`(축 이름은 label 에만), 새 경로는 `values:{축 이름}`이다.
+// **이름으로만 이으면 `사회·공공적 가치`가 안 붙는다** — 옛 label 이 `사회·공공적 이슈 가치
+// 만족도`라 부분 문자열이 아니다. 안 붙으면 그 축만 "정성 분석 대기"로 조용히 비어 나간다.
+console.log("\n=== ③ 가치 축 ↔ 정성 문항 ===");
+const asQuestion = (question_key: string, label: string) =>
+  ({ question_key, label, categories: [] } as unknown as Parameters<typeof findValueQuestion>[0][number]);
+
+const legacyQuestions = [
+  asQuestion("values:functional", "기능적 가치 만족도"),
+  asQuestion("values:aesthetic", "심미적 가치 만족도"),
+  asQuestion("values:economic", "경제적 가치 만족도"),
+  asQuestion("values:social", "사회·공공적 이슈 가치 만족도"),
+];
+for (const axis of ["기능적 가치", "심미적 가치", "경제적 가치", "사회·공공적 가치"]) {
+  check(`옛 경로 '${axis}'`, findValueQuestion(legacyQuestions, axis)?.label.startsWith(axis.slice(0, 3)), true);
+}
+
+// 새 경로는 축 이름이 그대로 키다 — 이름이 문장이어도(이젠오토) 붙어야 한다.
+const roleQuestions = [
+  asQuestion("values:기능적 가치 영역 만족도", "기능적 가치 영역 만족도"),
+  asQuestion("values:셀케어의 심미적 가치 영역에 대한 만족도는 몇 점입니까?(copy)", "셀케어의 심미적 가치 영역에 대한 만족도는 몇 점입니까?(copy)"),
+];
+for (const axis of roleQuestions.map((q) => q.label)) {
+  check(`새 경로 '${axis.slice(0, 12)}…'`, findValueQuestion(roleQuestions, axis)?.label, axis);
+}
+// 없는 축에 엉뚱한 문항을 붙이지 않는다.
+check("축이 없으면 안 붙임", findValueQuestion(legacyQuestions, "환경적 가치"), undefined);
 
 console.log(`\n${pass}/${pass + fail} PASS`);
 if (fail > 0) process.exit(1);

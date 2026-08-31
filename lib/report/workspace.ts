@@ -13,7 +13,8 @@ import { buildOverviewSection } from "@/lib/report/workspaceOverview";
 import { buildDemographicsSection } from "@/lib/report/workspaceDemographics";
 import { buildFeatureSection } from "@/lib/report/workspaceFeatureExperience";
 import { buildCorePurchaseFactorSection } from "@/lib/report/workspaceCorePurchaseFactor";
-import { buildFourValuesSection } from "@/lib/report/workspaceFourValues";
+import { buildFourValuesSection, findValueQuestion } from "@/lib/report/workspaceFourValues";
+import { genericOf } from "@/lib/report/genericStats";
 import { buildUxQualitySection } from "@/lib/report/workspaceUxQuality";
 import { buildCrossAnalysisSection } from "@/lib/report/workspaceCrossAnalysis";
 import { buildJourneySection } from "@/lib/report/workspaceJourney";
@@ -453,21 +454,20 @@ function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questio
   // 자동 생성이 아직 없는(구버전 report 등) 경우의 폴백으로만 남긴다. 원본은 이 문단이
   // 선택적("나중에 채울 것")이 아니라 항상 있는 필수 구성요소이기 때문이다.
   const itemTexts = parseFourValueItemTexts(itemsText ?? "");
-  const valueRows: { key: "functional" | "aesthetic" | "economic" | "social"; label: string; mean: number; sd: number }[] = [
-    { key: "functional", label: "기능적 가치", mean: stats.fourValues.functional.mean, sd: stats.fourValues.functional.sd },
-    { key: "aesthetic", label: "심미적 가치", mean: stats.fourValues.aesthetic.mean, sd: stats.fourValues.aesthetic.sd },
-    { key: "economic", label: "경제적 가치", mean: stats.fourValues.economic.mean, sd: stats.fourValues.economic.sd },
-    { key: "social", label: "사회·공공적 가치", mean: stats.fourValues.social.mean, sd: stats.fourValues.social.sd },
-  ];
+  // **축 이름·개수는 raw data 에서 온다**(genericOf). 예전엔 기능적/심미적/경제적/사회·공공적
+  // 네 개를 영문 키까지 박아 읽어서, 축이 3개거나 이름이 다른 raw data 에서는 0.00점짜리
+  // 문항이 네 개 찍혔다 — 바로 위 조사 결과 표(workspaceFourValues)는 이미 배열을 읽고
+  // 있었으므로 같은 장 안에서 표와 문항 목록이 서로 어긋나 있었다.
+  const valueRows = genericOf(stats).valueAxes;
   const blocks: ReportBlock[] = [];
   valueRows.forEach((value, index) => {
-    const question = questions.find((q) => q.question_key === `values:${value.key}`);
+    const question = findValueQuestion(questions, value.name);
     const survey = findSurveyQuestion(stats, "4대 가치 만족도 평가", index);
-    const heading = survey ? `Q${survey.qno}. ${survey.question}` : `${value.label} 만족도`;
+    const heading = survey ? `Q${survey.qno}. ${survey.question}` : `${value.name} 만족도`;
     blocks.push(headingBlock({ id: `${idPrefix}-q${index + 1}`, variant: "question", text: heading }));
     blocks.push(richStaticBlock({
       id: `${idPrefix}-meansd-${index + 1}`,
-      html: `<p style="font-weight:700;margin:0 0 4pt">${escapeHtml(value.label)} 만족도</p>${valueMeanSdTableHtml(value.mean, value.sd)}`,
+      html: `<p style="font-weight:700;margin:0 0 4pt">${escapeHtml(value.name)} 만족도</p>${valueMeanSdTableHtml(value.mean, value.sd)}`,
     }));
     if (question && question.categories.length > 0) {
       const positive = question.categories.filter((category) => category.polarity === "positive");
@@ -478,12 +478,12 @@ function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questio
       }));
       blocks.push(richStaticBlock({
         id: `${idPrefix}-summary-${index + 1}`,
-        html: valueSummaryBoxHtml(value.label, question.polarity_summaries, question.question_key, itemTexts[value.label]),
+        html: valueSummaryBoxHtml(value.name, question.polarity_summaries, question.question_key, itemTexts[value.name]),
         summaryQuestionKey: question.question_key,
         summaryKind: "value",
       }));
     } else {
-      blocks.push(textBlock({ id: `${idPrefix}-pending-${index + 1}`, label: `${value.label} 정성 분석`, html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`, pending: true }));
+      blocks.push(textBlock({ id: `${idPrefix}-pending-${index + 1}`, label: `${value.name} 정성 분석`, html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`, pending: true }));
     }
   });
   return blocks;

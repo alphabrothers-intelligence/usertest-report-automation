@@ -466,8 +466,15 @@ AI가 답한 `groupKey`는 버리고 헤더 접두(`실용성1)` → `실용성`
 
 ## 5·6단계 — 아직 옛 방식인 곳
 
-**"목차를 스스로 만들고 숫자까지 채우는 것"까지 됐고, "그 숫자를 도표로 그리는 쪽"은 아직
-리바랩스 전용**이다.
+**"목차를 스스로 만들고 숫자까지 채우는 것"까지 됐고, "그 숫자를 도표로 그리는 쪽"은
+출력 형식마다 상태가 다르다.**
+
+| 출력 | 상태 |
+|---|---|
+| 웹 작업공간(`lib/report/workspace*.ts`) — 지금의 본 경로 | **배선 완료(2026-08-31)**. Ⅱ·Ⅳ·Ⅴ·Ⅵ장과 종합 결과 장이 `genericOf()`로 배열을 읽는다 |
+| PDF(`lib/pdf/`, `lib/pdf-rivalabs-v3/`) · DOCX · HWPX | 아직 고정 칸(걷기 앱 문항 3개 · 가치 축 4개 · UX 계열 2개) |
+| 정성 프롬프트 재료(`lib/pipeline/summary.ts`, `sectionAnalysis.ts`) | 아직 고정 칸 |
+| 6단계 정성 문항 선정 | `lib/agent/questionSpecs.ts`는 있으나 파이프라인에 안 물려 있음 |
 
 ### 무엇이 어떻게 박혀 있나
 
@@ -507,8 +514,26 @@ uxQuality: { usability, fun }                             // 2계열 고정
 | `uxQuality.{usability,fun}` | 계열 2개 고정 | `generic.uxGroups` |
 
 빈 칸에 아무 문항이나 넣지 않는다 — "하루 평균 걷는 시간" 자리에 엉뚱한 문항이 그려지는 것이
-비어 있는 것보다 나쁘다. **다음 작업은 Ⅱ·Ⅴ·Ⅵ장 렌더러가 `generic`을 읽게 바꾸는 것**이고,
-셋 다 넘어가면 고정 칸을 지우고 `generic`을 본체로 올린다(ponytail: 전환용 동거 필드).
+비어 있는 것보다 나쁘다.
+
+**웹 작업공간 배선 완료(2026-08-31).** `lib/report/genericStats.ts`의 `genericOf()` 하나가
+"새 경로면 배열, 옛 경로면 고정 칸을 배열로 되돌림"을 흡수하므로 **렌더러는 항상 배열만 본다** —
+렌더러마다 갈래를 두면 같은 화면을 두 벌 유지하게 되기 때문이다. 읽는 곳은
+`workspaceDemographics` · `workspaceFourValues` · `workspaceUxQuality` · `workspaceJourney` ·
+`workspace.ts`(가치 문항 목록) · `workspaceConclusion`(종합 결과 근거 문장) 여섯이다.
+
+> **마지막에 걸려 있던 두 곳 (2026-08-31)**: 가치 장의 **조사 결과 표**는 배열을 읽는데
+> 바로 아래 **문항 목록**은 아직 `functional`·`aesthetic`·`economic`·`social` 네 개를 영문
+> 키까지 박아 읽고 있었다. 케어클은 축 순서가 기능→**경제**→**심미**→사회라서, 두 번째
+> 문항에 경제적 가치 점수를 넣고 제목은 "심미적 가치"라고 적는 상태였다. 같은 장 안에서
+> 표와 문항이 어긋나 있었는데도 "블록이 비어 있지 않다"는 검사만으로는 안 잡혔다 —
+> `check:workspace-plan`에 **축 이름과 순서**를 보는 검사를 추가했다(36/36).
+>
+> 문항 키가 경로마다 다른 것(옛 `values:functional` ↔ 새 `values:{축 이름}`)은 키를 맞추지
+> 않고 **이름으로 잇는다**(`findValueQuestion`). 축 이름은 raw data 에서 오므로 그쪽이 기준이다.
+
+남은 것은 PDF·DOCX·HWPX와 정성 프롬프트 재료다. 전부 넘어가면 고정 칸을 지우고 `generic`을
+본체로 올린다(ponytail: 전환용 동거 필드).
 
 **실측으로 드러난 것**: 리바랩스 외 4종은 전부 **UX 계열 0개**다(`실용성1)` 같은 계열 접두가
 리바랩스에만 있다). 즉 Ⅵ장 레이더는 그 4종에서 조건 미충족으로 드롭된다 — 규칙대로 동작하는
@@ -987,10 +1012,13 @@ raw data
 | `npm run check:role-classify` | 2단계 역할 판정 정확도 + 최종 목차 (실 데이터 5종 전 컬럼, 정답은 `단계매핑` 시트) | ✓ 5회 | 280/282 (99.3%) |
 | `RUNS=3 npm run check:role-classify` | 위 + 실행마다 갈리는 컬럼·목차 | ✓ 15회 | 흔들림 0 |
 | `npm run check:role-plan` | 판정 저장·담당자 수정이 그대로 반영되는가 | ✗ | 9/9 |
-| `npm run check:section-plan` | 3단계 조립 규칙 (역할을 손으로 넣어 확인) | ✗ | 19/19 |
+| `npm run check:section-plan` | 3단계 조립 규칙 (역할을 손으로 넣어 확인) | ✗ | 21/21 |
 | `npm run check:role-quant` | 4단계 정량 계산 + **어댑터**(렌더러 모양으로 옮겨도 값이 그대로인가) | ✗ | 154/154 |
+| `npm run check:workspace-plan` | 5단계 렌더 배선 — 리바랩스 무회귀 + 데이터마다 장이 달라지고 **내용이 들어차는가** + 가치 축 이름·순서 | ✗ | 36/36 |
+| `npm run check:question-specs` | 6단계 정성 문항 선정(이유 컬럼이 붙은 문항) | ✗ | 26/26 |
+| `npm run check:toc-coverage` | 5종 목차를 `표준목차` 시트의 `제품군 실적` 기준으로 절 단위 대조 | ✗ | 20/20 |
 | `npm run check:golden` | 기존(옛 경로) 정량 93개 값 무회귀 | ✗ | 93/93 |
-| `npm run check:layout-blocks` | 레이아웃 블록 | ✗ | 22/22 |
+| `npm run check:question-header` · `check:layout-blocks` | 문항 헤더 규칙 · 레이아웃 블록 | ✗ | 14/14 · 22/22 |
 
 `check:role-classify`만 **실제 과금**된다(파일당 1회 · 약 27초 · 약 74원 · 5종이라 1회 약 370원). 프롬프트나 규칙을
 건드렸을 때만 수동으로 돌린다. 목표 정확도 90%에 미달하면 스크립트가 실패로 끝난다.

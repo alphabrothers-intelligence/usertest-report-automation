@@ -2,6 +2,7 @@ import type { QuestionWithApprovedCategories, RecommendationRow } from "@/lib/db
 import { splitOverallDirection } from "@/lib/pdf/sectionsQualitative";
 import type { QuantStats } from "@/lib/quant/compute";
 import { richTextToHtml } from "@/lib/report/richText";
+import { genericOf } from "@/lib/report/genericStats";
 import { quadrantItems } from "@/lib/report/quadrantItems";
 import { headingBlock, quadrantBlock, richStaticBlock, rowGroupBlock, type ReportBlock } from "@/lib/report/sections";
 import { dataTableCss, REPORT_TEXT } from "@/lib/report/sectionStyle";
@@ -87,19 +88,23 @@ function resultSummaryPart(resultSummary: string | null | undefined, aliases: st
  * 내용을 HTML로 만들어 돌려주고, 표 구조 자체는 row-group 블록이 그린다(행별로 표를 따로
  * 만들면 표가 끊겨 보이기 때문 — 2026-08-18). */
 function conclusionEvidenceRows(stats: QuantStats, resultSummary: string | null | undefined): { id: string; label: string; html: string }[] {
-  const values = [
-    ["기능적 가치", stats.fourValues.functional.mean],
-    ["심미적 가치", stats.fourValues.aesthetic.mean],
-    ["경제적 가치", stats.fourValues.economic.mean],
-    ["사회·공공적 가치", stats.fourValues.social.mean],
-  ] as const;
+  // 가치 축과 UX 계열은 **개수·이름 모두 raw data 에서 온다**(genericOf). 예전엔 네 축과
+  // 실용성·즐거움 두 계열을 이름까지 박아 읽어서, 축이 3개인 raw data 는 없는 축을 0.00점으로
+  // 적고 계열 이름이 다른 raw data 는 "실용성 평균"이라는 문장이 그대로 나갔다.
+  const { valueAxes, uxGroups } = genericOf(stats);
   const topFactors = [...stats.keyFactorDistribution].sort((a, b) => b.percentage - a.percentage).slice(0, 3);
-  const usability = stats.uxQuality.usability;
-  const fun = stats.uxQuality.fun;
-  const lowestUx = [...usability, ...fun].sort((a, b) => a.mean - b.mean)[0];
+  const uxItems = uxGroups.flatMap((group) => group.items);
+  const lowestUx = [...uxItems].sort((a, b) => a.mean - b.mean)[0];
+  const groupMean = (items: { mean: number }[]) => items.reduce((sum, item) => sum + item.mean, 0) / Math.max(items.length, 1);
   const coreFallback = `<p style="margin:0">상위 선택 항목은 ${topFactors.map((item) => `<strong>${escapeHtml(item.label)}(${item.percentage}%)</strong>`).join(", ")}로 집계되었습니다.</p>`;
-  const valuesFallback = `<p style="margin:0">${values.map(([labelText, value]) => `<strong>${labelText}</strong> ${value.toFixed(2)}점`).join(", ")}으로 집계되었습니다. 항목별 수치는 원자료 기반 정량 결과입니다.</p>`;
-  const uxFallback = `<p style="margin:0">실용성 평균은 ${(usability.reduce((sum, item) => sum + item.mean, 0) / Math.max(usability.length, 1)).toFixed(2)}점, 즐거움 평균은 ${(fun.reduce((sum, item) => sum + item.mean, 0) / Math.max(fun.length, 1)).toFixed(2)}점입니다.${lowestUx ? ` 가장 낮은 항목은 <strong>${escapeHtml(lowestUx.name)}(${lowestUx.mean.toFixed(2)}점)</strong>입니다.` : ""}</p>`;
+  // 그 장이 아예 없는 raw data 도 있다(정리습관은 가치 문항 0개, 리바랩스 외 4종은 UX 계열
+  // 0개). 근거가 없다는 사실을 그대로 쓴다 — 빈 문장을 만들지 않는다.
+  const valuesFallback = valueAxes.length > 0
+    ? `<p style="margin:0">${valueAxes.map((axis) => `<strong>${escapeHtml(axis.name)}</strong> ${axis.mean.toFixed(2)}점`).join(", ")}으로 집계되었습니다. 항목별 수치는 원자료 기반 정량 결과입니다.</p>`
+    : `<p style="margin:0">가치 영역 문항을 수집하지 않아 집계할 값이 없습니다.</p>`;
+  const uxFallback = uxGroups.length > 0
+    ? `<p style="margin:0">${uxGroups.map((group) => `${escapeHtml(group.groupKey)} 평균은 ${groupMean(group.items).toFixed(2)}점`).join(", ")}입니다.${lowestUx ? ` 가장 낮은 항목은 <strong>${escapeHtml(lowestUx.name)}(${lowestUx.mean.toFixed(2)}점)</strong>입니다.` : ""}</p>`
+    : `<p style="margin:0">경험 품질 척도 문항을 수집하지 않아 집계할 값이 없습니다.</p>`;
   const npsFallback = `<p style="margin:0">전반적 만족도는 <strong>${stats.overallSatisfaction.mean.toFixed(2)}점</strong>, 평균 구매 의향은 <strong>${stats.nps.rawMean.toFixed(2)}점</strong>, NPS 지수는 <strong>${stats.nps.npsScore}</strong>입니다.</p>`;
   const crossFallback = `<p style="margin:0">연령·성별별 차이는 교차 분석의 정량 차트와 표를 함께 참조합니다.</p>`;
   const font = `font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:10.5pt;line-height:1.65`;

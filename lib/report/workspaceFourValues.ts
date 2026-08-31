@@ -27,6 +27,45 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/**
+ * 옛 경로(`lib/pipeline/questions.ts`)의 영문 문항 키 ↔ `genericOf()` 폴백이 쓰는 축 이름.
+ *
+ * 이름으로만 이으면 **`사회·공공적 가치` 하나가 안 붙는다** — 옛 label 이 `사회·공공적 **이슈**
+ * 가치 만족도`라 부분 문자열이 아니다(2026-08-31 실측. 예전 코드도 종합 해석에서 같은 이유로
+ * 이 축만 근거를 못 찾고 있었다). 네 개짜리 닫힌 목록이므로 추측하지 말고 그냥 적어둔다.
+ *
+ * ponytail: 옛 경로가 지워지면 이 표도 같이 지운다 — 새 경로는 키가 `values:{축 이름}`이다.
+ */
+const LEGACY_VALUE_KEYS: Record<string, string> = {
+  "기능적 가치": "values:functional",
+  "심미적 가치": "values:aesthetic",
+  "경제적 가치": "values:economic",
+  "사회·공공적 가치": "values:social",
+};
+
+/**
+ * 가치 축 하나에 붙는 정성 문항을 찾는다.
+ *
+ * **문항 키가 경로마다 다르다.** 옛 경로는 `values:functional`처럼 영문 고정 키를 쓰고 축
+ * 이름은 label 에만 있는데, 새 경로(`lib/agent/questionSpecs.ts`)는 `values:{축 이름}`이다.
+ * 축 이름은 raw data 에서 오므로 **그쪽이 기준이고, 키를 맞추려 들지 않는다.**
+ * 못 찾으면 그 축은 정성 대기다 — 엉뚱한 문항을 붙이느니 비워두는 편이 낫다.
+ */
+export function findValueQuestion(
+  questions: QuestionWithApprovedCategories[],
+  axisName: string,
+): QuestionWithApprovedCategories | undefined {
+  const byKey = (key: string) => questions.find((question) => question.question_key === key);
+  const normalize = (value: string) => value.replace(/[\s·]/g, "");
+  const axis = normalize(axisName);
+  return byKey(`values:${axisName}`)
+    ?? byKey(LEGACY_VALUE_KEYS[axisName] ?? "")
+    ?? questions.find((question) => {
+      const label = normalize(question.label);
+      return label.includes(axis) || axis.includes(label);
+    });
+}
+
 /** Ⅴ장 "2"의 저장 분석이 없을 때 사용하는 기존 규칙 기반 종합 해석. */
 function buildFourValuesAnalysisText(
   rows: { label: string; mean: number; sd: number }[],
@@ -39,7 +78,7 @@ function buildFourValuesAnalysisText(
   parts.push(`<p style="margin:0 0 3pt">• '${escapeHtml(ranked[0].label)}'의 만족도가 ${ranked[0].mean.toFixed(2)}점으로 가장 높고, '${escapeHtml(ranked[ranked.length - 1].label)}'가 ${ranked[ranked.length - 1].mean.toFixed(2)}점으로 가장 낮음.</p>`);
   const valuesQual = questionsByKeyPrefix(qualitative, "values:");
   for (const row of ranked) {
-    const question = valuesQual.find((q) => q.label.includes(row.label.replace("·", "")) || row.label.includes(q.label));
+    const question = findValueQuestion(valuesQual, row.label);
     const negatives = question?.categories.filter((c) => c.polarity === "negative").slice(0, 3).map((c) => c.label) ?? [];
     if (negatives.length > 0) {
       parts.push(`<p style="margin:0 0 3pt">• '${escapeHtml(row.label)}'(${row.mean.toFixed(2)}점): ${negatives.map(escapeHtml).join(", ")} 관련 개선 필요</p>`);
