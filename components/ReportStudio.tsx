@@ -17,6 +17,9 @@ import { withDefaultQuadrantZones, type ReportBlock, type ReportSectionContent }
 import { ReportWebWorkspace } from "@/components/ReportWebWorkspace";
 import { applyTextFormat, insertArrowLine, FormatButton } from "@/components/report-web-document/ReportBlockView";
 import type { ProductInfo } from "@/lib/productInfo/types";
+import type { ReviewFlag } from "@/lib/quant/reviewFlags";
+import { useQualitativeJob } from "@/components/wizard/useQualitativeJob";
+import { QualitativeArrivalBanner } from "@/components/report/QualitativeArrivalBanner";
 
 const STORAGE_KEY = "usertest-report-studio-v3";
 
@@ -137,6 +140,7 @@ export function ReportStudio({
   initialSection,
   demo = false,
   demoDataset,
+  qualitativeJobId,
 }: {
   pdfUrl?: string | null;
   /** raw data URL. 저장된 정량 결과를 웹 편집 화면에 불러오는 키다. */
@@ -147,6 +151,9 @@ export function ReportStudio({
   demo?: boolean;
   /** ?dataset= 로 고른 예시 raw data(리바랩스 외 4종). 없으면 리바랩스. */
   demoDataset?: string | null;
+  /** 아직 돌고 있는 정성 분석 job(`?job=`). **이 화면이 그 job의 진행 드라이버가 된다** —
+   * run-next 는 클라이언트가 시켜야 진행되므로, 여기서 안 돌리면 분석이 멈춘다. */
+  qualitativeJobId?: string | null;
 }) {
   const router = useRouter();
   const [sections, setSections] = useState<ReportSectionContent[]>([]);
@@ -163,6 +170,7 @@ export function ReportStudio({
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [workspaceSeed, setWorkspaceSeed] = useState<ReportWorkspaceSeed | null>(null);
+  const [reviewFlags, setReviewFlags] = useState<ReviewFlag[]>([]);
   const [productInfo, setProductInfo] = useState<ProductInfo>({});
   const [reportName, setReportName] = useState("");
   const [nameSaving, setNameSaving] = useState(false);
@@ -190,6 +198,7 @@ export function ReportStudio({
           workspace?: ReportWorkspaceSeed;
           reportName?: string | null;
           savedDraft?: { sections: ReportSectionContent[]; savedAt: string | null } | null;
+          reviewFlags?: ReviewFlag[];
         };
         if (!response.ok || !payload.ok || !payload.workspace) {
           throw new Error(payload.error || "보고서 작업공간을 불러오지 못했습니다.");
@@ -200,6 +209,7 @@ export function ReportStudio({
         if (cancelled || !payload.workspace) return;
         const seed = payload.workspace;
         setWorkspaceSeed(seed);
+        setReviewFlags(payload.reviewFlags ?? []);
         setProductInfo(seed.productInfo ?? {});
         setReportName(payload.reportName ?? "");
         // 이 특정 보고서(source)를 이전에 편집·저장한 적이 있으면 서버가 방금 계산한 정량
@@ -227,6 +237,47 @@ export function ReportStudio({
       cancelled = true;
     };
   }, [sourceFileUrl, demo, demoDataset, reloadNonce]);
+
+  // ── 뒤에서 도는 의견(정성) 분석 ────────────────────────────────────────────────
+  // **이 화면이 그 job 의 진행 드라이버다.** run-next 는 서버가 알아서 도는 배치가 아니라
+  // 클라이언트가 문항 하나씩 시켜야 진행되므로, 여기서 훅을 돌리지 않으면 보고서를 여는
+  // 순간 분석이 멈춘다(2026-08-31 새 흐름의 전제).
+  const job = useQualitativeJob(qualitativeJobId ?? null);
+  const [applyingQualitative, setApplyingQualitative] = useState(false);
+  const [qualitativeApplied, setQualitativeApplied] = useState(false);
+
+  /**
+   * 도착한 의견 분석을 **비어 있는 자리에만** 채운다.
+   *
+   * 통째로 새로 불러오면 그 사이 담당자가 고친 내용이 날아간다. 그렇다고 자동 병합을 하면
+   * 어디가 바뀌었는지 알 수 없다. 그래서 기준을 하나로 잡았다 — **"정성 분석 대기" 블록이
+   * 들어 있는 장만** 새 것으로 바꾼다. 그 장은 아직 채울 내용이 없어 편집할 것도 없었다.
+   */
+  async function applyQualitative() {
+    if (!sourceFileUrl) return;
+    setApplyingQualitative(true);
+    try {
+      const response = await fetch(`/api/report-workspace?source=${encodeURIComponent(sourceFileUrl)}`, { cache: "no-store" });
+      const payload = await response.json() as { ok: boolean; error?: string; workspace?: ReportWorkspaceSeed };
+      if (!payload.ok || !payload.workspace) throw new Error(payload.error || "분석 결과를 불러오지 못했습니다.");
+      const fresh = payload.workspace;
+      setWorkspaceSeed(fresh);
+      setSections((current) => {
+        const next = current.map((section) => {
+          const waiting = section.blocks.some((block) => block.kind === "text" && block.pending);
+          if (!waiting) return section;
+          const replacement = fresh.sections.find((candidate) => candidate.numeral === section.numeral);
+          return replacement ? hydrateWorkspaceSections([replacement])[0] : section;
+        });
+        return next;
+      });
+      setQualitativeApplied(true);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "분석 결과를 반영하지 못했습니다.");
+    } finally {
+      setApplyingQualitative(false);
+    }
+  }
 
   function retryWorkspaceLoad() {
     setWorkspaceStatus("loading");
@@ -440,6 +491,21 @@ export function ReportStudio({
         </div>
       </header>
 
+      {qualitativeJobId && (
+        <QualitativeArrivalBanner
+          status={job.status}
+          done={job.done}
+          total={job.total}
+          isFinished={job.isFinished}
+          isSuccessful={job.isSuccessful}
+          failed={job.progress?.failed ?? 0}
+          networkNotice={job.networkNotice}
+          applying={applyingQualitative}
+          applied={qualitativeApplied}
+          onApply={() => void applyQualitative()}
+        />
+      )}
+
       {workspaceMode === "web" ? (
         <ReportWebWorkspace
           sections={sections}
@@ -447,6 +513,7 @@ export function ReportStudio({
           checkpoint={checkpoint}
           workspaceStatus={workspaceStatus}
           reportData={workspaceSeed}
+          reviewFlags={reviewFlags}
           productInfo={productInfo}
           onProductInfoChange={setProductInfo}
           activeSection={activeSection}

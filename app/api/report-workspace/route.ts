@@ -9,6 +9,7 @@ import { buildReportWorkspaceSeed } from "@/lib/report/workspace";
 import { loadWallaFromUrl } from "@/lib/walla/loadFromUrl";
 import { normalizeWallaRows } from "@/lib/walla/normalize";
 import { computeQuantStats, type QuantStats } from "@/lib/quant/compute";
+import { flagQuantStatsForReview } from "@/lib/quant/reviewFlags";
 
 export const runtime = "nodejs";
 
@@ -92,6 +93,9 @@ export async function GET(request: Request) {
     }),
     reportId: report.id,
     reportName: report.report_name,
+    // "한 번 더 봐주세요" 표시(lib/quant/reviewFlags.ts). 규칙 기반이라 LLM 호출이 없고,
+    // 여기서 계산해 보내면 웹뷰가 quant_stats 전체를 받지 않아도 도표 옆에 붙일 수 있다.
+    reviewFlags: flagQuantStatsForReview(quantStats),
     // 서버에 저장된 편집 초안(2026-08-04 신규, localStorage 대체) — 있으면 ReportStudio가
     // 위 workspace.sections 대신 이걸 우선 보여준다(다른 기기·브라우저에서도 이어서 편집 가능).
     savedDraft: report.workspace_draft

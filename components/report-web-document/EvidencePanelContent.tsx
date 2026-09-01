@@ -60,15 +60,33 @@ export function AnalysisReferenceContent({
 }) {
   return (
     <section key={reference.title} className="quote-context-updated rounded-xl border border-[#c9daf2] bg-[#f5f9ff] p-4">
-      <p className="flex items-center gap-1.5 text-[11px] font-bold text-[#1473e6]"><span className="h-1.5 w-1.5 rounded-full bg-[#1473e6]" />현재 보고 있는 분석</p>
+      <p className="flex items-center gap-1.5 text-[11px] font-bold text-[#1473e6]"><span className="h-1.5 w-1.5 rounded-full bg-[#1473e6]" />{reference.kind === "정량 계산" ? "현재 보고 있는 도표" : "현재 보고 있는 분석"}</p>
       <p className="mt-1.5 text-[18px] font-bold leading-6 tracking-[-0.035em] text-[#1f3554]">{reference.title}</p>
       <p className="mt-2 inline-flex rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-[#315c9c]">{reference.kind}</p>
       <div className="mt-4 border-t border-[#d9e6f7] pt-3">
-        <p className="text-sm font-bold text-[#354158]">이 내용이 생성된 근거</p>
+        {/* 도표와 해석은 "근거"의 뜻이 다르다 — 도표는 계산 과정이고, 해석은 무엇을 종합했는가다. */}
+        <p className="text-sm font-bold text-[#354158]">
+          {reference.kind === "정량 계산" ? "이 그래프가 만들어진 방식" : "이 내용이 생성된 근거"}
+        </p>
         <ul className="mt-2 space-y-2">
-          {reference.bullets.map((bullet) => <li key={bullet} className="flex gap-2 text-xs leading-5 text-[#53627a]"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[#5c83bc]" />{bullet}</li>)}
+          {reference.bullets.map((bullet) => {
+            // `사용한 데이터: …`처럼 앞에 항목 이름이 붙은 줄은 그 부분만 굵게 — 여섯 줄이
+            // 이어지면 어디까지가 항목명인지 안 보인다.
+            const [label, ...rest] = bullet.split(": ");
+            const body = rest.join(": ");
+            return (
+              <li key={bullet} className="flex gap-2 text-xs leading-5 text-[#53627a]">
+                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[#5c83bc]" />
+                <span>{body ? <><strong className="font-bold text-[#354158]">{label}</strong> {body}</> : bullet}</span>
+              </li>
+            );
+          })}
         </ul>
-        <p className="mt-3 rounded-lg bg-white p-2.5 text-[11px] leading-5 text-[#7a8799]">직접 인용문이 아니라 위 정량·정성 근거를 종합해 생성된 내용입니다.</p>
+        <p className="mt-3 rounded-lg bg-white p-2.5 text-[11px] leading-5 text-[#7a8799]">
+          {reference.kind === "정량 계산"
+            ? "그래프 값은 위 계산으로 자동 생성되며 중간에 사람이 입력하지 않습니다. 확인할 것은 계산이 맞는지가 아니라, 원본 문항과 그래프 항목의 연결이 맞는지입니다."
+            : "직접 인용문이 아니라 위 정량·정성 근거를 종합해 생성된 내용입니다."}
+        </p>
       </div>
       {reference.kind === "제언" && sourceFileUrl && (
         <div className="mt-3 border-t border-[#d9e6f7] pt-3">

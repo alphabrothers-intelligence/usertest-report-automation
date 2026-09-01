@@ -21,6 +21,8 @@ import { ActionPanel, PageFooter, SectionBanner, TableOfContents } from "@/compo
 import { ReportBackCoverPage, ReportCoverPage, ReportTocPage } from "@/components/report-web-document/ReportFrontMatter";
 import { AnalysisReferenceContent, QuoteSourceContent } from "@/components/report-web-document/EvidencePanelContent";
 import { BlockView } from "@/components/report-web-document/ReportBlockView";
+import { ReviewFlagNotice } from "@/components/report/ReviewFlagNotice";
+import type { ReviewFlag } from "@/lib/quant/reviewFlags";
 import { useReportClipboard } from "@/components/report-web-document/useReportClipboard";
 import { useReportEvidence } from "@/components/report-web-document/useReportEvidence";
 import { useReportExport } from "@/components/report-web-document/useReportExport";
@@ -48,6 +50,10 @@ type Props = {
   onToolbarActionsChange?: (actions: { copy: () => void; openCorrections: () => void }) => void;
   productInfo: ProductInfo;
   onProductInfoChange: (next: ProductInfo) => void;
+  /** "한 번 더 봐주세요" 표시(lib/quant/reviewFlags.ts). 대상 도표 바로 위에 붙는다.
+   * 예전에는 마법사의 정량 검토 화면에만 있었는데, 그 단계를 없애면서 여기로 옮겼다 —
+   * 어차피 고치는 곳이 여기라 이유도 여기 있어야 한다(2026-08-31 담당자 확인). */
+  reviewFlags?: ReviewFlag[];
 };
 
 /** row-group(항목/주요 의견 표)은 행마다 자식 블록을 품고 있어, id로 블록을 찾거나
@@ -73,7 +79,7 @@ function replaceBlockById(blocks: ReportBlock[], id: string, next: ReportBlock):
   });
 }
 
-export function ReportWebDocument({ sections, setSections, checkpoint, reportData, activeSection, onActiveSectionChange, workspaceStatus, workspaceError, onRetry, sourceFileUrl, onToolbarActionsChange, productInfo, onProductInfoChange }: Props) {
+export function ReportWebDocument({ sections, setSections, checkpoint, reportData, activeSection, onActiveSectionChange, workspaceStatus, workspaceError, onRetry, sourceFileUrl, onToolbarActionsChange, productInfo, onProductInfoChange, reviewFlags = [] }: Props) {
   const documentContainerRef = useRef<HTMLDivElement>(null);
   const [pageGroups, setPageGroups] = useState<Record<string, string[][]>>({});
   const [selectedBlockRef, setSelectedBlockRef] = useState<{ numeral: string; id: string } | null>(null);
@@ -116,6 +122,7 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     checkpoint,
     sourceFileUrl,
     documentContainerRef,
+    quantStats: reportData?.quantStats ?? null,
   });
 
   function updateBlock(numeral: string, blockId: string, next: ReportBlock) {
@@ -245,7 +252,7 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
       {quotePanelOpen && (
         <aside className="h-fit rounded-xl border border-[#c9daf2] bg-white shadow-sm lg:sticky lg:top-36 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto">
           <div className="flex items-start justify-between border-b border-[#e3e8ef] px-4 py-3">
-            <div><p className="text-xs font-semibold text-[#356df3]">분석 근거</p><p className="mt-1 text-sm font-bold text-[#263449]">{analysisReference ? "종합 해석의 참고 근거" : "인용문과 원문 대조"}</p></div>
+            <div><p className="text-xs font-semibold text-[#356df3]">분석 근거</p><p className="mt-1 text-sm font-bold text-[#263449]">{analysisReference?.kind === "정량 계산" ? "도표의 계산 근거" : analysisReference ? "종합 해석의 참고 근거" : "인용문과 원문 대조"}</p></div>
             <button type="button" onClick={() => setQuotePanelOpen(false)} className="rounded px-2 py-1 text-lg text-[#8a94a3] hover:bg-[#f2f5f9]" aria-label="원문 패널 접기">×</button>
           </div>
           <div className="p-4">
@@ -298,12 +305,14 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
               <div
                 key={block.id}
                 data-report-block-id={block.id}
+                data-review-flagged={reviewFlags.some((flag) => flag.targetBlockId === block.id) || undefined}
                 role="button"
                 tabIndex={0}
                 onClick={() => setSelectedBlockRef({ numeral: section.numeral, id: block.id })}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedBlockRef({ numeral: section.numeral, id: block.id }); }}
                 className={`rounded transition-shadow ${selectedBlockRef?.numeral === section.numeral && selectedBlockRef.id === block.id ? "ring-2 ring-[#4fc8e8] ring-offset-2" : "hover:ring-1 hover:ring-[#c9d8ef]"}`}
               >
+                <ReviewFlagNotice flags={reviewFlags.filter((flag) => flag.targetBlockId === block.id)} />
                 <BlockView
                   block={block}
                   sourceFileUrl={sourceFileUrl}

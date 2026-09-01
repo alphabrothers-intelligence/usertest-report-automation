@@ -1,6 +1,8 @@
 export type AnalysisReference = {
   title: string;
-  kind: "종합 분석" | "종합 결과" | "제언";
+  /** `정량 계산`은 아래 표가 아니라 `quantEvidence.ts`가 도표에서 그때그때 만든다 — 해석·제언과
+   * 달리 문구가 블록 종류와 응답자 수에 따라 달라지기 때문이다. */
+  kind: "종합 분석" | "종합 결과" | "제언" | "정량 계산";
   bullets: string[];
 };
 

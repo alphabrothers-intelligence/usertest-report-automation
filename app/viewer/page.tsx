@@ -9,7 +9,7 @@ const VALID_NUMERALS = new Set(["I", "II", "III", "IV", "V", "VI", "VII", "VIII"
 export default async function ViewerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ pdf?: string | string[]; source?: string | string[]; section?: string | string[]; dataset?: string | string[] }>;
+  searchParams: Promise<{ pdf?: string | string[]; source?: string | string[]; section?: string | string[]; dataset?: string | string[]; job?: string | string[] }>;
 }) {
   const params = await searchParams;
   const pdfUrl = typeof params.pdf === "string" && params.pdf.startsWith("/api/download?")
@@ -28,5 +28,8 @@ export default async function ViewerPage({
   // ?dataset=carecl 처럼 다른 예시 raw data로 열 수 있다(리바랩스 외 4종). 목차·도표가 데이터마다
   // 어떻게 달라지는지 원본과 나란히 보기 위한 통로다.
   const demoDataset = typeof params.dataset === "string" ? params.dataset : undefined;
-  return <ReportStudio pdfUrl={pdfUrl} sourceFileUrl={sourceFileUrl} initialSection={initialSection} demo={!sourceFileUrl} demoDataset={demoDataset} />;
+  // 아직 돌고 있는 의견 분석 job. **이 화면이 그 job의 진행 드라이버가 된다** — 마법사에서
+  // 분석을 기다리지 않고 넘어오므로, 여기서 이어 돌리지 않으면 분석이 그대로 멈춘다.
+  const qualitativeJobId = typeof params.job === "string" ? params.job : undefined;
+  return <ReportStudio pdfUrl={pdfUrl} sourceFileUrl={sourceFileUrl} initialSection={initialSection} demo={!sourceFileUrl} demoDataset={demoDataset} qualitativeJobId={qualitativeJobId} />;
 }

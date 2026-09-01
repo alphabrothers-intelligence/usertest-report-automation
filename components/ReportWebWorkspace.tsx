@@ -5,6 +5,7 @@ import { ReportWebDocument } from "@/components/ReportWebDocument";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import type { ReportSectionContent } from "@/lib/report/sections";
 import type { ProductInfo } from "@/lib/productInfo/types";
+import type { ReviewFlag } from "@/lib/quant/reviewFlags";
 
 type ReportWebWorkspaceProps = {
   sections: ReportSectionContent[];
@@ -20,6 +21,7 @@ type ReportWebWorkspaceProps = {
   onToolbarActionsChange?: (actions: { copy: () => void; openCorrections: () => void }) => void;
   productInfo: ProductInfo;
   onProductInfoChange: (next: ProductInfo) => void;
+  reviewFlags?: ReviewFlag[];
 };
 
 /**
@@ -41,6 +43,7 @@ export function ReportWebWorkspace({
   onToolbarActionsChange,
   productInfo,
   onProductInfoChange,
+  reviewFlags,
 }: ReportWebWorkspaceProps) {
   return (
     <div data-workspace-status={workspaceStatus}>
@@ -58,6 +61,7 @@ export function ReportWebWorkspace({
         onToolbarActionsChange={onToolbarActionsChange}
         productInfo={productInfo}
         onProductInfoChange={onProductInfoChange}
+        reviewFlags={reviewFlags}
       />
     </div>
   );

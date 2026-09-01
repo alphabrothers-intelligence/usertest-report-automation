@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { BatchCorrectionItem } from "@/components/QuoteCorrectionPanel";
 import { ANALYSIS_EVIDENCE_BY_BLOCK, type AnalysisReference } from "@/components/report-web-document/analysisEvidence";
+import { quantEvidenceFor } from "@/components/report-web-document/quantEvidence";
 import { markQuoteEndingReviews } from "@/components/report-web-document/quoteEndingMarkup";
 import type { QuoteCompletionTarget, QuoteSourceResult } from "@/components/report-web-document/EvidencePanelContent";
 import { reportQuoteReviewToken, splitHighlightParts } from "@/lib/report/quoteEnding";
 import { escapeHtml } from "@/lib/report/richText";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
+import type { QuantStats } from "@/lib/quant/compute";
 
 type RequestStatus = "idle" | "loading" | "error";
 type QuoteCompletion = { completedQuote: string; changedFrom: string; changedTo: string };
@@ -22,7 +24,30 @@ type UseReportEvidenceInput = {
   checkpoint: () => void;
   sourceFileUrl?: string | null;
   documentContainerRef: RefObject<HTMLDivElement | null>;
+  /** 정량 도표의 계산 근거를 만드는 데 쓴다(응답자 수 등). 없으면 도표 근거는 안 뜬다. */
+  quantStats?: QuantStats | null;
 };
+
+/** row-group(항목/주요 의견 표)은 행마다 자식 블록을 품고 있어 한 단계 더 내려가야 한다. */
+function findBlock(sections: ReportSectionContent[], id: string): ReportBlock | null {
+  const walk = (blocks: ReportBlock[]): ReportBlock | null => {
+    for (const block of blocks) {
+      if (block.id === id) return block;
+      if (block.kind === "row-group") {
+        for (const row of block.rows) {
+          const found = walk(row.blocks);
+          if (found) return found;
+        }
+      }
+    }
+    return null;
+  };
+  for (const section of sections) {
+    const found = walk(section.blocks);
+    if (found) return found;
+  }
+  return null;
+}
 
 export function useReportEvidence({
   sections,
@@ -30,6 +55,7 @@ export function useReportEvidence({
   checkpoint,
   sourceFileUrl,
   documentContainerRef,
+  quantStats,
 }: UseReportEvidenceInput) {
   const [quoteSource, setQuoteSource] = useState<QuoteSourceResult | null>(null);
   const [quoteSourceStatus, setQuoteSourceStatus] = useState<RequestStatus>("idle");
@@ -136,7 +162,11 @@ export function useReportEvidence({
 
       const blockAtReadingPoint = readingPoint?.closest<HTMLElement>("[data-report-block-id]");
       const blockId = blockAtReadingPoint?.dataset.reportBlockId ?? "";
-      const reference = ANALYSIS_EVIDENCE_BY_BLOCK[blockId];
+      // 해석·제언 블록은 고정 표에서, 정량 도표는 블록에서 그때그때 만든다.
+      // 예전에는 도표에 근거가 없어 이 패널이 "표·그래프 자체를 확인하는 구간"으로만 비어
+      // 있었다 — 마법사 정량 검토 화면에 있던 설명을 여기로 옮겼다(2026-08-31).
+      const blockAtPoint = blockId ? findBlock(sections, blockId) : null;
+      const reference = ANALYSIS_EVIDENCE_BY_BLOCK[blockId] ?? quantEvidenceFor(blockAtPoint, quantStats);
       const quoteGroupAtReadingPoint = readingPoint?.closest<HTMLElement>("[data-quote-group]");
       const quoteScope = quoteGroupAtReadingPoint && !quoteGroupAtReadingPoint.closest("[data-analysis-evidence]") && !reference
         ? quoteGroupAtReadingPoint.closest<HTMLElement>("table") ?? quoteGroupAtReadingPoint
@@ -195,7 +225,7 @@ export function useReportEvidence({
       window.removeEventListener("resize", schedule);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentContainerRef, sections]);
+  }, [documentContainerRef, sections, quantStats]);
 
   async function regenerateRecommendation() {
     if (!sourceFileUrl || recommendationStatus === "loading" || !analysisBlockId) return;
