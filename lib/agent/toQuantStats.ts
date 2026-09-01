@@ -62,7 +62,7 @@ export type GenericStats = {
  * 여기서는 역할로 정하므로 어떤 raw data든 그 데이터의 실제 문항이 실제 단계에 들어간다.
  * 이름은 목차의 장 제목과 같아야 한다 — 표에는 "기능별"인데 목차는 "단계별"이면 어긋나 보인다.
  */
-export const STAGE_OF_ROLE: Partial<Record<QuestionRole, string>> = {
+const STAGE_OF_ROLE: Partial<Record<QuestionRole, string>> = {
   demographic: "인적 사항 및 특성 조사",
   context: "인적 사항 및 특성 조사",
   prior_service: "인적 사항 및 특성 조사",

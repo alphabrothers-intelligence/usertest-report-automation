@@ -23,7 +23,6 @@
     "check:question-specs": "tsx scripts/check-question-specs.ts",
     "check:toc-coverage": "tsx scripts/check-toc-coverage.ts",
     "check:quant-evidence": "tsx scripts/check-quant-evidence.ts",
-    "render:review-cards": "tsx --env-file=.env.local scripts/render-review-cards.ts",
     "render:quant-preview": "tsx scripts/render-quant-preview.ts",
     "render:reference-v2": "tsx scripts/render-reference-v2.tsx",
     "check:visual-layout": "tsx --env-file=.env.local scripts/check-visual-layout.ts",
