@@ -65,3 +65,6 @@ next-env.d.ts
 # STAGE_MAPPING.xlsx 작업 중 저장한 스냅샷/백업본 — 최종본만 커밋
 docs/STAGE_MAPPING.pre-*.xlsx
 docs/STAGE_MAPPING.backup-*.xlsx
+
+# Serena 로컬 설정
+/.serena/
