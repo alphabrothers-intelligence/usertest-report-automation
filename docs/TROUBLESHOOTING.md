@@ -15,6 +15,17 @@
   훅을 `safely()`로 감싸 부수 작업 실패가 본 작업을 죽이지 못하게** 했다(`sectionAnalysis.ts`).
   섹션 키를 새로 추가할 때는 이 check 제약도 같이 넓힐 것 — 안 그러면 조용히 안 돌아간다.
 
+## 웹뷰 스크린샷: `chrome --headless --screenshot`이 끝나지 않음 (2026-09-02)
+
+- **증상**: 보고서 웹뷰를 `Google Chrome --headless --screenshot --virtual-time-budget=15000`
+  으로 찍으려 하면 2분이 지나도 프로세스가 안 끝난다(빈 파일도 안 나온다).
+- **원인**: 이 화면은 스크롤 위치에 따라 왼쪽 근거 패널을 바꾸느라 `requestAnimationFrame`
+  루프가 계속 돈다. virtual time이 "할 일 없음"에 도달하지 못해 캡처 시점이 오지 않는다.
+- **해결**: `--remote-debugging-port`로 띄우고 CDP(Page.navigate → 고정 대기 →
+  Page.captureScreenshot)로 찍는다. `npm run shot:web -- "<url>" out.png 1440 'sel:<선택자>'`
+  로 만들어뒀다(추가 의존성 없음 — Node 내장 WebSocket 사용). Playwright는 이 저장소에
+  설치돼 있지 않다.
+
 ## 2026-09-02 — 앵커 인용문 1건이 원문에서 복원되지 않음 (미해결 · 추적 중)
 
 **증상**: 인용문을 원문 위치로 지목하게 하는 앵커 출력(`lib/pipeline/anchorQuotes.ts`)을 켜고

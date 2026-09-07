@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FocusEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react";
 import { RichReportEditor } from "@/components/RichReportEditor";
 import { EditableBarChart } from "@/components/report/EditableBarChart";
 import { EditableRankCompositionChart } from "@/components/report/EditableRankCompositionChart";
@@ -286,17 +286,52 @@ export function insertArrowLine() {
   active.dispatchEvent(new InputEvent("input", { bubbles: true }));
 }
 
-export function FormatButton({ label, title, onApply, className }: { label: string; title: string; onApply: () => void; className?: string }) {
+export function FormatButton({ label, title, onApply, className }: { label: ReactNode; title: string; onApply: () => void; className?: string }) {
   return (
     <button
       type="button"
       title={title}
+      aria-label={title}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onApply}
-      className={`rounded border border-[#d7dce8] px-2.5 py-1.5 text-sm font-semibold text-[#315c9c] hover:bg-[#edf3fc] ${className ?? ""}`}
+      // 글자 라벨("굵게")이 아니라 아이콘을 넣는다(2026-09-02 담당자 요청 — 첨부한 편집기 아이콘
+      // 형태). 뜻은 title/aria-label로 남긴다.
+      className={`flex size-9 items-center justify-center rounded-md text-[#3f4c5f] hover:bg-white ${className ?? ""}`}
     >
       {label}
     </button>
+  );
+}
+
+/** 편집 아이콘 — 첨부된 참고 이미지와 같은 얇은 선/글자 형태. */
+export function UndoIcon({ flip }: { flip?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" style={flip ? { transform: "scaleX(-1)" } : undefined}>
+      <path d="M9.5 14.5 5 10l4.5-4.5" />
+      <path d="M5 10h8.5a5.5 5.5 0 0 1 0 11H10" />
+    </svg>
+  );
+}
+
+/** 사이드바 여닫기 — 첨부 이미지와 같은 "칸이 나뉜 패널" 아이콘. `side`로 어느 쪽 칸인지 표시한다.
+ * 세 패널(목차·분석 근거·보고서 작업)의 접기 버튼이 전부 이 아이콘을 쓴다 — ×로 두면 무엇이
+ * 닫히는지, 어디서 다시 여는지 알 수 없다(2026-09-02 담당자 지적). */
+export function SidebarIcon({ side = "left" }: { side?: "left" | "right" }) {
+  return (
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinejoin="round">
+      <rect x="3.2" y="4.2" width="17.6" height="15.6" rx="3" />
+      <path d={side === "left" ? "M10 4.2v15.6" : "M14 4.2v15.6"} />
+    </svg>
+  );
+}
+
+export function FormatGlyph({ variant }: { variant: "bold" | "italic" | "underline" }) {
+  const style = variant === "bold" ? "font-bold" : variant === "italic" ? "italic font-serif" : "";
+  return (
+    <span className="relative inline-flex flex-col items-center leading-none">
+      <span className={`text-[17px] ${style}`}>A</span>
+      {variant === "underline" && <span className="mt-[2px] h-[1.5px] w-[15px] rounded bg-current" />}
+    </span>
   );
 }
 

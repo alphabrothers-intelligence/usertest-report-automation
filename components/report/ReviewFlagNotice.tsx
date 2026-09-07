@@ -9,11 +9,11 @@
  * 예: 리바랩스 Ⅱ장 유사 서비스 만족도는 100명이 아니라 91명 기준인데 그래프만 보면 전체
  * 결과로 읽힌다. Ⅲ장 순위표는 6.35 동점 두 기능이 3위/4위로 찍히는데 그건 컬럼 순서일 뿐이다.
  */
-import type { ReviewFlag } from "@/lib/quant/reviewFlags";
+import type { ReviewNotice } from "@/lib/quant/reviewFlags";
 
 /** 같은 이유가 여러 항목에서 걸리면 문구를 한 번만 쓰고 항목만 칩으로 나열한다. */
-function groupByReason(flags: ReviewFlag[]) {
-  const groups = new Map<string, { title?: string; message: string; severity: ReviewFlag["severity"]; locations: string[] }>();
+function groupByReason(flags: ReviewNotice[]) {
+  const groups = new Map<string, { title?: string; message: string; severity: ReviewNotice["severity"]; locations: string[] }>();
   for (const flag of flags) {
     const key = `${flag.severity}:${flag.title}:${flag.message}`;
     const group = groups.get(key);
@@ -23,7 +23,7 @@ function groupByReason(flags: ReviewFlag[]) {
   return [...groups.values()];
 }
 
-export function ReviewFlagNotice({ flags }: { flags: ReviewFlag[] }) {
+export function ReviewFlagNotice({ flags }: { flags: ReviewNotice[] }) {
   if (flags.length === 0) return null;
   return (
     <>

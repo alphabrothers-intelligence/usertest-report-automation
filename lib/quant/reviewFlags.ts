@@ -3,13 +3,18 @@
 // 이미 계산된 QuantStats 위에 "왜 이 숫자가 나왔는지" 이유를 붙이기만 한다.
 import type { QuantStats } from "./compute";
 
-export interface ReviewFlag {
-  sectionNumeral: "II" | "III" | "VII" | "VIII";
-  targetBlockId: string;
+/** 왼쪽 `분석 근거` 패널이 그리는 "한 번 더 봐주세요" 한 건. 정량 도표(아래 ReviewFlag)와
+ * 정성 극성 확인(lib/pipeline/confidence.ts의 categoryPolarityNeedsReview) 둘 다 이 모양이다. */
+export interface ReviewNotice {
   title?: string;
   location: string;
   message: string;
   severity: "info" | "warning";
+}
+
+export interface ReviewFlag extends ReviewNotice {
+  sectionNumeral: "II" | "III" | "VII" | "VIII";
+  targetBlockId: string;
 }
 
 const LOW_SAMPLE_THRESHOLD = 10; // 교차분석 그룹 표본이 이 미만이면 해석 주의

@@ -18,7 +18,7 @@ type ReportWebWorkspaceProps = {
   workspaceError?: string | null;
   onRetry: () => void;
   sourceFileUrl?: string | null;
-  onToolbarActionsChange?: (actions: { copy: () => void; openCorrections: () => void }) => void;
+  onToolbarActionsChange?: (actions: { copy: () => void; openCorrections: () => void; toggleToc: () => void; tocOpen: boolean }) => void;
   productInfo: ProductInfo;
   onProductInfoChange: (next: ProductInfo) => void;
   reviewFlags?: ReviewFlag[];

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { ReportPropertyPanel } from "@/components/ReportPropertyPanel";
+import { SidebarIcon } from "@/components/report-web-document/ReportBlockView";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
 import { REPORT_TEXT, SECTION_BANNER, sectionRomanGlyph } from "@/lib/report/sectionStyle";
 
@@ -43,11 +44,13 @@ export function TableOfContents({
   activeSection,
   onSelect,
   onSelectSubitem,
+  onCollapse,
 }: {
   sections: ReportSectionContent[];
   activeSection: string;
   onSelect: (numeral: string) => void;
   onSelectSubitem: (numeral: string, headingBlockId: string | null) => void;
+  onCollapse: () => void;
 }) {
   const navRef = useRef<HTMLElement>(null);
 
@@ -57,8 +60,15 @@ export function TableOfContents({
 
   return (
     <aside className="h-fit bg-transparent px-1 py-2 lg:sticky lg:top-28 lg:flex lg:max-h-[calc(100vh-8rem)] lg:flex-col lg:overflow-hidden">
-      <p className="px-2 text-xl font-bold tracking-[-0.03em] text-[#20242c]">목차</p>
-      <p className="mb-2 mt-0.5 px-2 text-xs text-[#8a94a3]">보고서 작성 현황</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="px-2 text-xl font-bold tracking-[-0.03em] text-[#20242c]">목차</p>
+          <p className="mb-2 mt-0.5 px-2 text-xs text-[#8a94a3]">보고서 작성 현황</p>
+        </div>
+        {/* 접기 버튼은 툴바의 목차 토글과 **같은 아이콘**이다 — ×로 두면 무엇이 닫히는지, 어디서
+            다시 여는지 알 수 없다는 지적(2026-09-02). */}
+        <button type="button" onClick={onCollapse} className="rounded-md p-1.5 text-[#1473e6] hover:bg-white" title="목차 접기" aria-label="목차 접기"><SidebarIcon /></button>
+      </div>
       <nav ref={navRef} className="min-h-0 space-y-0.5 pr-1 lg:overflow-y-auto lg:overscroll-contain">
         {sections.map((section) => {
           // **소목차는 그 장이 실제로 가진 절 제목에서 뽑는다.** 예전에는 리바랩스 기준 고정
@@ -114,17 +124,22 @@ export function ActionPanel({
   onDownload,
   selectedBlock,
   onBlockChange,
+  onCollapse,
 }: {
   activeTitle: string;
   onDownload: () => void;
   selectedBlock: ReportBlock | null;
   onBlockChange: (next: ReportBlock) => void;
+  onCollapse: () => void;
 }) {
   return (
     <aside className="h-fit rounded-xl border border-[#c9daf2] bg-white shadow-[0_10px_30px_rgba(31,55,88,0.08)] lg:sticky lg:top-36 lg:flex lg:max-h-[calc(100vh-10rem)] lg:flex-col lg:overflow-hidden">
-      <div className="border-b border-[#e3e8ef] px-5 py-4">
-        <p className="text-xs font-semibold text-[#8a94a3]">보고서 작업</p>
-        <p className="mt-1 text-base font-bold text-[#263449]">{activeTitle}</p>
+      <div className="flex items-start justify-between border-b border-[#e3e8ef] px-5 py-4">
+        <div>
+          <p className="text-xs font-semibold text-[#8a94a3]">보고서 작업</p>
+          <p className="mt-1 text-base font-bold text-[#263449]">{activeTitle}</p>
+        </div>
+        <button type="button" onClick={onCollapse} className="rounded-md p-1.5 text-[#1473e6] hover:bg-[#f2f5f9]" title="편집 패널 접기" aria-label="편집 패널 접기"><SidebarIcon side="right" /></button>
       </div>
       <div className="lg:min-h-0 lg:overflow-y-auto">
         <div className="space-y-2 p-5">

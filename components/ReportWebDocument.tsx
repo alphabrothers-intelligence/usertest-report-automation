@@ -19,9 +19,10 @@ import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetSt
 import { QuoteCorrectionPanel } from "@/components/QuoteCorrectionPanel";
 import { ActionPanel, PageFooter, SectionBanner, TableOfContents } from "@/components/report-web-document/ReportDocumentChrome";
 import { ReportBackCoverPage, ReportCoverPage, ReportTocPage } from "@/components/report-web-document/ReportFrontMatter";
-import { AnalysisReferenceContent, QuoteSourceContent } from "@/components/report-web-document/EvidencePanelContent";
+import { AnalysisReferenceContent, PolarityReviewCard, QuoteSourceContent } from "@/components/report-web-document/EvidencePanelContent";
 import { BlockView } from "@/components/report-web-document/ReportBlockView";
 import { ReviewFlagNotice } from "@/components/report/ReviewFlagNotice";
+import { SidebarIcon } from "@/components/report-web-document/ReportBlockView";
 import type { ReviewFlag } from "@/lib/quant/reviewFlags";
 import { useReportClipboard } from "@/components/report-web-document/useReportClipboard";
 import { useReportEvidence } from "@/components/report-web-document/useReportEvidence";
@@ -47,7 +48,7 @@ type Props = {
   sourceFileUrl?: string | null;
   /** 텍스트 서식·전체 복사·인용문 검토 버튼을 스튜디오 상단 고정 헤더(ReportStudio.tsx)에서
    * 그릴 수 있도록, 이 문서 컴포넌트 내부 핸들러를 위로 노출한다. */
-  onToolbarActionsChange?: (actions: { copy: () => void; openCorrections: () => void }) => void;
+  onToolbarActionsChange?: (actions: { copy: () => void; openCorrections: () => void; toggleToc: () => void; tocOpen: boolean }) => void;
   productInfo: ProductInfo;
   onProductInfoChange: (next: ProductInfo) => void;
   /** "한 번 더 봐주세요" 표시(lib/quant/reviewFlags.ts). 대상 도표 바로 위에 붙는다.
@@ -84,6 +85,12 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
   const [pageGroups, setPageGroups] = useState<Record<string, string[][]>>({});
   const [selectedBlockRef, setSelectedBlockRef] = useState<{ numeral: string; id: string } | null>(null);
   const [correctionsPanelOpen, setCorrectionsPanelOpen] = useState(false);
+  // 본문 열은 A4(210mm=794px) 아래로 못 줄이므로(줄이면 패널이 문서를 덮는다), 화면이 좁을 때
+  // 가로 스크롤 대신 접을 수 있게 한다 — 왼쪽 `분석 근거` 패널과 같은 방식.
+  const [actionPanelOpen, setActionPanelOpen] = useState(true);
+  // 목차를 접으면 그 폭을 왼쪽 `분석 근거` 패널이 가져간다(2026-09-02 담당자 요청) — 검토
+  // 카드·인용문 대조는 넓을수록 읽기 쉬운데 목차는 늘 펼쳐둘 필요가 없다.
+  const [tocOpen, setTocOpen] = useState(true);
   const { sectionElementsRef, scrollToSection, scrollToSubitem } = useReportNavigation({
     activeSection,
     onActiveSectionChange,
@@ -108,8 +115,12 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     quoteCompletion,
     quoteCompletionStatus,
     quoteCompletionTarget,
+    applyPolarityReview,
+    polarityReviews,
+    polarityReviewStatus,
     quotePanelOpen,
     quoteSource,
+    readingBlockId,
     quoteSourceStatus,
     recommendationError,
     recommendationStatus,
@@ -123,6 +134,15 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     sourceFileUrl,
     documentContainerRef,
     quantStats: reportData?.quantStats ?? null,
+    // 스크롤해서 도표 앞에 도착하면 오른쪽 편집 탭이 **클릭 없이** 그 도표로 열린다(담당자 요청).
+    // 본문 문단(text)에서는 바꾸지 않는다 — 글을 읽어 내려가는 동안 방금 고르던 차트의 편집칸이
+    // 사라지면 오히려 방해가 된다.
+    onReadingBlockChange: (blockId) => {
+      const section = sections.find((item) => findBlockById(item.blocks, blockId));
+      const block = section ? findBlockById(section.blocks, blockId) : null;
+      if (!section || !block || block.kind === "text") return;
+      setSelectedBlockRef({ numeral: section.numeral, id: blockId });
+    },
   });
 
   function updateBlock(numeral: string, blockId: string, next: ReportBlock) {
@@ -141,9 +161,15 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
   // 복사/인용검토 버튼을 스튜디오 상단 고정 헤더에서 그리려면, 이 컴포넌트 내부에서만
   // 만들 수 있는 핸들러(activeSection 클로저 포함)를 부모로 노출해야 한다.
   useEffect(() => {
-    onToolbarActionsChange?.({ copy: () => void copyActiveSection(), openCorrections: () => setCorrectionsPanelOpen(true) });
+    onToolbarActionsChange?.({
+      copy: () => void copyActiveSection(),
+      openCorrections: () => setCorrectionsPanelOpen(true),
+      // 목차는 접으면 열 자체가 사라지므로(세로 탭도 안 남긴다), 다시 여는 버튼은 위 툴바에 둔다.
+      toggleToc: () => setTocOpen((open) => !open),
+      tocOpen,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSection, onToolbarActionsChange]);
+  }, [activeSection, onToolbarActionsChange, tocOpen]);
 
   // 화면과 인쇄가 같은 A4 본문 폭에서 줄바꿈되도록 실제 렌더 높이를 측정해 블록을 페이지로
   // 묶는다. 긴 단일 블록은 브라우저가 문단/표 행 경계에서 자연 분할하도록 단독 페이지에 둔다.
@@ -244,8 +270,17 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     // 왼쪽 "분석 근거" 탭(펼쳤을 때 430px)이 본문보다 과하게 넓다는 지적(2026-08-12)으로
     // 320px로, 우측 패널은 텍스트 서식·복사·인용검토를 스튜디오 상단 고정 헤더로 옮기며 남는
     // 항목이 줄어 320px→260px로 줄였다. 본문 최소폭도 520px→560px로 올려 그만큼 더 넓게 보이게 한다.
-    <div className={`mx-auto grid max-w-[2020px] gap-5 px-4 py-8 lg:px-7 ${quotePanelOpen ? "lg:grid-cols-[250px_320px_minmax(560px,1fr)_260px]" : "lg:grid-cols-[250px_52px_minmax(560px,1fr)_260px]"}`}>
-      <TableOfContents sections={sections} activeSection={activeSection} onSelect={scrollToSection} onSelectSubitem={scrollToSubitem} />
+    <div
+      style={{
+        "--toc-col": tocOpen ? "250px" : "52px",
+        "--evidence-col": quotePanelOpen ? (tocOpen ? "320px" : "420px") : "52px",
+        "--action-col": actionPanelOpen ? "260px" : "52px",
+      } as React.CSSProperties}
+      className={`mx-auto grid max-w-[2020px] gap-5 px-4 py-8 lg:px-7 ${tocOpen ? "lg:grid-cols-[var(--toc-col)_var(--evidence-col)_minmax(210mm,1fr)_var(--action-col)]" : "lg:grid-cols-[var(--evidence-col)_minmax(210mm,1fr)_var(--action-col)]"}`}
+    >
+      {tocOpen && (
+        <TableOfContents sections={sections} activeSection={activeSection} onSelect={scrollToSection} onSelectSubitem={scrollToSubitem} onCollapse={() => setTocOpen(false)} />
+      )}
       {!quotePanelOpen && (
         <button type="button" onClick={() => setQuotePanelOpen(true)} className="h-fit rounded-lg border border-[#c9daf2] bg-white px-2 py-4 text-xs font-bold text-[#315c9c] shadow-sm lg:sticky lg:top-28" style={{ writingMode: "vertical-rl" }}>분석 근거</button>
       )}
@@ -253,9 +288,21 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
         <aside className="h-fit rounded-xl border border-[#c9daf2] bg-white shadow-sm lg:sticky lg:top-36 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto">
           <div className="flex items-start justify-between border-b border-[#e3e8ef] px-4 py-3">
             <div><p className="text-xs font-semibold text-[#356df3]">분석 근거</p><p className="mt-1 text-sm font-bold text-[#263449]">{analysisReference?.kind === "정량 계산" ? "도표의 계산 근거" : analysisReference ? "종합 해석의 참고 근거" : "인용문과 원문 대조"}</p></div>
-            <button type="button" onClick={() => setQuotePanelOpen(false)} className="rounded px-2 py-1 text-lg text-[#8a94a3] hover:bg-[#f2f5f9]" aria-label="원문 패널 접기">×</button>
+            <button type="button" onClick={() => setQuotePanelOpen(false)} className="rounded-md p-1.5 text-[#1473e6] hover:bg-[#f2f5f9]" title="분석 근거 패널 접기" aria-label="분석 근거 패널 접기"><SidebarIcon /></button>
           </div>
           <div className="p-4">
+            {/* 실무자가 확인해야 할 것을 한 곳에 모은다 — 정량 도표의 "요주의 표시"
+                (lib/quant/reviewFlags.ts)와 정성 극성 확인(categoryPolarityNeedsReview)이
+                계산 근거와 같은 패널에서, 지금 읽고 있는 자리에 맞춰 바뀐다. */}
+            <ReviewFlagNotice flags={reviewFlags.filter((flag) => flag.targetBlockId === readingBlockId)} />
+            {sourceFileUrl && polarityReviews.map((target) => (
+              <PolarityReviewCard
+                key={`${target.questionKey}-${target.label}`}
+                target={target}
+                status={polarityReviewStatus}
+                onDecide={(polarity) => void applyPolarityReview(target, polarity)}
+              />
+            ))}
             {analysisReference && !quoteSource && quoteSourceStatus === "idle" && (
               <AnalysisReferenceContent
                 reference={analysisReference}
@@ -312,7 +359,6 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedBlockRef({ numeral: section.numeral, id: block.id }); }}
                 className={`rounded transition-shadow ${selectedBlockRef?.numeral === section.numeral && selectedBlockRef.id === block.id ? "ring-2 ring-[#4fc8e8] ring-offset-2" : "hover:ring-1 hover:ring-[#c9d8ef]"}`}
               >
-                <ReviewFlagNotice flags={reviewFlags.filter((flag) => flag.targetBlockId === block.id)} />
                 <BlockView
                   block={block}
                   sourceFileUrl={sourceFileUrl}
@@ -328,14 +374,19 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
         ))}
         <ReportBackCoverPage productInfo={productInfo} onChange={(next) => { checkpoint(); onProductInfoChange(next); }} />
       </article>
-      <ActionPanel
-        activeTitle={sections.find((section) => section.numeral === activeSection)?.title ?? "보고서 편집"}
-        onDownload={() => void downloadActiveSectionZip()}
-        selectedBlock={selectedBlock}
-        onBlockChange={(next) => {
-          if (selectedBlockRef) updateBlock(selectedBlockRef.numeral, selectedBlockRef.id, next);
-        }}
-      />
+      {actionPanelOpen ? (
+        <ActionPanel
+          activeTitle={sections.find((section) => section.numeral === activeSection)?.title ?? "보고서 편집"}
+          onDownload={() => void downloadActiveSectionZip()}
+          selectedBlock={selectedBlock}
+          onBlockChange={(next) => {
+            if (selectedBlockRef) updateBlock(selectedBlockRef.numeral, selectedBlockRef.id, next);
+          }}
+          onCollapse={() => setActionPanelOpen(false)}
+        />
+      ) : (
+        <button type="button" onClick={() => setActionPanelOpen(true)} className="h-fit rounded-lg border border-[#c9daf2] bg-white px-2 py-4 text-xs font-bold text-[#315c9c] shadow-sm lg:sticky lg:top-28" style={{ writingMode: "vertical-rl" }}>보고서 작업</button>
+      )}
       <QuoteCorrectionPanel
         open={correctionsPanelOpen}
         onClose={() => setCorrectionsPanelOpen(false)}

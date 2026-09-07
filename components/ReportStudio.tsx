@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import { withDefaultQuadrantZones, type ReportBlock, type ReportSectionContent } from "@/lib/report/sections";
 import { ReportWebWorkspace } from "@/components/ReportWebWorkspace";
-import { applyTextFormat, insertArrowLine, FormatButton } from "@/components/report-web-document/ReportBlockView";
+import { applyTextFormat, insertArrowLine, FormatButton, FormatGlyph, SidebarIcon, UndoIcon } from "@/components/report-web-document/ReportBlockView";
 import type { ProductInfo } from "@/lib/productInfo/types";
 import type { ReviewFlag } from "@/lib/quant/reviewFlags";
 import { useQualitativeJob } from "@/components/wizard/useQualitativeJob";
@@ -179,7 +179,7 @@ export function ReportStudio({
   const [exporting, setExporting] = useState<"hwpx" | null>(null);
   // 텍스트 서식·전체 복사·인용문 검토 버튼(2026-08-12, 헤더로 이전) — activeSection이
   // 바뀔 때마다 ReportWebDocument가 최신 핸들러로 갱신해준다.
-  const [toolbarActions, setToolbarActions] = useState<{ copy: () => void; openCorrections: () => void } | null>(null);
+  const [toolbarActions, setToolbarActions] = useState<{ copy: () => void; openCorrections: () => void; toggleToc: () => void; tocOpen: boolean } | null>(null);
   const inlinePdfUrl = useMemo(() => withInlinePdf(pdfUrl), [pdfUrl]);
 
   useEffect(() => {
@@ -245,6 +245,23 @@ export function ReportStudio({
   const job = useQualitativeJob(qualitativeJobId ?? null);
   const [applyingQualitative, setApplyingQualitative] = useState(false);
   const [qualitativeApplied, setQualitativeApplied] = useState(false);
+  const [retryingQualitative, setRetryingQualitative] = useState(false);
+
+  /** 빠진 문항만 다시 큐에 넣는다. 워커 루프가 알아서 집어가므로 여기서는 상태만 되돌린다. */
+  async function retryFailedQualitative() {
+    if (!qualitativeJobId) return;
+    setRetryingQualitative(true);
+    try {
+      const response = await fetch(`/api/qualitative-jobs/${qualitativeJobId}/retry-failed`, { method: "POST" });
+      const payload = await response.json() as { ok: boolean; error?: string };
+      if (!payload.ok) throw new Error(payload.error || "빠진 문항을 다시 시작하지 못했습니다.");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "빠진 문항을 다시 시작하지 못했습니다.");
+    } finally {
+      setRetryingQualitative(false);
+    }
+  }
+
 
   /**
    * 도착한 의견 분석을 **비어 있는 자리에만** 채운다.
@@ -463,16 +480,31 @@ export function ReportStudio({
         </div>
         <div className="border-t border-[#e4e8ef] bg-[#f8f9fc]">
           <div className="mx-auto flex min-h-[54px] max-w-[2000px] items-center gap-2 px-5 sm:px-8">
-            <button type="button" title="되돌리기" onClick={undo} disabled={undoStack.length === 0} className="flex size-9 items-center justify-center rounded-md text-lg text-[#526174] hover:bg-white disabled:opacity-30">↶</button>
-            <button type="button" title="다시 실행" onClick={redo} disabled={redoStack.length === 0} className="flex size-9 items-center justify-center rounded-md text-lg text-[#526174] hover:bg-white disabled:opacity-30">↷</button>
+            {workspaceMode === "web" && toolbarActions && (
+              <>
+                <button
+                  type="button"
+                  title={toolbarActions.tocOpen ? "목차 접기" : "목차 펼치기"}
+                  aria-label={toolbarActions.tocOpen ? "목차 접기" : "목차 펼치기"}
+                  aria-pressed={toolbarActions.tocOpen}
+                  onClick={toolbarActions.toggleToc}
+                  className={`flex size-9 items-center justify-center rounded-md hover:bg-white ${toolbarActions.tocOpen ? "text-[#1473e6]" : "text-[#526174]"}`}
+                >
+                  <SidebarIcon />
+                </button>
+                <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
+              </>
+            )}
+            <button type="button" title="되돌리기" aria-label="되돌리기" onClick={undo} disabled={undoStack.length === 0} className="flex size-9 items-center justify-center rounded-md text-[#526174] hover:bg-white disabled:opacity-30"><UndoIcon /></button>
+            <button type="button" title="다시 실행" aria-label="다시 실행" onClick={redo} disabled={redoStack.length === 0} className="flex size-9 items-center justify-center rounded-md text-[#526174] hover:bg-white disabled:opacity-30"><UndoIcon flip /></button>
             <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
             {workspaceMode === "web" && toolbarActions && (
               <>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <FormatButton label="굵게" title="굵게" onApply={() => applyTextFormat("bold")} className="font-bold" />
-                  <FormatButton label="기울임" title="기울임" onApply={() => applyTextFormat("italic")} className="italic" />
-                  <FormatButton label="밑줄" title="밑줄" onApply={() => applyTextFormat("underline")} className="underline" />
-                  <FormatButton label="제언 화살표" title="→ 제언 문단 추가" onApply={insertArrowLine} />
+                  <FormatButton label={<FormatGlyph variant="bold" />} title="굵게" onApply={() => applyTextFormat("bold")} />
+                  <FormatButton label={<FormatGlyph variant="italic" />} title="기울임" onApply={() => applyTextFormat("italic")} />
+                  <FormatButton label={<FormatGlyph variant="underline" />} title="밑줄" onApply={() => applyTextFormat("underline")} />
+                  <FormatButton label={<span className="text-[15px]">→</span>} title="제언 화살표 문단 추가" onApply={insertArrowLine} />
                 </div>
                 <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -498,11 +530,14 @@ export function ReportStudio({
           total={job.total}
           isFinished={job.isFinished}
           isSuccessful={job.isSuccessful}
-          failed={job.progress?.failed ?? 0}
+          isIncomplete={job.isIncomplete}
+          failed={job.failed}
           networkNotice={job.networkNotice}
           applying={applyingQualitative}
           applied={qualitativeApplied}
+          retrying={retryingQualitative}
           onApply={() => void applyQualitative()}
+          onRetryFailed={() => void retryFailedQualitative()}
         />
       )}
 

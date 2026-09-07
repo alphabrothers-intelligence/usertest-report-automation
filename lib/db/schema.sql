@@ -109,6 +109,11 @@ create index if not exists categories_question_id_idx on categories (question_id
 -- 검증 기준이라 건드리지 않고, 렌더링은 이 컬럼을 우선 쓴다(없으면 quotes로 폴백).
 alter table categories add column if not exists quotes_display text[];
 
+-- 극성 판정 확인(2026-09-02): 부정↔중립 경계에 걸린 묶음을 담당자가 확인했는지. 확인했거나
+-- 극성을 바꾼 뒤에는 웹뷰 왼쪽 패널이 같은 묶음을 다시 물어보지 않는다. 승인 게이트가 아니라
+-- "이미 봤다"는 표시일 뿐이라 기본값은 false이고 PDF 발행을 막지 않는다.
+alter table categories add column if not exists polarity_reviewed boolean not null default false;
+
 -- 2026-09-04: 카테고리에 속한 응답자 번호. **비율(clause_count)을 코드가 세기 위해** 모델에게
 -- 개수 대신 이 목록을 받게 바꾸면서 같이 저장한다(lib/pipeline/anchorQuotes.ts). 저장해두면
 -- 극성 판정 채점을 대표 인용 몇 건이 아니라 전수로 할 수 있다.

@@ -8,6 +8,7 @@ import { buildReportPlan } from "@/lib/pipeline/reportPlan";
 import type { SectionPlan } from "@/lib/agent/sectionPlan";
 import { parseFourValueItemTexts } from "@/lib/pipeline/sectionAnalysis";
 import { decodeImprovementLabel } from "@/lib/pipeline/stage2";
+import { categoryPolarityNeedsReview } from "@/lib/pipeline/confidence";
 import { buildConclusionSection } from "@/lib/report/workspaceConclusion";
 import { buildOverviewSection } from "@/lib/report/workspaceOverview";
 import { buildDemographicsSection } from "@/lib/report/workspaceDemographics";
@@ -115,14 +116,36 @@ function improvementCategoryHtml(categories: CategoryRow[], questionKey: string)
   return out;
 }
 
-function categoryHtml(cat: CategoryRow, questionKey: string): string[] {
+/**
+ * 원본 PDF 실측 글자 크기(`pdftotext -bbox`, 2026-09-02). bbox 높이는 명목 크기의 약 1.11배라
+ * 그 비율로 환산한 값이다.
+ *  - Ⅲ장(한 칸): 인용문 10pt, 카테고리 라벨 11pt, 극성 배너 13pt
+ *  - Ⅴ장(두 칸): 인용문 9pt, 조사 결과 박스 10pt — **두 칸이라 한 칸보다 작다**
+ * 웹 편집기 본문이 13px(=9.75pt)이므로 Ⅲ장은 그대로 두고, Ⅴ장 두 칸만 9pt로 줄인다.
+ */
+const VALUE_COLUMN = { quote: "9pt", label: "9.5pt", header: "11pt" };
+
+function categoryHtml(cat: CategoryRow, questionKey: string, options: { compact?: boolean } = {}): string[] {
   // 한글 붙여넣기에서 CSS font-weight만으로는 굵게가 유지되지 않는 사례가 있어,
   // 인라인 스타일과 실제 의미 태그를 반드시 함께 낸다.
-  const out = [`<p style="font-weight:700;margin:10pt 0 3pt"><strong>[${richTextToInlineHtml(cat.label)}]</strong></p>`];
+  const labelSize = options.compact ? `font-size:${VALUE_COLUMN.label};` : "";
+  const out = [`<p style="${labelSize}font-weight:700;margin:10pt 0 3pt"><strong>[${richTextToInlineHtml(cat.label)}]</strong></p>`];
   cat.quotes.slice(0, 3).forEach((quote, i) => out.push(quoteHtml(quote, questionKey, cat.quotes_display?.[i])));
   out.push(`<p style="font-weight:700;font-style:italic;margin:3pt 0 8pt"><strong><em>→ ${richTextToInlineHtml(cat.insight_final ?? cat.insight_draft)}</em></strong></p>`);
   out.push(BLANK_LINE_HTML);
-  return out;
+  // 카테고리 하나를 감싸는 컨테이너. **문서에 보이는 것은 아무것도 더하지 않는다**(테두리도
+  // 배경도 없는 순수 래퍼) — 왼쪽 `분석 근거` 패널이 "지금 읽고 있는 묶음"을 정확히 집어내고,
+  // 극성 확인이 필요한 묶음이면 그 자리에서 인용문·사유·처리 버튼을 띄우기 위한 표식이다.
+  // 한글 복사기(domClipboard.walkBlock)는 블록 자식만 있는 래퍼를 그대로 펼치므로 안전하다.
+  const review = cat.polarity_reviewed ? null : categoryPolarityNeedsReview(cat);
+  const reviewAttributes = review
+    ? ` data-polarity-review="${escapeHtml(encodeURIComponent(review.reason))}" data-polarity-review-signals="${escapeHtml(encodeURIComponent(review.signals.join("|")))}"`
+    : "";
+  return [
+    `<div data-quote-category data-category-question="${escapeHtml(questionKey)}"` +
+      ` data-category-label="${escapeHtml(encodeURIComponent(cat.label))}"` +
+      ` data-category-polarity="${escapeHtml(cat.polarity ?? "")}"${reviewAttributes}>${out.join("")}</div>`,
+  ];
 }
 
 // --- 원본 14페이지 "주관식 응답 감정 분석"(반원 도넛 + %표) + "응답 요약" (2026-07-26 추가) ---
@@ -380,10 +403,12 @@ function qualitativeBlock(id: string, label: string, questions: QuestionWithAppr
  */
 function valueOpinionColumnHtml(title: string, background: string, categories: CategoryRow[], questionKey: string): string {
   const body = categories.length
-    ? categories.map((category) => categoryHtml(category, questionKey).join("")).join("")
+    ? categories.map((category) => categoryHtml(category, questionKey, { compact: true }).join("")).join("")
     : `<p style="margin:0;color:#6b7280">분석된 ${title} 의견이 없습니다.</p>`;
-  return `<td data-quote-section="${escapeHtml(title)} 의견" style="width:50%;vertical-align:top;border:${CSS.border};padding:10pt;background-color:#ffffff">
-    <p style="margin:0 0 8pt;padding:5pt 8pt;background-color:${background};font-weight:700;text-align:center">${title} 의견</p>
+  // 글자 크기를 명시하지 않으면 이 칸만 문서 기본값(16px)으로 렌더된다. 원본 실측값(9pt,
+  // VALUE_COLUMN 주석 참고)에 맞춘다 — 두 칸으로 나뉜 자리라 Ⅲ장 한 칸(10pt)보다 작다.
+  return `<td data-quote-section="${escapeHtml(title)} 의견" style="width:50%;vertical-align:top;border:${CSS.border};padding:10pt;background-color:#ffffff;font-size:${VALUE_COLUMN.quote};line-height:1.65">
+    <p style="margin:0 0 8pt;padding:5pt 8pt;background-color:${background};font-size:${VALUE_COLUMN.header};font-weight:700;text-align:center">${title} 의견</p>
     ${body}
   </td>`;
 }
@@ -428,22 +453,22 @@ export function valueSummaryBoxHtml(label: string, summaries: PolaritySummaryTex
           .filter((value): value is string => Boolean(value))
           .join(" ")
       : "");
-  // overrideText(sectionAnalysis.ts 자동 생성분)가 있으면 이미 채워진 값이니 "AI 요약 생성"
-  // 버튼을 보여줄 필요가 없다 — questionKey를 비워 버튼을 감춘다.
-  questionKey = overrideText ? undefined : questionKey;
+  // **"AI 요약 생성" 버튼은 두지 않는다**(2026-09-02 담당자 요청) — 이 박스는 정성 분석
+  // 과정에서 runFourValueItemAnalysis가 항상 채운다. 예전엔 그 섹션이 실행 이력 테이블의
+  // 체크 제약 때문에 한 번도 실행되지 못해(schema.sql 참고) 담당자가 매번 버튼을 눌러야
+  // 했는데, 그건 자동 생성이 고장 나 있다는 신호였지 사람이 할 일이 아니었다.
+  void questionKey;
   // 가치 전용 프롬프트는 3~4문장을 줄바꿈으로 분리한다. 단순 <br>보다 실제 <p>가 한글의
   // 붙여넣기에서 문단/문단 간격으로 더 안정적으로 변환되므로 줄마다 문단을 만든다.
   // richTextToInlineHtml은 **__강조__**를 <strong><u>로 바꿔 HWP에도 강조 의미가 남는다.
   const formattedText = text.split(/\r?\n+/).filter(Boolean)
     .map((line) => `<p style="margin:0 0 5pt;line-height:1.65">${richTextToInlineHtml(line)}</p>`)
     .join("");
-  const action = questionKey
-    ? `<button type="button" data-copy-ignore contenteditable="false" data-ai-summary="${escapeHtml(questionKey)}" style="float:right;border:1px solid #315c9c;border-radius:3pt;background:#ffffff;color:#315c9c;padding:3pt 7pt;font-size:9pt;font-weight:700;cursor:pointer">AI 요약 생성</button>`
-    : "";
+  const action = "";
   return (
     `<table style="${CSS.table};margin:0 0 14pt"><tbody>` +
     `<tr><td style="${CSS.header};color:#000000">${action}[ ${escapeHtml(label)} 조사 결과 ]</td></tr>` +
-    `<tr><td style="${CSS.cellLeft};padding:8pt">${text ? formattedText : "정성 요약이 아직 없습니다. 이 박스의 AI 요약 생성 버튼으로 채울 수 있습니다."}</td></tr>` +
+    `<tr><td style="${CSS.cellLeft};padding:8pt">${text ? formattedText : "이 항목의 정성 요약이 아직 생성되지 않았습니다. 의견 분석을 다시 실행하면 함께 채워집니다."}</td></tr>` +
     `</tbody></table>`
   );
 }

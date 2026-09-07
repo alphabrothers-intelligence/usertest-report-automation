@@ -38,6 +38,8 @@
     "check:qualitative-fidelity": "tsx --env-file=.env.local scripts/check-qualitative-fidelity.ts",
     "check:category-coverage": "tsx --env-file=.env.local scripts/check-category-coverage.ts",
     "db:migrate": "tsx --env-file=.env.local scripts/db-migrate.ts",
+    "check:polarity-review": "tsx scripts/check-polarity-review.ts",
+    "shot:web": "tsx scripts/shot-web.ts",
     "check:quote-evidence": "tsx scripts/check-quote-evidence.ts",
     "check:fast-polarity": "tsx --env-file=.env.local scripts/check-fast-polarity.ts"
   },

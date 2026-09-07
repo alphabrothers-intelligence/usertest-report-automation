@@ -114,7 +114,7 @@ function sanitizeReportHtml(value: string): string {
       continue;
     }
     for (const attribute of Array.from(element.attributes)) {
-      if (["data-report-kind", "data-report-quote", "data-quote-group", "data-quote-section", "data-analysis-evidence", "data-analysis-label", "data-edited-quote", "data-edited-quote-diff", "data-copy-ignore", "data-quote-source", "data-quote-text", "data-quote-group-source", "data-quote-group-label", "data-quote-group-bundle", "data-quote-completion-source", "data-quote-ending-review", "data-quote-ending-token", "data-quote-ending-note", "contenteditable", "type", "title", "hidden"].includes(attribute.name)) continue;
+      if (["data-report-kind", "data-report-quote", "data-quote-group", "data-quote-section", "data-analysis-evidence", "data-analysis-label", "data-edited-quote", "data-edited-quote-diff", "data-copy-ignore", "data-quote-source", "data-quote-text", "data-quote-group-source", "data-quote-group-label", "data-quote-category", "data-category-question", "data-category-label", "data-category-polarity", "data-polarity-review", "data-polarity-review-signals", "data-quote-group-bundle", "data-quote-completion-source", "data-quote-ending-review", "data-quote-ending-token", "data-quote-ending-note", "contenteditable", "type", "title", "hidden"].includes(attribute.name)) continue;
       if (attribute.name === "style") {
         const style = sanitizeStyle(attribute.value);
         if (style) element.setAttribute("style", style);

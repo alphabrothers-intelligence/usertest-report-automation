@@ -9,6 +9,7 @@ import type { QuoteCompletionTarget, QuoteSourceResult } from "@/components/repo
 import { reportQuoteReviewToken, splitHighlightParts } from "@/lib/report/quoteEnding";
 import { escapeHtml } from "@/lib/report/richText";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
+import type { PolarityReviewTarget } from "@/components/report-web-document/EvidencePanelContent";
 import type { QuantStats } from "@/lib/quant/compute";
 
 type RequestStatus = "idle" | "loading" | "error";
@@ -26,6 +27,8 @@ type UseReportEvidenceInput = {
   documentContainerRef: RefObject<HTMLDivElement | null>;
   /** 정량 도표의 계산 근거를 만드는 데 쓴다(응답자 수 등). 없으면 도표 근거는 안 뜬다. */
   quantStats?: QuantStats | null;
+  /** 읽고 있는 블록이 바뀔 때 한 번씩 호출한다 — 오른쪽 편집 탭을 클릭 없이 따라오게 하는 데 쓴다. */
+  onReadingBlockChange?: (blockId: string) => void;
 };
 
 /** row-group(항목/주요 의견 표)은 행마다 자식 블록을 품고 있어 한 단계 더 내려가야 한다. */
@@ -56,6 +59,7 @@ export function useReportEvidence({
   sourceFileUrl,
   documentContainerRef,
   quantStats,
+  onReadingBlockChange,
 }: UseReportEvidenceInput) {
   const [quoteSource, setQuoteSource] = useState<QuoteSourceResult | null>(null);
   const [quoteSourceStatus, setQuoteSourceStatus] = useState<RequestStatus>("idle");
@@ -64,10 +68,20 @@ export function useReportEvidence({
   const [quoteCompletionTarget, setQuoteCompletionTarget] = useState<QuoteCompletionTarget | null>(null);
   const [quotePanelOpen, setQuotePanelOpen] = useState(true);
   const [analysisReference, setAnalysisReference] = useState<AnalysisReference | null>(null);
+  // 지금 읽고 있는 블록 — 정량 "요주의 표시"를 문서 본문이 아니라 이 패널에서 고르는 데 쓴다.
+  const [readingBlockId, setReadingBlockId] = useState<string>("");
+  const [polarityReviews, setPolarityReviews] = useState<PolarityReviewTarget[]>([]);
+  const [polarityReviewStatus, setPolarityReviewStatus] = useState<RequestStatus>("idle");
   const [analysisBlockId, setAnalysisBlockId] = useState<string | null>(null);
   const [recommendationStatus, setRecommendationStatus] = useState<RequestStatus>("idle");
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
   const quoteSourceRequestRef = useRef(0);
+  const lastReadingBlockRef = useRef<string | null>(null);
+  // 스크롤 콜백은 sections가 바뀔 때만 다시 만들어지므로, 최신 콜백을 ref로 들고 있는다.
+  const onReadingBlockChangeRef = useRef(onReadingBlockChange);
+  useEffect(() => {
+    onReadingBlockChangeRef.current = onReadingBlockChange;
+  });
   const activeEvidenceKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -162,9 +176,37 @@ export function useReportEvidence({
 
       const blockAtReadingPoint = readingPoint?.closest<HTMLElement>("[data-report-block-id]");
       const blockId = blockAtReadingPoint?.dataset.reportBlockId ?? "";
-      // 해석·제언 블록은 고정 표에서, 정량 도표는 블록에서 그때그때 만든다.
-      // 예전에는 도표에 근거가 없어 이 패널이 "표·그래프 자체를 확인하는 구간"으로만 비어
-      // 있었다 — 마법사 정량 검토 화면에 있던 설명을 여기로 옮겼다(2026-08-31).
+      setReadingBlockId(blockId);
+      if (lastReadingBlockRef.current !== blockId) {
+        lastReadingBlockRef.current = blockId;
+        onReadingBlockChangeRef.current?.(blockId);
+      }
+      // 극성 확인이 필요한 묶음(lib/report/workspace.ts의 categoryHtml)은 **읽고 있는 그 자리**
+      // 에서만 띄운다. 예전엔 블록 전체에서 모아서, 긍정 의견을 읽는 중에 부정 묶음 카드가
+      // 떠 있는 어긋난 화면이 됐다(2026-09-02 담당자 지적). 묶음 안이면 그 묶음만, 극성
+      // 그룹(긍정/부정/중립) 안이면 그 그룹 것만 본다.
+      const categoryAtPoint = readingPoint?.closest<HTMLElement>("[data-quote-category][data-polarity-review]");
+      const reviewScope = categoryAtPoint ?? readingPoint?.closest<HTMLElement>("[data-quote-group]");
+      const reviewNodes = categoryAtPoint
+        ? [categoryAtPoint]
+        : Array.from(reviewScope?.querySelectorAll<HTMLElement>("[data-quote-category][data-polarity-review]") ?? []);
+      const reviews: PolarityReviewTarget[] = reviewNodes.map((node) => ({
+        blockId,
+        questionKey: node.dataset.categoryQuestion ?? "",
+        label: decodeURIComponent(node.dataset.categoryLabel ?? ""),
+        polarity: (node.dataset.categoryPolarity ?? "") as PolarityReviewTarget["polarity"],
+        reason: decodeURIComponent(node.dataset.polarityReview ?? ""),
+        signals: decodeURIComponent(node.dataset.polarityReviewSignals ?? "").split("|").filter(Boolean),
+        quotes: Array.from(node.querySelectorAll<HTMLElement>("[data-quote-text]"))
+          .map((quote) => decodeURIComponent(quote.dataset.quoteText ?? "")).filter(Boolean),
+      }));
+      // 스크롤 프레임마다 새 배열이라 같은 내용이면 이전 상태를 그대로 둔다(재렌더 방지).
+      setPolarityReviews((previous) =>
+        previous.length === reviews.length && previous.every((item, index) => item.label === reviews[index].label)
+          ? previous
+          : reviews,
+      );
+
       const blockAtPoint = blockId ? findBlock(sections, blockId) : null;
       const reference = ANALYSIS_EVIDENCE_BY_BLOCK[blockId] ?? quantEvidenceFor(blockAtPoint, quantStats);
       const quoteGroupAtReadingPoint = readingPoint?.closest<HTMLElement>("[data-quote-group]");
@@ -226,6 +268,37 @@ export function useReportEvidence({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentContainerRef, sections, quantStats]);
+
+  /**
+   * 극성 확인 처리. "이대로 유지"(polarity=null)는 확인 표시만, 다른 극성을 고르면 실제로 옮긴다.
+   * 바뀐 문항 블록은 **서버가 다시 만든 것으로 통째로 교체**한다 — 배너 번호·비율·도넛이 함께
+   * 달라지는데 그 계산을 브라우저에서 또 구현하면 두 벌이 되기 때문이다. 교체 범위는 그 문항의
+   * 블록(`...-q3-intro`/`-chart`/`-detail`)뿐이라 다른 곳의 편집 내용은 그대로 남는다.
+   */
+  async function applyPolarityReview(target: PolarityReviewTarget, polarity: PolarityReviewTarget["polarity"] | null) {
+    if (!sourceFileUrl || polarityReviewStatus === "loading") return;
+    setPolarityReviewStatus("loading");
+    try {
+      const response = await fetch("/api/report-workspace/category-polarity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: sourceFileUrl, questionKey: target.questionKey, label: target.label, polarity }),
+      });
+      const result = await response.json() as { ok: boolean; sections?: ReportSectionContent[]; error?: string };
+      if (!response.ok || !result.ok || !result.sections) throw new Error(result.error);
+      const prefix = target.blockId.replace(/-(intro|chart|detail)$/, "");
+      const rebuilt = new Map(result.sections.flatMap((section) => section.blocks).map((block) => [block.id, block]));
+      checkpoint();
+      setSections((previous) => previous.map((section) => ({
+        ...section,
+        blocks: section.blocks.map((block) => (block.id.startsWith(prefix) ? rebuilt.get(block.id) ?? block : block)),
+      })));
+      setPolarityReviews((previous) => previous.filter((item) => item.label !== target.label));
+      setPolarityReviewStatus("idle");
+    } catch {
+      setPolarityReviewStatus("error");
+    }
+  }
 
   async function regenerateRecommendation() {
     if (!sourceFileUrl || recommendationStatus === "loading" || !analysisBlockId) return;
@@ -346,6 +419,10 @@ export function useReportEvidence({
 
   return {
     analysisReference,
+    applyPolarityReview,
+    polarityReviews,
+    polarityReviewStatus,
+    readingBlockId,
     applyBatchCorrections,
     applyQuoteCompletion,
     generateQuoteCompletion,

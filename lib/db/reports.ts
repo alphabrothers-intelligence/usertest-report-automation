@@ -407,6 +407,8 @@ export interface CategoryRow {
   insight_draft: string;
   insight_final: string | null;
   insight_approved: boolean;
+  /** 극성 판정 확인 표시를 담당자가 처리했는지(확인 또는 극성 변경). 게이트가 아니라 표시다. */
+  polarity_reviewed: boolean;
   /** 이 카테고리에 속한 응답자 번호(앵커 경로). clause_count는 이 목록의 길이다. */
   respondents: number[] | null;
 }
@@ -603,6 +605,29 @@ export async function getQuestionsWithAllCategories(
     ...q,
     categories: categories.filter((c) => c.question_id === q.id),
   }));
+}
+
+/**
+ * 웹뷰 왼쪽 패널의 극성 확인 처리(2026-09-02). 담당자가 "이대로 유지"를 고르면 확인만 남기고,
+ * 다른 극성을 고르면 카테고리의 polarity 자체를 바꾼다 — 보고서의 배너 비율·도넛은 서버가
+ * 이 값으로 다시 만들므로(lib/report/workspace.ts) 화면에서 따로 계산하지 않는다.
+ */
+export async function reviewCategoryPolarity(
+  reportId: string,
+  questionKey: string,
+  label: string,
+  polarity: Polarity | null,
+): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    update categories cat set
+      polarity_reviewed = true,
+      polarity = coalesce(${polarity}, cat.polarity)
+    from questions q
+    where q.id = cat.question_id and q.report_id = ${reportId}
+      and q.question_key = ${questionKey} and cat.label = ${label}
+    returning cat.id
+  `;
+  return rows.length > 0;
 }
 
 /** 극성 요약 결과를 문항별로 저장한다 — 기존 요약이 있으면 병합(coalesce)하지 않고 덮어쓴다

@@ -16,6 +16,100 @@ export type QuoteSourceResult = {
   }>;
 };
 
+/** 사람이 직접 눈으로 확인해야 하는 항목 — 나머지(계산 방식 등)는 참고용 사실이다. */
+const ACTION_BULLET_LABELS = new Set(["확인할 내용", "검증할 부분"]);
+
+export type PolarityReviewTarget = {
+  /** 확인 결과를 적용할 때 다시 만들 문항 블록을 찾는 기준. */
+  blockId: string;
+  questionKey: string;
+  label: string;
+  polarity: "positive" | "negative" | "neutral" | "";
+  reason: string;
+  signals: string[];
+  quotes: string[];
+};
+
+const POLARITY_LABEL: Record<string, string> = { positive: "긍정", negative: "부정", neutral: "중립" };
+
+/** 판정을 흔들리게 만든 표현에 형광펜을 친다 — "무엇을 보고 이 판정이 나왔는지"가 카드에서 바로 보이도록. */
+function QuoteWithSignals({ quote, signals }: { quote: string; signals: string[] }) {
+  const pattern = signals.filter(Boolean).map((signal) => signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  if (!pattern) return <>{quote}</>;
+  return (
+    <>
+      {quote.split(new RegExp(`(${pattern})`)).map((part, index) =>
+        signals.includes(part)
+          ? <mark key={`${part}-${index}`} className="rounded bg-[#ffe9b8] px-0.5 text-inherit">{part}</mark>
+          : <span key={`${part}-${index}`}>{part}</span>,
+      )}
+    </>
+  );
+}
+
+/**
+ * 극성 판정 확인 카드(2026-09-02). **경고가 아니라 결정 화면이다.**
+ *
+ * 첫 판(같은 날 오전)은 사유·판단 기준·형광펜 설명·되돌리기 안내를 다 문장으로 적어 18줄이
+ * 넘었고, "읽을 게 너무 많아 빨리 판단할 수 없다"는 지적을 받았다. 지금은 **판단에 실제로
+ * 필요한 것만** 남긴다:
+ *  - 무엇을 판단하나 → 묶음 이름 + 한 줄 사유
+ *  - 무엇을 보고 판단하나 → 응답 원문(판정 근거가 된 표현에 형광펜)
+ *  - 어떻게 결정하나 → 두 버튼. **판단 기준은 별도 문단이 아니라 버튼 밑 한 마디로** 붙인다
+ *    (기준을 읽는 곳과 고르는 곳이 같아야 한 번에 끝난다).
+ */
+export function PolarityReviewCard({
+  target,
+  status,
+  onDecide,
+}: {
+  target: PolarityReviewTarget;
+  status: "idle" | "loading" | "error";
+  onDecide: (polarity: PolarityReviewTarget["polarity"] | null) => void;
+}) {
+  const current = POLARITY_LABEL[target.polarity] ?? "미분류";
+  const alternative = target.polarity === "neutral" ? "negative" : "neutral";
+  const busy = status === "loading";
+  const hint: Record<string, string> = { positive: "만족·칭찬", negative: "구체적 불편 있음", neutral: "취향·단순 감상" };
+  return (
+    <section className="mb-3 overflow-hidden rounded-xl border border-[#ecd6ae] bg-[#fffaf1]">
+      <div className="px-3.5 pb-2.5 pt-3">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-[#b08a3c]">극성 확인</p>
+        <p className="mt-1 text-[15px] font-bold leading-5 text-[#1f3554]">{target.label}</p>
+        <p className="mt-1 text-[11px] leading-4 text-[#8a7c60]">감정 표현만 있고 구체적인 불편이 없습니다</p>
+      </div>
+      <ul className="space-y-1.5 border-t border-[#f0e3c8] bg-white px-3.5 py-2.5">
+        {target.quotes.map((quote) => (
+          <li key={quote} className="text-[12px] leading-5 text-[#354158]">“<QuoteWithSignals quote={quote} signals={target.signals} />”</li>
+        ))}
+      </ul>
+      <div className="grid grid-cols-2 gap-2 border-t border-[#f0e3c8] p-2.5">
+        {([target.polarity, alternative] as const).map((choice, index) => (
+          <button
+            key={choice}
+            type="button"
+            disabled={busy}
+            onClick={() => onDecide(index === 0 ? null : choice)}
+            className={`rounded-lg px-2 py-2 text-center disabled:opacity-60 ${index === 0 ? "border border-[#d9c49b] bg-white hover:bg-[#fffdf8]" : "bg-[#946313] hover:bg-[#7d5310]"}`}
+          >
+            <span className={`block text-xs font-bold ${index === 0 ? "text-[#946313]" : "text-white"}`}>
+              {index === 0 ? `${current} 유지` : `${POLARITY_LABEL[choice]}으로 변경`}
+            </span>
+            <span className={`mt-0.5 block text-[10px] leading-3 ${index === 0 ? "text-[#a8905f]" : "text-white/75"}`}>
+              {hint[choice]}
+            </span>
+          </button>
+        ))}
+      </div>
+      {(busy || status === "error") && (
+        <p className="border-t border-[#f0e3c8] px-3.5 py-2 text-[11px] text-[#8a7c60]">
+          {busy ? "보고서에 반영하는 중..." : "반영하지 못했습니다. 다시 눌러주세요."}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export type QuoteCompletionTarget = { quote: string; originalResponse: string };
 export type QuoteCompletion = { completedQuote: string; changedFrom: string; changedTo: string };
 
@@ -45,6 +139,14 @@ function HighlightedOriginal({ text, matches }: { text: string; matches: QuoteSo
   return <>{parts}</>;
 }
 
+/** 도표·해석마다 "그래서 내가 뭘 봐야 하나"를 한 줄로. 근거 목록에 없으면 종류별 기본 문장. */
+function actionLine(reference: AnalysisReference, actions: string[]): string {
+  if (actions.length > 0) return actions.join(" ");
+  return reference.kind === "제언"
+    ? "AI가 쓴 초안입니다. 아래 근거와 어긋나는 문장이 있으면 본문에서 바로 고치세요."
+    : "아래 근거만으로 이 내용이 설명되는지 보고, 빠진 근거가 있으면 본문을 고치세요.";
+}
+
 export function AnalysisReferenceContent({
   reference,
   sourceFileUrl,
@@ -58,46 +160,58 @@ export function AnalysisReferenceContent({
   recommendationError: string | null;
   onRegenerate: () => void;
 }) {
+  // **기본 화면은 "확인할 것" 한 덩어리뿐이다**(2026-09-02 담당자 지적 — 여섯 줄을 다 읽어야
+  // 뭘 봐야 하는지 알 수 있어 검토가 느려진다). 계산 과정·데이터 출처는 필요할 때만 펼친다.
+  const details = reference.bullets.filter((bullet) => !ACTION_BULLET_LABELS.has(bullet.split(": ")[0]));
+  const actions = reference.bullets
+    .filter((bullet) => ACTION_BULLET_LABELS.has(bullet.split(": ")[0]))
+    .map((bullet) => bullet.split(": ").slice(1).join(": "));
   return (
     <section key={reference.title} className="quote-context-updated rounded-xl border border-[#c9daf2] bg-[#f5f9ff] p-4">
       <p className="flex items-center gap-1.5 text-[11px] font-bold text-[#1473e6]"><span className="h-1.5 w-1.5 rounded-full bg-[#1473e6]" />{reference.kind === "정량 계산" ? "현재 보고 있는 도표" : "현재 보고 있는 분석"}</p>
-      <p className="mt-1.5 text-[18px] font-bold leading-6 tracking-[-0.035em] text-[#1f3554]">{reference.title}</p>
-      <p className="mt-2 inline-flex rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-[#315c9c]">{reference.kind}</p>
-      <div className="mt-4 border-t border-[#d9e6f7] pt-3">
-        {/* 도표와 해석은 "근거"의 뜻이 다르다 — 도표는 계산 과정이고, 해석은 무엇을 종합했는가다. */}
-        <p className="text-sm font-bold text-[#354158]">
-          {reference.kind === "정량 계산" ? "이 그래프가 만들어진 방식" : "이 내용이 생성된 근거"}
-        </p>
-        <ul className="mt-2 space-y-2">
-          {reference.bullets.map((bullet) => {
-            // `사용한 데이터: …`처럼 앞에 항목 이름이 붙은 줄은 그 부분만 굵게 — 여섯 줄이
-            // 이어지면 어디까지가 항목명인지 안 보인다.
-            const [label, ...rest] = bullet.split(": ");
-            const body = rest.join(": ");
-            return (
-              <li key={bullet} className="flex gap-2 text-xs leading-5 text-[#53627a]">
-                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[#5c83bc]" />
-                <span>{body ? <><strong className="font-bold text-[#354158]">{label}</strong> {body}</> : bullet}</span>
-              </li>
-            );
-          })}
-        </ul>
-        <p className="mt-3 rounded-lg bg-white p-2.5 text-[11px] leading-5 text-[#7a8799]">
-          {reference.kind === "정량 계산"
-            ? "그래프 값은 위 계산으로 자동 생성되며 중간에 사람이 입력하지 않습니다. 확인할 것은 계산이 맞는지가 아니라, 원본 문항과 그래프 항목의 연결이 맞는지입니다."
-            : "직접 인용문이 아니라 위 정량·정성 근거를 종합해 생성된 내용입니다."}
-        </p>
+      <p className="mt-1.5 text-[17px] font-bold leading-6 tracking-[-0.035em] text-[#1f3554]">{reference.title}</p>
+      <p className="mt-1.5 inline-flex rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[#315c9c]">{reference.kind}</p>
+
+      <div className="mt-3 rounded-lg border border-[#ecd6ae] bg-[#fffaf1] p-3">
+        <p className="text-[11px] font-bold text-[#946313]">직접 확인할 것</p>
+        <p className="mt-1 text-[13px] leading-6 text-[#4d4432]">{actionLine(reference, actions)}</p>
       </div>
+
+      {details.length > 0 && (
+        <details className="group mt-2 rounded-lg bg-white px-3 py-2">
+          <summary className="cursor-pointer list-none text-[11px] font-bold text-[#5c7ba6] [&::-webkit-details-marker]:hidden">
+            {reference.kind === "정량 계산" ? "이 그래프가 만들어진 방식" : "이 내용이 생성된 근거"} {details.length}가지
+            <span className="ml-1 font-medium text-[#8a99ad] group-open:hidden">펼치기</span>
+            <span className="ml-1 hidden font-medium text-[#8a99ad] group-open:inline">접기</span>
+          </summary>
+          <div className="mt-2 space-y-2 border-t border-[#eef2f7] pt-2">
+            {details.map((bullet) => {
+              const [label, ...rest] = bullet.split(": ");
+              const body = rest.join(": ");
+              return (
+                <div key={bullet}>
+                  <p className="text-[11px] font-bold text-[#7a8799]">{body ? label : "근거"}</p>
+                  <p className="mt-0.5 text-[12px] leading-5 text-[#53627a]">{body || bullet}</p>
+                </div>
+              );
+            })}
+            <p className="pt-1 text-[11px] leading-4 text-[#96a1b1]">
+              {reference.kind === "정량 계산"
+                ? "값은 위 계산으로 자동 생성됩니다. 계산이 맞는지가 아니라 문항과 항목의 연결을 보세요."
+                : "직접 인용문이 아니라 위 근거를 종합해 생성된 문장입니다."}
+            </p>
+          </div>
+        </details>
+      )}
+
       {reference.kind === "제언" && sourceFileUrl && (
-        <div className="mt-3 border-t border-[#d9e6f7] pt-3">
-          <p className="text-xs font-bold text-[#354158]">제언 AI 작업</p>
-          <p className="mt-1 text-[11px] leading-5 text-[#7a8799]">현재 정량·정성 근거는 유지하고 제언 초안만 다시 생성합니다. 생성 후 본문에서 직접 수정할 수 있습니다.</p>
+        <>
           <button type="button" onClick={onRegenerate} disabled={recommendationStatus === "loading"} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#1473e6] px-3 py-2.5 text-xs font-bold text-white hover:bg-[#0f65cf] disabled:cursor-wait disabled:opacity-70">
             {recommendationStatus === "loading" && <span className="inline-block size-3 animate-spin rounded-full border-2 border-white/45 border-t-white" />}
             {recommendationStatus === "loading" ? "근거를 바탕으로 다시 생성 중" : "AI로 제언 다시 생성"}
           </button>
           {recommendationStatus === "error" && <div className="mt-2 rounded-md bg-[#fff3f1] p-2 text-[11px] leading-5 text-[#b54747]">{recommendationError}<button type="button" onClick={onRegenerate} className="ml-1 font-bold underline">다시 시도</button></div>}
-        </div>
+        </>
       )}
     </section>
   );
