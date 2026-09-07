@@ -25,6 +25,21 @@ import type { QuestionResult } from "./orchestrate";
 import { computeNps } from "@/lib/quant/basic";
 import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 import { FAST_STANDARD_SYSTEM, FAST_IMPROVEMENT_SYSTEM } from "./prompts";
+import {
+  ANCHOR_FORMAT_NOTE,
+  ANCHOR_QUOTES_ENABLED,
+  AnchorCombinedOutputSchema,
+  resolveAnchorQuotes,
+  type AnchorCombinedOutput,
+} from "./anchorQuotes";
+
+// **2026-09-01 200s → 280s (실측 근거).** 실제 14문항 실행에서 성공한 12건이 평균 149초,
+// 최대 192초였다 — 200초 창은 여유가 8초뿐이라 정상 호출이 상한에 붙어 있었고, 두 문항이
+// 넘겨서 실패했다(간헐 장애가 아니라 분포상 예정된 실패). run-next 의 maxDuration 이 300초라
+// DB 쓰기 몫 20초를 남긴 280초가 실질 최대치다. **이 값을 다시 낮추지 말 것** — 낮추면 같은
+// 사고가 재발한다. 근본 해결(출력량 자체를 줄이기)은 별도 작업이다.
+const FAST_HARD_TIMEOUT_MS = Number(process.env.FAST_HARD_TIMEOUT_MS ?? 280_000);
+
 
 const FAST_MODEL = process.env.ANTHROPIC_QUALITATIVE_FAST_MODEL ?? process.env.ANTHROPIC_STAGE2_MODEL ?? "claude-sonnet-5";
 
@@ -34,10 +49,21 @@ function filterVerifiedQuotes(output: Stage2RawOutput, reasons: string[]): Stage
     categories: output.categories.map((category) => {
       const quotes = category.quotes.filter((quote) => reasons.some((reason) => isVerbatimClause(reason, quote)));
       const quotesDisplay = quotes.map((quote) => buildQuoteDisplayText(quote, category.quoteEvidence));
+      warnIfNoEvidenceHighlight(category.label, quotes, quotesDisplay, category.quoteEvidence.length);
       const { quoteEvidence: _quoteEvidence, ...rest } = category;
       return { ...rest, quotes, quotesDisplay };
     }),
   };
+}
+
+/**
+ * 보고서 인용문의 볼드+밑줄(근거 구간) 강조가 통째로 비는 사고를 눈에 보이게 한다.
+ * 예전엔 조용히 빠져서, 발행된 보고서를 사람이 보고서야 "왜 여기만 강조가 없지"를 발견했다
+ * (2026-09-02). evidence 개수까지 같이 찍어 "모델이 안 준 것"과 "줬는데 못 찾은 것"을 구분한다.
+ */
+function warnIfNoEvidenceHighlight(label: string, quotes: string[], display: string[], evidenceCount: number): void {
+  if (quotes.length === 0 || display.some((text) => text.includes("**__"))) return;
+  console.warn(`[fast] 근거 강조 0건 — 카테고리 "${label}" (인용 ${quotes.length}건, evidence ${evidenceCount}건)`);
 }
 
 function assertCounts(output: { total_clause_count: number; categories: Array<{ clause_count: number }> }, label: string) {
@@ -123,7 +149,7 @@ export async function runFastReportAnalysis(
       // maxDuration=300초(run-next/route.ts) 안에 100초 여유가 남는다. 대신 클레임 단위
       // job-item 재시도(최대 3회, lib/db/qualitativeJobs.ts MAX_ITEM_ATTEMPTS)가 안전망 역할을
       // 그대로 맡는다.
-      hardTimeoutMs: 200_000,
+      hardTimeoutMs: FAST_HARD_TIMEOUT_MS,
       // 2단 구조 + 소분류당 인용 다수라 예전 평면 구조(6000)보다 출력이 크다 — 넉넉히 상향.
       maxOutputTokens: 12000,
       reasoning: "none",
@@ -138,24 +164,51 @@ export async function runFastReportAnalysis(
   }
 
   const traceLabel = `fast:${spec.label}`;
-  const { output } = await withClaudeGuard(traceLabel, () => streamStructured<z.infer<typeof Stage2CombinedOutputSchema>>({
+  // **인용문을 원문으로 다시 쓰지 않고 위치로 지목하게 한다**(anchorQuotes.ts). 출력이 절반으로
+  // 줄어 시간·비용이 같이 줄고, 코드가 원문에서 잘라내므로 verbatim 이 구조적으로 보장된다.
+  // 판단 규칙은 그대로 두고 형식 지시만 덧붙인다.
+  const useAnchors = ANCHOR_QUOTES_ENABLED;
+  // 삼항을 `Output.object()` 안에 넣으면 제네릭이 한쪽 스키마로만 추론돼 빌드가 깨진다
+  // (2026-09-02 실측: tsc 는 통과하는데 `next build` 만 실패). 각각 따로 만들어 고른다.
+  const standardOutputSpec = useAnchors
+    ? Output.object({ schema: AnchorCombinedOutputSchema })
+    : Output.object({ schema: Stage2CombinedOutputSchema });
+  const { output: rawOutput } = await withClaudeGuard(traceLabel, () => streamStructured<
+    z.infer<typeof Stage2CombinedOutputSchema> | AnchorCombinedOutput
+  >({
     model: anthropic(FAST_MODEL),
     instructions: {
       role: "system",
-      content: FAST_STANDARD_SYSTEM,
+      // 캐시 프리픽스가 갈리지 않도록 형식 지시는 **뒤에** 붙인다.
+      content: useAnchors ? FAST_STANDARD_SYSTEM + ANCHOR_FORMAT_NOTE : FAST_STANDARD_SYSTEM,
       providerOptions: { anthropic: { cacheControl: { type: "ephemeral", ttl: "1h" } } },
     },
     prompt: standardPrompt(spec),
-    output: Output.object({ schema: Stage2CombinedOutputSchema }),
+    output: standardOutputSpec,
     // 200s×1회로 변경한 근거는 위 개선아이디어 분기 주석 참고 — 표준 문항 쪽이 이번 사고의
     // 실패 사례 대부분(유사서비스·전반적만족도·사회공공적 가치)이었다.
-    hardTimeoutMs: 200_000,
+    hardTimeoutMs: FAST_HARD_TIMEOUT_MS,
     maxOutputTokens: 8000,
     reasoning: "none",
   }, traceLabel), { onUsage: options.onUsage, maxAttempts: 1 });
 
   const stage2ByPolarity: Partial<Record<Polarity, Stage2Output>> = {};
   const seen = new Set<Polarity>();
+  // 여기서 기존 모양으로 되돌린다 — 이 아래로는 앵커 여부를 알 수 없다.
+  const output = useAnchors
+    ? (() => {
+        const resolved = resolveAnchorQuotes(rawOutput as AnchorCombinedOutput, spec.inputs);
+        const used = Object.entries(resolved.stats.byStrategy).filter(([, n]) => n > 0).map(([k, n]) => `${k}:${n}`).join(" ");
+        console.info(`[anchor] ${traceLabel} 인용 복원 ${resolved.stats.resolved}/${resolved.stats.total} (${used})`);
+        // 못 찾은 앵커는 **사유와 함께** 남긴다 — 개수만으로는 원인을 추적할 수 없다.
+        // 응답 원문은 절대 로그에 남기지 않는다(개인정보). 모델이 적은 짧은 조각만 남긴다.
+        for (const failure of resolved.stats.failures) {
+          console.warn(`[anchor] ${traceLabel} 복원 실패 (${failure.reason}) 응답자 ${failure.respondentId} from=${JSON.stringify(failure.from)} to=${JSON.stringify(failure.to)}`);
+        }
+        return { groups: resolved.groups, nps_judgment: resolved.nps_judgment };
+      })()
+    : (rawOutput as z.infer<typeof Stage2CombinedOutputSchema>);
+
   for (const group of output.groups) {
     if (seen.has(group.polarity)) continue;
     assertCounts(group, traceLabel);

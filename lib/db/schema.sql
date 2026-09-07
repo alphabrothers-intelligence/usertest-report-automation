@@ -109,6 +109,11 @@ create index if not exists categories_question_id_idx on categories (question_id
 -- 검증 기준이라 건드리지 않고, 렌더링은 이 컬럼을 우선 쓴다(없으면 quotes로 폴백).
 alter table categories add column if not exists quotes_display text[];
 
+-- 2026-09-04: 카테고리에 속한 응답자 번호. **비율(clause_count)을 코드가 세기 위해** 모델에게
+-- 개수 대신 이 목록을 받게 바꾸면서 같이 저장한다(lib/pipeline/anchorQuotes.ts). 저장해두면
+-- 극성 판정 채점을 대표 인용 몇 건이 아니라 전수로 할 수 있다.
+alter table categories add column if not exists respondents int[];
+
 -- 제언 문단 (6.5절: 핵심구매요소 해석, 개발우선순위제언 등). 체크포인트 B 대상.
 create table if not exists recommendations (
   id uuid primary key default gen_random_uuid(),

@@ -22,12 +22,38 @@ function malformedEnding(trimmed: string): { token: string; index: number } | nu
   return { token: match[1], index: match.index };
 }
 
+/** 해체(반말)·어간형 종결 — 이대로 두면 "…느껴져"처럼 문장이 덜 끝난 채로 보고서에 실린다. */
+const HAECHE_ENDINGS = ["져", "워", "해", "돼", "봐", "줘", "아", "어", "여", "지", "게", "걸"];
+/** 한 음절만 바꾸면 격식체가 되는 것들. 나머지(워·지·게·걸)는 규칙으로 못 고쳐 검토 표시만 한다. */
+const HAECHE_REPLACEMENTS: Record<string, string> = { "져": "집니다.", "해": "합니다.", "돼": "됩니다.", "봐": "봅니다.", "줘": "줍니다." };
+
+/**
+ * **뒷말이 있어야 문장이 완성되는 연결어미.** 인용문 끝맺음 검사(여기)와, 긴 인용문을 조각으로
+ * 좁힐 때 "앞 조각을 데려와야 하는가" 판단(lib/pipeline/anchorQuotes.ts)이 같은 목록을 본다 —
+ * 두 곳이 어긋나면 조건절이 잘린 인용문이 검사도 통과해버린다.
+ */
+export const CONNECTIVE_ENDINGS = [
+  "지만", "는데", "은데", "인데", "으나", "거나", "반면", "한데", "면서", "으면서", "으며", "며",
+  "어서", "아서", "여서", "니까", "으니까", "므로", "으므로", "라서", "다가",
+  // 조건·이유·나열 — 이게 빠져 있으면 "GPS만 고쳐지면 / 좋을 것 같다"의 조건이 잘린다.
+  "면", "으면", "다면", "라면", "고", "도록", "든지", "때문에", "덕분에",
+  // "~그런지 / ~인지"처럼 판단을 뒤로 미루는 어미. 명사 오탐(이미지·페이지)을 피하려고
+  // 앞 음절까지 묶은 형태만 넣는다.
+  "은지", "는지", "인지", "런지",
+] as const;
+
 export function reportQuoteEndingToken(quote: string): string | null {
   const trimmed = quote.trim();
   const malformed = malformedEnding(trimmed);
   if (malformed) return malformed.token;
   if (!trimmed || /(다|요|네|죠|까|랑|ㅎ+|ㅋ+|!|\?|\.|~|요\)|다\))$/.test(trimmed)) return null;
-  return trimmed.match(/([가-힣]+(?:지만|는데|은데|인데|으나|거나|반면|한데|면서|으면서|으며|어서|아서|여서|니까|으니까|므로|으므로|라서|다가|고|을|를|이|은|는|의|에|와|도|만|음|함|임|됨|짐))$/)?.[1] ?? null;
+  return trimmed.match(new RegExp(`([가-힣]+(?:${[...CONNECTIVE_ENDINGS, "고", "을", "를", "이", "은", "는", "의", "에", "와", "도", "만", "음", "함", "임", "됨", "짐"].join("|")}))$`))?.[1]
+    // 해체(반말)·어간형 종결도 보고서 인용으로는 끝맺음이 안 된 문장이다("…엉성하게 느껴져",
+    // "…진입장벽이 좀 높아", "…추천해야할 이유가 부족하여", 2026-09-02 담당자 지적).
+    // 리바랩스 최신 report의 인용 518건으로 재보니 이 그룹에 9건이 걸리고 전부 실제로 끝이
+    // 잘린 문장이었다 — 명사 오탐(단어·이미지 등)은 나오지 않았다.
+    ?? trimmed.match(new RegExp(`([가-힣]+(?:${HAECHE_ENDINGS.join("|")}))$`))?.[1]
+    ?? null;
 }
 
 export function needsReportQuoteEndingReview(quote: string): boolean {
@@ -128,6 +154,15 @@ export function deterministicEndingCompletion(quote: string): string | null {
   if (quote.endsWith("함")) return `${quote.slice(0, -1)}합니다.`;
   if (quote.endsWith("임")) return `${quote.slice(0, -1)}입니다.`;
   if (quote.endsWith("음")) return formalizeStem(quote.slice(0, -1));
+  // 해체 종결: "느껴져"→"느껴집니다.", "생각해"→"생각합니다."
+  const last = quote.slice(-1);
+  if (HAECHE_REPLACEMENTS[last]) return `${quote.slice(0, -1)}${HAECHE_REPLACEMENTS[last]}`;
+  // 어간에 붙은 아/어/여는 떼고 격식체로. "같아여"처럼 두 번 붙은 경우가 있어 한 번 더 본다
+  // ("같아여"→"같아"→"같습니다."). "부족하여"→"부족합니다.", "생각되어"→"생각됩니다."
+  if (/[아어여]$/.test(quote)) {
+    const stem = /[아어여]$/.test(quote.slice(0, -1)) ? quote.slice(0, -2) : quote.slice(0, -1);
+    return stem ? formalizeStem(stem) : null;
+  }
   return null;
 }
 

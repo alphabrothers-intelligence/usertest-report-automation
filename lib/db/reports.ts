@@ -281,6 +281,7 @@ export async function saveQualitativeResults(
           polarity,
           label: c.label,
           clause_count: c.clause_count,
+          respondents: c.respondents?.length ? c.respondents : null,
           quotes: c.quotes,
           quotes_display: c.quotesDisplay,
           insight_draft: c.insight,
@@ -347,6 +348,7 @@ export async function saveQualitativeQuestionResult(
         polarity,
         label: c.label,
         clause_count: c.clause_count,
+        respondents: c.respondents?.length ? c.respondents : null,
         quotes: c.quotes,
         quotes_display: c.quotesDisplay,
         insight_draft: c.insight,
@@ -405,6 +407,8 @@ export interface CategoryRow {
   insight_draft: string;
   insight_final: string | null;
   insight_approved: boolean;
+  /** 이 카테고리에 속한 응답자 번호(앵커 경로). clause_count는 이 목록의 길이다. */
+  respondents: number[] | null;
 }
 
 /** 체크포인트 B(7.2절) 대상: 아직 인사이트가 승인되지 않은 카테고리. */

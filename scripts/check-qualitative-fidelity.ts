@@ -1,113 +1,185 @@
-// PRD 9.2절: "원문 대조 가능한 문장 표본에 대해, 실제 보고서 배치 극성과 생성 결과 극성이
-// 일치하는 비율"을 실측한다. 아래 ground truth는 실제 리바랩스 발행 보고서(2025.09.05,
-// data/[알파브라더스] 리바랩스_사용성테스트_결과보고서_0904_상연.pdf)의 각 문항 긍정/부정/중립
-// 대표 인용문을 그대로 옮긴 것이다(2026-07-16 수집). 문항별 점수는 극성에 영향을 주지 않도록
-// 임의의 중립값(5)으로 고정한다 — 6.2절 프롬프트가 "텍스트가 명확하면 점수와 무관하게 텍스트
-// 기준으로 판정"하도록 지시하므로, 점수를 실제 응답자 점수와 맞출 필요가 없다.
-// 사용법: npm run check:qualitative-fidelity (ANTHROPIC_API_KEY 필요, 실제 과금 발생 — 약 6회 호출)
-import { runStage1 } from "../lib/pipeline/stage1";
+/**
+ * PRD 9.2절 극성 판정 일치율 측정 — **제품이 실제로 쓰는 경로 기준**(2026-09-02 전면 교체).
+ *
+ * ## 예전 판의 문제
+ *
+ * 옛 스크립트는 손으로 옮겨 적은 24건을 `runStage1`(절 분리 경로)에 넣어 쟀다. 그런데 보고서는
+ * 그 경로를 쓰지 않는다 — 실제로는 `runFastReportAnalysis`(앵커 경로)가 문항 전체를 한 번에
+ * 분류한다. 즉 **제품과 무관한 숫자**였고, 부정/중립 표본이 14건뿐이라 1건 차이로 합격선을
+ * 넘나들었다.
+ *
+ * ## 지금 재는 것
+ *
+ * - **정답**: 실제 발행 보고서 PDF의 "1. 긍정 의견 / 2. 부정 의견 / 3. 중립 의견" 아래에 실린
+ *   인용문. 사람이 옮겨 적지 않고 `pdftotext`로 뽑으므로 표본이 늘어도 손이 안 간다(8~26쪽
+ *   기준 60건 이상).
+ * - **예측**: DB에 저장된 그 보고서의 카테고리(제품 경로가 만든 결과)에서 같은 인용문이 어느
+ *   극성 묶음에 들어갔는지. **새로 API를 호출하지 않는다** — 이미 만들어진 산출물을 재므로
+ *   비용 0이고, "지금 담당자가 보고 있는 보고서"를 그대로 평가한다.
+ * - 인용문이 그대로 안 보이면 **같은 응답자의 같은 문항 응답**에서 뽑힌 인용문으로 한 번 더
+ *   맞춰본다(모델이 같은 답변의 다른 구간을 대표로 고른 경우).
+ *
+ * ## 한계(숫자를 읽을 때 반드시 같이 볼 것)
+ *
+ * 제품이 대표로 뽑아 보고서에 실은 인용문만 평가 대상이 된다 — 전수가 아니라 **대표 인용
+ * 표본**이다. 매칭되지 않은 정답 개수도 같이 출력하니, 그 비율이 크면 일치율을 과신하지 말 것.
+ *
+ * 사용법: `npm run check:qualitative-fidelity`
+ *   - `pdftotext`(poppler) 필요: `brew install poppler`
+ *   - `data/`의 발행 보고서 PDF와 raw data가 있어야 한다(gitignore라 CI에서는 못 돈다).
+ *   - `DATABASE_URL` 필요. API 호출·과금 없음.
+ */
+import { readFileSync } from "node:fs";
+import { sql } from "../lib/db/client";
+import { parseWallaWorkbook } from "../lib/walla/parse";
+import { normalizeWallaRows } from "../lib/walla/normalize";
+import {
+  KR_BY_POLARITY,
+  PAGE_RANGE,
+  extractLabels,
+  extractOriginalShares,
+  matchesFeature,
+  reportText,
+  type Label,
+  type Polarity,
+} from "./publishedReport";
 
-interface GroundTruthItem {
-  questionLabel: string;
-  quote: string;
-  expectedPolarity: "positive" | "negative" | "neutral";
-}
+const RAW_DATA = "data/[리바랩스]사용성테스트 raw data.xlsx";
 
-const groundTruth: GroundTruthItem[] = [
-  // 펫과의 산책 (Q6, 보고서 8~10p) — 긍정 26.6% · 부정 70.4% · 중립 3.0%
-  { questionLabel: "'펫과의 산책' 기능 만족도", quote: "뭔가 보상이 있다는 점에서 걷는 것에 동기 부여가 되어 좋았다.", expectedPolarity: "positive" },
-  { questionLabel: "'펫과의 산책' 기능 만족도", quote: "평소에 걷기에 흥미가 없었는데 이런 앱을 알고나서 더 자주 걷는거같다", expectedPolarity: "positive" },
-  { questionLabel: "'펫과의 산책' 기능 만족도", quote: "gps기능이 잘 작동해서 현재 위치가 정확하게 잡힌다", expectedPolarity: "positive" },
-  { questionLabel: "'펫과의 산책' 기능 만족도", quote: "gps가 부정확해서 걸은 길이나 걸음수가 제대로 체크 되지 않아요.", expectedPolarity: "negative" },
-  { questionLabel: "'펫과의 산책' 기능 만족도", quote: "경로가 지도상 도로를 따라 찍히지 않고 건물을 뚫고 찍히거나 가끔 아예 다른 길로 표시되어 아쉬웠다.", expectedPolarity: "negative" },
-  { questionLabel: "'펫과의 산책' 기능 만족도", quote: "실제로 하루 만보 이상 걸었을때도 500보 정도로 카운팅 되어 있었음", expectedPolarity: "negative" },
-  { questionLabel: "'펫과의 산책' 기능 만족도", quote: "제한 속도가 어느정도인진 모르겠으나, 타겜에 비해 좀 느슨한 편인 거 같다.", expectedPolarity: "neutral" },
-  { questionLabel: "'펫과의 산책' 기능 만족도", quote: "버스나 지하철을 타고 가면서도 보상 획득이 가능합니다.", expectedPolarity: "neutral" },
-
-  // 펫 성장 시스템 (Q7, 11~13p) — 긍정 42.4% · 부정 53.4% · 중립 4.2%
-  { questionLabel: "'펫 성장 시스템' 기능 만족도", quote: "특히 알에서 부화하고 레벨이 올라가는 과정을 보는 재미가 있어 몰입도가 높았습니다.", expectedPolarity: "positive" },
-  { questionLabel: "'펫 성장 시스템' 기능 만족도", quote: "다마고치 키우는거 처럼 펫을 관리해주고 성장시키는 재미가 있어서 좋았다.", expectedPolarity: "positive" },
-  { questionLabel: "'펫 성장 시스템' 기능 만족도", quote: "펫이 성장하거나 부화하는 과정에서 경험치가 어떤 방식으로 올라가는지 구체적인 설명이 부족해 혼란스러웠습니다.", expectedPolarity: "negative" },
-  { questionLabel: "'펫 성장 시스템' 기능 만족도", quote: "알부화가 느리고 레벨업이 너무 느려서 흥미를 못느끼겠습니다", expectedPolarity: "negative" },
-
-  // 펫 꾸미기 (Q8, 14~16p) — 긍정 33.3% · 부정 41.2% · 중립 25.4%
-  { questionLabel: "'펫 꾸미기' 기능 만족도", quote: "여러 꾸미기 아이템이 있고 개성을 살릴 수 있어서 좋다고 생각한다.", expectedPolarity: "positive" },
-  { questionLabel: "'펫 꾸미기' 기능 만족도", quote: "한번 구매하면 모든 펫이 쓸수 있는게 아닌, 한 마리만 쓸 수 있어서 여러 옷을 구매해야한다.", expectedPolarity: "negative" },
-  { questionLabel: "'펫 꾸미기' 기능 만족도", quote: "상자, 퀘스트에서 벌리는 골드는 100에서 500 골드 정도임에도 불구하고 가장 싼 옷의 가격이 5천골드, 대부분의 옷이 5만 골드인 점은 조금 아쉽습니다.", expectedPolarity: "negative" },
-
-  // 실시간 거점형 (Q9, 17~18p) — 긍정 26.0% · 부정 54.5% · 중립 19.5%
-  { questionLabel: "'실시간 거점형' 기능 만족도", quote: "동네를 돌아다니며 거점을 획득하는것은 걷기를 의도하고 몬가 개임을 하는것 같아 흥미롭다.", expectedPolarity: "positive" },
-  { questionLabel: "'실시간 거점형' 기능 만족도", quote: "거점을 점령 함으로써 얻을 수 있는 메리트가 생각보다 좋지 않습니다.", expectedPolarity: "negative" },
-  { questionLabel: "'실시간 거점형' 기능 만족도", quote: "영역을 차지했을 때의 이득이 와닿지 않는다.", expectedPolarity: "negative" },
-
-  // 펫 교배 (Q10, 21~23p) — 긍정 25.2% · 부정 64.5% · 중립 10.3%
-  { questionLabel: "'펫 교배' 기능 만족도", quote: "가장 흥미로운 컨텐츠이다. 일정 걸음 수를 통해 조건을 충족시키는 것과, 부모를 통해 랜덤하게 외형과 스킬이 유전된다는 점에서 흥미를 유발한다", expectedPolarity: "positive" },
-  { questionLabel: "'펫 교배' 기능 만족도", quote: "교배 시스템 진행이 안됩니다. 펫을 넣으면 갑자기 화면이 멈춘 것처럼 되고, +버튼을 다시 눌러도 먹통입니다", expectedPolarity: "negative" },
-
-  // 펫 레이싱 (Q11, 24~26p) — 긍정 28.5% · 부정 68.0% · 중립 3.5%
-  { questionLabel: "'펫 레이싱' 기능 만족도", quote: "레이스 종류 중에서 가장 재밌었던 레이스 입니다.", expectedPolarity: "positive" },
-  { questionLabel: "'펫 레이싱' 기능 만족도", quote: "말 그대로 디펜스 느낌이라 뚫리지 않게 계속 생각해서 소환하고 스킬을 쓰는 재미가 있었다.", expectedPolarity: "positive" },
-  { questionLabel: "'펫 레이싱' 기능 만족도", quote: "일반 레이스를 플레이 해야하는 이유를 못 찾겠습니다", expectedPolarity: "negative" },
-  { questionLabel: "'펫 레이싱' 기능 만족도", quote: "이건 진짜 필요가 없는 컨텐츠라고 생각합니다.", expectedPolarity: "negative" },
-];
-
-function groupByQuestion(items: GroundTruthItem[]): Map<string, GroundTruthItem[]> {
-  const map = new Map<string, GroundTruthItem[]>();
-  for (const item of items) {
-    const arr = map.get(item.questionLabel) ?? [];
-    arr.push(item);
-    map.set(item.questionLabel, arr);
-  }
-  return map;
+/** 비교용 정규화 — 공백·따옴표·문장부호 차이는 같은 인용문으로 본다. */
+function normalize(text: string): string {
+  return text.replace(/[\s"'“”‘’·.,!?~()\[\]]/g, "");
 }
 
 async function main() {
-  const grouped = groupByQuestion(groundTruth);
-  const rows: (GroundTruthItem & { actual: string | null })[] = [];
+  const pdfText = reportText();
+  const labels = extractLabels(pdfText);
+  const originalShares = extractOriginalShares(pdfText);
+  if (labels.length === 0) throw new Error("발행 보고서에서 정답 인용문을 찾지 못했습니다.");
 
-  for (const [label, items] of grouped) {
-    const stage1 = await runStage1({
-      questionLabel: label,
-      inputs: items.map((item, i) => ({ respondent_id: i + 1, score: 5, reason: item.quote })),
-    });
+  // 평가 대상: 정성 분석이 들어 있는 가장 최근 보고서(= 담당자가 보고 있는 것).
+  // **파일명으로 거르지 않는다** — 업로드 경로에서 온 파일명은 한글이 자모 분리(NFD)로 저장돼
+  // `like '%리바랩스%'`(NFC)에 안 걸린다(2026-09-02 실측으로 확인).
+  const [report] = await sql<{ id: string; file_name: string; created_at: Date }[]>`
+    select r.id, r.file_name, r.created_at from reports r
+    where exists (select 1 from questions q join categories c on c.question_id = q.id where q.report_id = r.id)
+    order by r.created_at desc limit 1
+  `;
+  if (!report) throw new Error("비교할 정성 분석 결과가 DB에 없습니다.");
+  const rows = await sql<{ question_key: string; polarity: Polarity | null; quotes: string[]; clause_count: number }[]>`
+    select q.question_key, c.polarity, c.quotes, c.clause_count from categories c
+    join questions q on q.id = c.question_id
+    where q.report_id = ${report.id} and c.polarity is not null
+  `;
 
-    items.forEach((item, i) => {
-      const respondent = stage1.results.find((r) => r.respondent_id === i + 1);
-      const actual = respondent?.clauses[0]?.polarity ?? null;
-      rows.push({ ...item, actual });
-    });
+  // 제품이 뽑은 인용문 → 극성. 같은 인용문이 두 번 나오면 먼저 저장된 것을 쓴다.
+  const predictionByQuote = new Map<string, { polarity: Polarity; questionKey: string }>();
+  for (const row of rows) {
+    for (const quote of row.quotes) {
+      const key = normalize(quote);
+      if (key && !predictionByQuote.has(key)) predictionByQuote.set(key, { polarity: row.polarity!, questionKey: row.question_key });
+    }
   }
 
-  console.log("quote | expected | actual | match");
-  for (const r of rows) {
-    console.log(`"${r.quote.slice(0, 30)}..." | ${r.expectedPolarity} | ${r.actual} | ${r.actual === r.expectedPolarity ? "PASS" : "FAIL"}`);
+  // 같은 응답자 폴백용: raw data의 서술형 응답 원문 → 그 응답에서 뽑힌 인용문의 극성.
+  const buffer = readFileSync(new URL(`../${RAW_DATA}`, import.meta.url));
+  const parsed = parseWallaWorkbook(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer);
+  const records = normalizeWallaRows(parsed.headerRow, parsed.dataRows);
+  const responses: string[] = records.flatMap((record) => [
+    ...record.featureSatisfaction.map((feature) => feature.reason),
+    ...Object.values(record.values).map((value) => value.reason),
+    record.keyFactor.reason,
+    record.priorService.reason,
+    record.overallSatisfaction.reason,
+    record.nps.reason,
+    record.improvementIdea,
+  ].filter((value): value is string => Boolean(value && value.trim())));
+  const polarityByResponse = new Map<string, Polarity>();
+  for (const response of responses) {
+    const normalized = normalize(response);
+    for (const [quoteKey, prediction] of predictionByQuote) {
+      if (normalized.includes(quoteKey)) {
+        polarityByResponse.set(normalized, prediction.polarity);
+        break;
+      }
+    }
   }
 
-  // PRD 1.3절 기준 ①: 긍정 vs 나머지(부정+중립) 경계, 목표 90%+
-  const positiveBoundaryCorrect = rows.filter((r) => {
-    const expectedIsPositive = r.expectedPolarity === "positive";
-    const actualIsPositive = r.actual === "positive";
-    return expectedIsPositive === actualIsPositive;
-  }).length;
-  const positiveBoundaryRate = (positiveBoundaryCorrect / rows.length) * 100;
+  const matched: { label: Label; predicted: Polarity; via: "quote" | "response" }[] = [];
+  const unmatched: Label[] = [];
+  for (const label of labels) {
+    const key = normalize(label.quote);
+    const direct = predictionByQuote.get(key);
+    if (direct) {
+      matched.push({ label, predicted: direct.polarity, via: "quote" });
+      continue;
+    }
+    const containing = [...polarityByResponse.entries()].find(([response]) => response.includes(key));
+    if (containing) matched.push({ label, predicted: containing[1], via: "response" });
+    else unmatched.push(label);
+  }
 
-  // PRD 1.3절 기준 ②: 부정 vs 중립 경계(긍정 표본 제외), 목표 75%+
-  const negNeutralRows = rows.filter((r) => r.expectedPolarity !== "positive");
-  const negNeutralCorrect = negNeutralRows.filter((r) => r.actual === r.expectedPolarity).length;
-  const negNeutralRate = negNeutralRows.length === 0 ? 0 : (negNeutralCorrect / negNeutralRows.length) * 100;
+  const rate = (hits: number, total: number) => (total === 0 ? "n/a" : `${((hits / total) * 100).toFixed(1)}% (${hits}/${total})`);
+  const positiveScope = matched.filter((item) => item.label.polarity === "positive" || item.predicted === "positive");
+  const positiveHits = positiveScope.filter((item) => (item.label.polarity === "positive") === (item.predicted === "positive")).length;
+  const negNeu = matched.filter((item) => item.label.polarity !== "positive" && item.predicted !== "positive");
+  const negNeuHits = negNeu.filter((item) => item.label.polarity === item.predicted).length;
+  const exact = matched.filter((item) => item.label.polarity === item.predicted).length;
 
-  console.log(`\n표본 수: ${rows.length}`);
-  console.log(
-    `긍정 vs 나머지 일치율: ${positiveBoundaryRate.toFixed(1)}% (목표 90%+) → ${positiveBoundaryRate >= 90 ? "PASS" : "FAIL"}`,
-  );
-  console.log(
-    `부정 vs 중립 일치율(부정·중립 표본 ${negNeutralRows.length}건 중): ${negNeutralRate.toFixed(1)}% (목표 75%+) → ${negNeutralRate >= 75 ? "PASS" : "FAIL"}`,
-  );
+  console.log(`평가 대상 보고서: ${report.file_name} (${report.created_at.toISOString().slice(0, 10)}, ${report.id.slice(0, 8)})`);
+  console.log(`정답 표본: ${labels.length}건 (${PAGE_RANGE.from}~${PAGE_RANGE.to}쪽) / 매칭 ${matched.length}건 · 미매칭 ${unmatched.length}건`);
+  console.log(`  - 인용문 직접 일치 ${matched.filter((item) => item.via === "quote").length}건, 같은 응답 일치 ${matched.filter((item) => item.via === "response").length}건`);
+  console.log("");
+  console.log(`긍정 vs 나머지: ${rate(positiveHits, positiveScope.length)}  (PRD 1.3절 목표 90%+)`);
+  console.log(`부정 vs 중립:   ${rate(negNeuHits, negNeu.length)}  (목표 75%+)`);
+  console.log(`전체 일치:      ${rate(exact, matched.length)}`);
 
-  if (positiveBoundaryRate < 90 || negNeutralRate < 75) process.exitCode = 1;
+  // --- 문항별 극성 비율(전수 기준) ---
+  // 인용문 표본은 "제품이 대표로 뽑은 것"에 한정되지만, 비율은 응답 전체가 반영된 값이라
+  // 편향이 없다. 대표 인용 일치율이 좋아도 이 비율이 크게 어긋나면 보고서는 다른 그림이 된다.
+  const shareRows = new Map<string, Record<Polarity, number>>();
+  for (const row of rows) {
+    const current = shareRows.get(row.question_key) ?? { positive: 0, negative: 0, neutral: 0 };
+    current[row.polarity!] += row.clause_count;
+    shareRows.set(row.question_key, current);
+  }
+  const errors: number[] = [];
+  const shareLines: string[] = [];
+  for (const feature of [...new Set(originalShares.map((share) => share.feature))]) {
+      const key = [...shareRows.keys()].find((candidate) => matchesFeature(feature, candidate));
+    if (!key) continue;
+    const counts = shareRows.get(key)!;
+    const total = counts.positive + counts.negative + counts.neutral;
+    if (total === 0) continue;
+    const parts: string[] = [];
+    for (const polarity of ["positive", "negative", "neutral"] as const) {
+      const original = originalShares.find((share) => share.feature === feature && share.polarity === polarity)?.pct;
+      if (original === undefined) continue;
+      const ours = (counts[polarity] / total) * 100;
+      errors.push(Math.abs(ours - original));
+      parts.push(`${KR_BY_POLARITY[polarity]} ${original.toFixed(1)}→${ours.toFixed(1)}`);
+    }
+    shareLines.push(`  ${feature}: ${parts.join(" · ")}`);
+  }
+  if (errors.length > 0) {
+    const mae = errors.reduce((sum, value) => sum + value, 0) / errors.length;
+    console.log(`\n문항별 극성 비율(원본→생성, 응답 전수 기준) — 평균 절대 오차 ${mae.toFixed(1)}%p, ${errors.length}개 비교`);
+    for (const line of shareLines) console.log(line);
+  }
+
+  const wrong = matched.filter((item) => item.label.polarity !== item.predicted);
+  if (wrong.length > 0) {
+    console.log(`\n불일치 ${wrong.length}건:`);
+    for (const item of wrong) {
+      console.log(`  ${item.label.page}쪽 정답 ${KR_BY_POLARITY[item.label.polarity]} → 생성 ${KR_BY_POLARITY[item.predicted]}`);
+      console.log(`    "${item.label.quote.slice(0, 70)}"`);
+    }
+  }
+  // 표본 대표성 경고 — 매칭률이 낮으면 위 일치율은 "대표 인용문에 한정된" 숫자다.
+  if (matched.length < labels.length * 0.5) {
+    console.log(`\n주의: 정답의 절반 이상이 생성 결과에 없어(${unmatched.length}건) 위 수치는 표본이 좁습니다.`);
+  }
+  process.exit(0);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+void main();

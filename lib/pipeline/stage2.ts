@@ -25,6 +25,8 @@ export const CategorySchema = z.object({
     .number()
     .describe("이 카테고리에 속하는 전체 clause 개수 — quotes에 포함 안 된 것도 포함"),
   quotes: z.array(z.string()).describe("입력 raw_clause 원문 중에서만 verbatim으로 선택한 대표 인용 2~4개"),
+  // 앵커 경로에서 코드가 채운다(모델이 적은 번호를 검증·중복 제거한 결과). 옛 경로는 비어 있다.
+  respondents: z.array(z.number()).default([]).describe("이 카테고리에 해당하는 응답자 번호"),
   quoteEvidence: z
     .array(QuoteEvidenceSchema)
     .default([])
@@ -101,18 +103,60 @@ function quoteCandidate(clause: Stage2ClauseInput): string | null {
   return clause.raw_clause ?? clause.analysis_clause;
 }
 
+/** 공백을 무시하고 needle을 찾아 **원문 기준** 구간을 돌려준다. 모델이 근거 구간을 옮겨 적을 때
+ * 띄어쓰기가 한두 칸 달라지는 일이 잦은데, 그때마다 강조를 통째로 포기하면 안 되기 때문이다. */
+function looseRange(haystack: string, needle: string): [number, number] | null {
+  const target = needle.replace(/\s+/g, "");
+  if (!target) return null;
+  for (let start = 0; start < haystack.length; start += 1) {
+    if (/\s/.test(haystack[start])) continue;
+    let matched = 0;
+    for (let pos = start; pos < haystack.length; pos += 1) {
+      if (/\s/.test(haystack[pos])) continue;
+      if (haystack[pos] !== target[matched]) break;
+      matched += 1;
+      if (matched === target.length) return [start, pos + 1];
+    }
+  }
+  return null;
+}
+
+/** 강조 구간으로 인정할 최소 길이. 한두 글자 강조는 의미가 없다. */
+const MIN_EVIDENCE_CHARS = 4;
+/** 인용문의 이 비율을 넘게 강조하면 "무분별한 볼드"가 된다 — 강조는 안 하느니만 못하다. */
+const MAX_EVIDENCE_RATIO = 0.9;
+
 /**
- * quoteEvidence가 지목한 reasonSpan이 실제로 quote의 부분 문자열일 때만 볼드+밑줄 마커를
- * 스플라이스한 표시용 문자열을 만든다. 마킹은 코드가 하고 LLM은 위치만 지목하므로 verbatim
- * 검증(quotes 원본)과 완전히 분리된다. 일치하는 항목이 없으면 원본 quote를 그대로 쓴다.
+ * quoteEvidence가 지목한 reasonSpan을 quote 안에서 찾아 볼드+밑줄 마커를 스플라이스한 표시용
+ * 문자열을 만든다. 마킹은 코드가 하고 LLM은 위치만 지목하므로 verbatim 검증(quotes 원본)과
+ * 완전히 분리된다. 찾지 못하면 원본 quote를 그대로 쓴다.
+ *
+ * **매칭을 느슨하게 하는 이유**(2026-09-02): 예전엔 `e.quote === quote`(인용문을 토씨까지 똑같이
+ * 옮겨 적었을 때)와 `quote.includes(reasonSpan)`(구간도 완전 일치) 두 조건을 모두 요구했다.
+ * 모델이 인용문을 옮겨 적으며 띄어쓰기 하나만 바꿔도 강조가 통째로 사라졌고, 실제로 한 문항의
+ * 카테고리 전부가 강조 0건이 되는 일이 잦았다(리바랩스 최신 report 14문항 중 6문항이 0건 —
+ * 4대 가치 세 문항 포함). 인용문 매칭은 공백 무시로 완화하고, 그래도 못 찾으면 "이 인용문 안에서
+ * 찾아지는 구간"으로 한 번 더 본다. **강조 자체의 안전장치는 그대로다** — 구간이 실제로 이
+ * 인용문 안에 있어야 하고, 너무 짧거나(4자 미만) 문장 대부분(90% 초과)을 덮으면 강조하지 않는다.
  */
 export function buildQuoteDisplayText(
   quote: string,
   evidence: { quote: string; reasonSpan: string }[],
 ): string {
-  const match = evidence.find((e) => e.quote === quote && e.reasonSpan && quote.includes(e.reasonSpan));
-  if (!match) return quote;
-  return quote.replace(match.reasonSpan, `**__${match.reasonSpan}__**`);
+  const normalize = (value: string) => value.replace(/\s+/g, "");
+  const spans = evidence.filter((item) => item.reasonSpan);
+  const forThisQuote = spans.filter((item) => normalize(item.quote) === normalize(quote));
+  for (const item of forThisQuote.length > 0 ? forThisQuote : spans) {
+    const exact = quote.indexOf(item.reasonSpan);
+    const range: [number, number] | null = exact >= 0
+      ? [exact, exact + item.reasonSpan.length]
+      : looseRange(quote, item.reasonSpan);
+    if (!range) continue;
+    const span = quote.slice(range[0], range[1]);
+    if (span.length < MIN_EVIDENCE_CHARS || span.length > quote.length * MAX_EVIDENCE_RATIO) continue;
+    return `${quote.slice(0, range[0])}**__${span}__**${quote.slice(range[1])}`;
+  }
+  return quote;
 }
 
 /**
