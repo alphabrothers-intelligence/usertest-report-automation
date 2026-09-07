@@ -203,7 +203,7 @@ create table if not exists qualitative_section_analysis_runs (
   id uuid primary key default gen_random_uuid(),
   job_id uuid not null references qualitative_jobs(id) on delete cascade,
   report_id uuid not null references reports(id) on delete cascade,
-  section_key text not null check (section_key in ('featureExperience', 'corePurchaseFactor', 'fourValues', 'uxQuality', 'crossAnalysis')),
+  section_key text not null check (section_key in ('featureExperience', 'corePurchaseFactor', 'fourValues', 'fourValueItems', 'uxQuality', 'crossAnalysis')),
   attempt int not null default 1,
   status text not null check (status in ('running', 'completed', 'failed')) default 'running',
   started_at timestamptz not null default now(),
@@ -219,6 +219,10 @@ create index if not exists qualitative_section_analysis_runs_job_id_idx
 create index if not exists qualitative_section_analysis_runs_report_id_idx
   on qualitative_section_analysis_runs(report_id, created_at);
 
+-- 2026-09-02: fourValueItems(4대 가치 항목별 조사 결과)가 체크 목록에 빠져 있어, 실행 이력
+-- insert가 제약 위반으로 던지면서 **그 섹션이 한 번도 생성되지 못했다**(실측: 6번의 작업에서
+-- 다른 5개는 6/6 성공, fourValueItems는 시도 기록조차 0건). 이력 기록이 본 작업을 죽이는
+-- 구조였던 것이라 sectionAnalysis.ts에서 훅 실패를 격리했고, 목록도 여기서 넓힌다.
 -- 2026-07-30: Ⅶ 교차분석 텍스트 해석(crossAnalysis)이 섹션 분석 5번째 종류로 추가되어
 -- section_key 체크 제약을 넓힌다. create table if not exists는 기존 테이블에 재적용되지
 -- 않으므로, 이미 배포된 환경에서도 idempotent하게 갱신되도록 별도 alter로 둔다.
@@ -233,5 +237,5 @@ begin
   end if;
   alter table qualitative_section_analysis_runs
     add constraint qualitative_section_analysis_runs_section_key_check
-    check (section_key in ('featureExperience', 'corePurchaseFactor', 'fourValues', 'uxQuality', 'crossAnalysis'));
+    check (section_key in ('featureExperience', 'corePurchaseFactor', 'fourValues', 'fourValueItems', 'uxQuality', 'crossAnalysis'));
 end $$;

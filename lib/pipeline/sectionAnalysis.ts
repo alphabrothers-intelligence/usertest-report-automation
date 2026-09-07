@@ -425,6 +425,15 @@ export async function runUxQualityAnalysis(stats: QuantStats, qual: QuestionWith
 /** 이미 저장된 정량 통계 + 정성 카테고리를 재료로 섹션 분석 전체를 생성·저장한다.
  * 제품형에 따라 대상 섹션이 달라진다(실제품형엔 UX 품질·4대가치 종합·기능 티어 분석이 없음).
  * 각 섹션 생성은 독립적으로 try/catch — 하나가 실패해도 나머지는 저장된다. */
+/** 이력 기록 같은 부수 작업은 실패해도 로그만 남기고 넘어간다. */
+async function safely(task: () => unknown, label: string): Promise<void> {
+  try {
+    await task();
+  } catch (error) {
+    console.error(`[sectionAnalysis] ${label}:`, error);
+  }
+}
+
 export async function runSectionAnalysesForReport(
   reportId: string,
   options: {
@@ -472,17 +481,17 @@ export async function runSectionAnalysesForReport(
   await Promise.all(
     selectedTasks.map(({ key, run }) => limit(async () => {
       try {
-        await options.onSectionStart?.(key);
+        // **이력 기록 실패가 본 작업을 죽이면 안 된다.** fourValueItems가 실행 이력 테이블의
+        // section_key 체크 제약 목록에 없어서, onSectionStart의 insert가 던지는 바람에 LLM
+        // 호출도 못 해보고 조용히 건너뛰어졌다(2026-09-02, 6번의 작업에서 시도 기록 0건).
+        // 제약은 넓혔지만 같은 사고가 다시 나지 않도록 훅 자체를 격리한다.
+        await safely(() => options.onSectionStart?.(key), `${key} 시작 이력 저장 실패`);
         const text = await run();
         if (text) analyses[key] = text;
-        await options.onSectionComplete?.(key);
+        await safely(() => options.onSectionComplete?.(key), `${key} 완료 이력 저장 실패`);
       } catch (err) {
         console.error(`[sectionAnalysis] ${key} 실패:`, err);
-        try {
-          await options.onSectionError?.(key, err);
-        } catch (hookError) {
-          console.error(`[sectionAnalysis] ${key} 실패 이력 저장 실패:`, hookError);
-        }
+        await safely(() => options.onSectionError?.(key, err), `${key} 실패 이력 저장 실패`);
       }
     })),
   );
