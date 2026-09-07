@@ -1,33 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
 import { RecentReportsSidebar } from "@/components/RecentReportsSidebar";
 import { UploadStep } from "@/components/wizard/UploadStep";
 import { PreviewStep } from "@/components/wizard/PreviewStep";
+import { GeneratingStep } from "@/components/wizard/GeneratingStep";
 import { INITIAL_WIZARD_STATE, type WizardState } from "@/components/wizard/types";
 
-type Step = "upload" | "preparing" | "preview";
+type Step = "upload" | "preparing" | "preview" | "generating";
 
 const STEPS: { id: Step; label: string }[] = [
   { id: "upload", label: "데이터 등록" },
   { id: "preview", label: "구성 확인" },
+  { id: "generating", label: "보고서 생성" },
 ];
 
 /**
  * 마법사 진입점.
  *
- * **화면이 둘뿐이다**(2026-08-31 담당자 확정). 예전에는 `데이터 등록 → 목차 확인 → 정량 검토 →
- * 응답 분석` 네 단계였는데, 뒤 세 개는 전부 "확인했으니 다음"을 누르는 게이트였다. 셋 다 없앴다.
+ * **데이터 등록 → 구성 확인 → 보고서 생성, 셋뿐이다.** 예전에는 `데이터 등록 → 목차 확인 →
+ * 정량 검토 → 응답 분석` 네 단계였는데, 뒤 세 개는 전부 "확인했으니 다음"을 누르는 **게이트**였다
+ * (2026-08-31 담당자 확정으로 셋 다 없앰). 지금 남은 세 번째는 게이트가 아니라 **작업 진행 화면**이다.
  *
  * - **목차 확인**: 미리보기 카드가 목차와 도표를 같이 보여주므로 따로 둘 이유가 없다.
  * - **정량 검토**: 요주의 지표는 보고서 웹뷰의 해당 도표 옆으로 옮겼다 — 고칠 수 있는 곳에
  *   이유가 있어야 한다(`ReviewFlagNotice`). 검토는 승인 게이트가 아니라 표시다.
- * - **응답 분석 대기**: 기다리지 않는다. 업로드 직후 정량·정성을 **같이** 시작해, 정량이
- *   끝나는 즉시(수 초) 카드를 띄우고 정성은 뒤에서 계속 돈다. 보고서로 넘어가도 그 화면이
- *   job 을 이어 돌린다(`useQualitativeJob`) — 진행 바 앞에 사람을 세워두지 않기 위해서다.
+ * - **응답 분석 대기**: 업로드 직후 정량·정성을 **같이** 시작해, 정량이 끝나는 즉시(수 초)
+ *   카드를 띄운다. 카드를 훑는 동안 정성이 뒤에서 돈다.
+ *
+ * **다만 "완성 전에 보고서를 연다"는 2026-09-02에 되돌렸다.** 정성이 안 끝난 채로 웹뷰를
+ * 열었더니, 화면이 완성된 보고서 모양이라 담당자가 다 됐다고 믿고 열었다가 의견이 통째로
+ * 비어 있어 당황했다(실사용 피드백). 지금은 `보고서 생성하기` 뒤에 **생성 중 화면**을 두고
+ * 완성본만 연다 — 대기 시간은 정성을 미리 시작해둔 만큼 짧다.
  */
 export default function WizardPage() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("upload");
+  const [retrying, setRetrying] = useState(false);
   const [state, setState] = useState<WizardState>(INITIAL_WIZARD_STATE);
   const [prepareError, setPrepareError] = useState<string | null>(null);
   const [qualitativeError, setQualitativeError] = useState<string | null>(null);
@@ -70,6 +80,23 @@ export default function WizardPage() {
     }
 
     setStep("preview");
+  }
+
+  /** 완성본을 연다. 정성이 이미 끝난 뒤이므로 `?job=`을 넘기지 않는다 — 웹뷰가 드라이버를
+   *  또 돌릴 이유가 없다. */
+  const openReport = useCallback(() => {
+    if (state.rawDataFile) router.replace(`/viewer?source=${encodeURIComponent(state.rawDataFile.url)}`);
+  }, [router, state.rawDataFile]);
+
+  /** 빠진 문항만 다시 큐에 넣는다. 워커 루프가 알아서 집어간다. */
+  async function retryFailed() {
+    if (!state.qualitativeJobId) return;
+    setRetrying(true);
+    try {
+      await fetch(`/api/qualitative-jobs/${state.qualitativeJobId}/retry-failed`, { method: "POST" });
+    } finally {
+      setRetrying(false);
+    }
   }
 
   return (
@@ -120,6 +147,17 @@ export default function WizardPage() {
                 fileUrl={state.rawDataFile.url}
                 qualitativeJobId={state.qualitativeJobId}
                 qualitativeError={qualitativeError}
+                onGenerate={() => setStep("generating")}
+              />
+            )}
+
+            {step === "generating" && state.rawDataFile && (
+              <GeneratingStep
+                qualitativeJobId={state.qualitativeJobId}
+                qualitativeError={qualitativeError}
+                onDone={openReport}
+                onRetryFailed={() => void retryFailed()}
+                retrying={retrying}
               />
             )}
           </section>

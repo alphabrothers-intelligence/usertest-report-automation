@@ -8,11 +8,13 @@
  * 아니라 표시이고, 고칠 수 있는 곳은 어차피 보고서 웹뷰이기 때문이다. 요주의 지표는
  * 웹뷰의 해당 도표 옆으로 옮겼다(`ReviewFlagNotice`).
  *
- * **의견 분석을 기다리지 않는다.** 업로드 직후 정량·정성을 같이 시작해서, 정량이 끝나는 즉시
- * (수 초) 이 화면을 띄운다. 실무자가 카드를 훑는 동안 정성이 뒤에서 돌고, 다 끝나기 전에
- * 보고서로 넘어가도 된다 — 넘어간 화면이 job 을 이어서 돌린다(`useQualitativeJob`).
+ * **정성 분석은 업로드 직후 이미 시작돼 있다.** 정량이 끝나는 즉시(수 초) 이 화면을 띄우므로,
+ * 실무자가 카드를 훑는 동안 몇 문항은 이미 끝난다 — 그만큼 다음 화면에서 기다리는 시간이 짧다.
+ *
+ * **여기서 보고서로 바로 넘어가지는 않는다**(2026-09-02 되돌림). 예전엔 정성이 안 끝나도 웹뷰로
+ * 넘겼는데, 완성된 보고서 모양인데 의견만 비어 있어 담당자가 다 됐다고 착각했다. 지금은
+ * `GeneratingStep`(생성 중 화면)을 거쳐 **완성본만** 연다.
  */
-import { useRouter } from "next/navigation";
 import { QuestionLayoutCards } from "@/components/QuestionLayoutCards";
 import { useQualitativeJob } from "@/components/wizard/useQualitativeJob";
 
@@ -20,18 +22,15 @@ export function PreviewStep({
   fileUrl,
   qualitativeJobId,
   qualitativeError,
+  onGenerate,
 }: {
   fileUrl: string;
   qualitativeJobId: string | null;
   qualitativeError: string | null;
+  /** 라우팅은 부모(마법사)가 한다 — 이 화면은 다음 단계가 무엇인지 몰라도 된다. */
+  onGenerate: () => void;
 }) {
-  const router = useRouter();
   const job = useQualitativeJob(qualitativeJobId);
-
-  const openReport = () => {
-    const job_ = qualitativeJobId && !job.isFinished ? `&job=${encodeURIComponent(qualitativeJobId)}` : "";
-    router.push(`/viewer?source=${encodeURIComponent(fileUrl)}${job_}`);
-  };
 
   return (
     <div className="w-full">
@@ -49,15 +48,15 @@ export function PreviewStep({
               의견 분석이 뒤에서 진행 중입니다{job.total > 0 ? ` · ${job.done}/${job.total} 문항` : ""}
             </p>
             <p className="mt-1 text-[13px] text-[#78869a]">
-              기다리지 않아도 됩니다. 아래 레이아웃을 훑어보고 보고서를 열면, 의견 분석은 그
-              화면에서 계속 진행되고 끝나면 알려드립니다.
+              아래 레이아웃을 훑어보시는 동안 계속 진행됩니다. 보고서를 만들면 남은 분석이
+              끝날 때까지 기다렸다가 완성본을 엽니다.
             </p>
             {job.networkNotice && <p className="mt-1 text-[13px] text-amber-800">{job.networkNotice}</p>}
           </>
         )}
       </div>
 
-      <QuestionLayoutCards source={fileUrl} onGenerate={openReport} />
+      <QuestionLayoutCards source={fileUrl} onGenerate={onGenerate} />
     </div>
   );
 }

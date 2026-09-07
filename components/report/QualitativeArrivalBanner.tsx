@@ -13,22 +13,29 @@ export function QualitativeArrivalBanner({
   total,
   isFinished,
   isSuccessful,
+  isIncomplete,
   failed,
   networkNotice,
   applying,
   applied,
+  retrying,
   onApply,
+  onRetryFailed,
 }: {
   status: string;
   done: number;
   total: number;
   isFinished: boolean;
   isSuccessful: boolean;
+  /** 끝났는데 빠진 문항이 있다 — 완료가 아니다. */
+  isIncomplete: boolean;
   failed: number;
   networkNotice: string | null;
   applying: boolean;
   applied: boolean;
+  retrying: boolean;
   onApply: () => void;
+  onRetryFailed: () => void;
 }) {
   if (applied) return null;
 
@@ -55,6 +62,30 @@ export function QualitativeArrivalBanner({
     );
   }
 
+  // **빠진 문항이 있으면 절대 "끝났다"고 하지 않는다.**
+  // 예전에는 이 경우도 초록 배너로 "의견 분석이 끝났습니다"가 떠서, 문항 2개가 통째로 빠진
+  // 보고서가 완성본 얼굴로 나갔다(2026-09-01 실사용 사고). 지금은 빠졌다는 사실과 이어서
+  // 할 방법을 같이 보여준다 — 이대로 내보내는 선택지는 주지 않는다.
+  if (isIncomplete) {
+    return (
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <span className="font-bold">의견 분석이 아직 끝나지 않았습니다.</span>
+        <span>
+          {total > 0 ? `${total}개 문항 중 ` : ""}
+          <strong>{failed}개</strong>가 분석되지 못했습니다. 이 상태로는 보고서에 그 문항의 의견이 비어 있습니다.
+        </span>
+        <button
+          type="button"
+          onClick={onRetryFailed}
+          disabled={retrying}
+          className="ml-auto rounded-md bg-amber-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-amber-800 disabled:bg-amber-700/50"
+        >
+          {retrying ? "다시 시작하는 중…" : `빠진 ${failed}개 문항 이어서 분석`}
+        </button>
+      </div>
+    );
+  }
+
   if (!isSuccessful) {
     return (
       <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
@@ -69,7 +100,6 @@ export function QualitativeArrivalBanner({
       <span className="text-emerald-900/75">
         아직 비어 있는 의견 부분만 채웁니다. 지금까지 고치신 내용은 그대로 둡니다.
       </span>
-      {failed > 0 && <span className="text-amber-800">일부 문항({failed}개)은 분석하지 못했습니다.</span>}
       <button
         type="button"
         onClick={onApply}

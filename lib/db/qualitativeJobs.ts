@@ -235,6 +235,10 @@ export async function getQualitativeJobItems(jobId: string): Promise<Qualitative
 }
 
 /** 여러 작업자가 동시에 요청해도 SKIP LOCKED로 서로 다른 문항/단계만 가져간다. */
+/** 이 시간이 지나도록 끝나지 않은 `running` 문항은 워커가 죽은 것으로 보고 다시 집는다.
+ *  `run-next` 의 maxDuration(300초)보다 반드시 커야 한다 — 아니면 살아 있는 작업을 빼앗는다. */
+const STALE_RUNNING_SECONDS = Math.max(360, Number(process.env.QUALITATIVE_STALE_RUNNING_SECONDS ?? 420));
+
 export async function claimNextQualitativeJobItem(jobId: string): Promise<QualitativeJobItemRow | null> {
   return sql.begin(async (tx) => {
     // stage2를 stage1보다 먼저 배정한다(2026-08-12 변경, 실제 stuck 사고로 발견). stage2는
@@ -244,9 +248,22 @@ export async function claimNextQualitativeJobItem(jobId: string): Promise<Qualit
     // 배정받지 못한 채 무한정 대기하는 게 실측됐다(job 하나가 19분+ 동안 0/14 완료).
     // stage2를 먼저 비우면 어려운 문항이 재시도를 반복하는 동안에도 나머지 문항은 계속
     // 끝까지 진행되고, 최악의 경우에도 실패는 그 어려운 문항 몇 개로 국한된다.
+    // **버려진 'running' 문항도 다시 집는다(2026-09-01).** 예전에는 `queued`만 집어서,
+    // 워커가 문항 처리 도중 죽으면(탭을 닫음·새로고침·네트워크 끊김·프로세스 종료) 그 문항이
+    // `running`에 영원히 갇히고 **아무도 다시 집지 않았다** — job 은 remaining_items > 0 이라
+    // 계속 '진행 중'인데 실제로는 아무것도 안 도는 상태로 남았다(실측 재현: 워커를 죽이자
+    // 1건이 그대로 갇혔고 수동 SQL 로만 되돌릴 수 있었다).
+    //
+    // 임계값은 **`run-next` 의 maxDuration(300초)보다 커야 한다** — 정상적으로 도는 중인
+    // 문항은 클레임 시각 이후 `updated_at` 이 갱신되지 않으므로, 300초 안쪽이면 살아 있는
+    // 작업을 빼앗는다. 420초로 잡아 여유를 뒀다.
     const [candidate] = await tx<QualitativeJobItemRow[]>`
       select * from qualitative_job_items
-      where job_id = ${jobId} and status = 'queued'
+      where job_id = ${jobId}
+        and (
+          status = 'queued'
+          or (status = 'running' and updated_at < now() - ${`${STALE_RUNNING_SECONDS} seconds`}::interval)
+        )
       order by case phase when 'stage2' then 0 else 1 end, created_at
       for update skip locked
       limit 1
@@ -288,6 +305,37 @@ async function refreshQualitativeJob(jobId: string): Promise<void> {
     ) counts
     where j.id = counts.job_id
   `;
+}
+
+/**
+ * **빠진 문항만 다시 큐에 넣는다.** 끝난 문항은 건드리지 않는다.
+ *
+ * 예전에는 3회 실패하면 `failed`로 굳고 job 이 `completed_with_failures`가 되어 **끝났다고
+ * 표시된 채 되돌릴 길이 없었다** — 불완전한 보고서가 완성본으로 나가던 원인(2026-09-01).
+ * 이제 그 상태는 "아직 안 끝남"이고, 이 함수가 이어서 할 수 있게 되돌린다.
+ *
+ * `attempts`를 0으로 되돌리는 이유: 재시도 상한은 "한 번의 진행에서 몇 번까지"를 뜻해야지,
+ * 담당자가 명시적으로 다시 시킨 것까지 막으면 안 된다.
+ *
+ * ponytail: 지금은 문항을 처음부터 다시 돌린다. 한 호출 안에서 응답자 단위 중간 저장
+ * (partialOutputStream)을 넣으면 남은 응답자만 이어서 하게 바꾼다.
+ */
+export async function requeueFailedQualitativeJobItems(jobId: string): Promise<number> {
+  const rows = await sql<{ id: string }[]>`
+    update qualitative_job_items
+    set status = 'queued', attempts = 0, last_error = null, completed_at = null, updated_at = now()
+    where job_id = ${jobId} and status = 'failed'
+    returning id
+  `;
+  if (rows.length > 0) {
+    await sql`
+      update qualitative_jobs
+      set status = 'running', completed_at = null, updated_at = now()
+      where id = ${jobId}
+    `;
+    await refreshQualitativeJob(jobId);
+  }
+  return rows.length;
 }
 
 export async function completeQualitativeJobStage1(itemId: string, checkpoint: QualitativeStage1Checkpoint): Promise<void> {

@@ -9,7 +9,9 @@
  * **넘어간 화면에서도 같은 루프가 계속 돌아야 한다** — 그래서 화면이 아니라 훅이다.
  *
  * 안에 든 것은 전부 실측으로 정해진 값이라 건드리지 말 것:
- * - 워커 3개(2026-08-27 확정, `orchestrate.ts` DEFAULT_CONCURRENCY=3과 일치. 4는 불안정했다)
+ * - 워커 수는 기본 3(2026-08-27 확정). "4는 불안정했다"는 당시 기록이 있으나 **그 실험은
+ *   크레딧 소진 시기와 겹쳐 결론이 오염됐다**(memory: anthropic-credit-constraint). 그래서
+ *   `NEXT_PUBLIC_QUALITATIVE_WORKERS`로 빼서 다시 잴 수 있게 했다 — 올려서 재보고 판단할 것.
  * - 워커는 `cancelled` 전까지 **절대 죽지 않는다** — fetch 예외를 잡아 쉬었다 재시도한다.
  *   예전엔 순간적인 네트워크 장애로 워커가 하나씩 죽고 나면 서버 job은 진행 가능한데도
  *   아무도 폴링하지 않아 "N/14에서 멈춘 채"로 남았다(2026-08-13 실측 재현).
@@ -27,8 +29,22 @@ export interface JobProgress {
   completedAt: string | null;
 }
 
-export const SUCCESS_STATUSES = ["completed", "completed_with_failures"];
-export const TERMINAL_STATUSES = [...SUCCESS_STATUSES, "failed", "cancelled"];
+/**
+ * **`completed_with_failures`를 성공으로 치지 않는다**(2026-09-01).
+ *
+ * 예전에는 여기에 들어 있어서, 문항 2개가 실패해도 초록 배너로 "끝났습니다"가 뜨고 불완전한
+ * 보고서가 완성본 얼굴로 나갔다. 미완료 문항이 하나라도 있으면 끝난 게 아니다 — 화면은
+ * 그 사실을 드러내고 이어서 분석할 길을 줘야 한다.
+ */
+export const SUCCESS_STATUSES = ["completed"];
+/** 더 이상 워커가 집을 게 없는 상태. 성공과는 다르다. */
+export const TERMINAL_STATUSES = [...SUCCESS_STATUSES, "completed_with_failures", "failed", "cancelled"];
+/** 끝났지만 빠진 문항이 있는 상태 — 보고서를 내보내면 안 된다. */
+export const INCOMPLETE_STATUSES = ["completed_with_failures", "failed"];
+
+/** 워커 수. 실측용으로 환경변수로 뺐다 — 3이 기본이고 올리면 벽시계가 준다(레이트리밋 한도 내에서).
+ *  문항 클레임은 `for update skip locked` 트랜잭션이라 몇 개를 띄워도 중복 처리되지 않는다. */
+const WORKER_COUNT = Math.max(1, Number(process.env.NEXT_PUBLIC_QUALITATIVE_WORKERS ?? 3));
 
 export function useQualitativeJob(jobId: string | null) {
   const [progress, setProgress] = useState<JobProgress | null>(null);
@@ -82,7 +98,7 @@ export function useQualitativeJob(jobId: string | null) {
       }
     };
 
-    void Promise.all([worker(), worker(), worker()]).catch((err) => {
+    void Promise.all(Array.from({ length: WORKER_COUNT }, () => worker())).catch((err) => {
       if (!cancelled) setError(err instanceof Error ? err.message : String(err));
     });
     void updateStatus().catch((err) => {
@@ -108,5 +124,8 @@ export function useQualitativeJob(jobId: string | null) {
     total: progress?.total ?? 0,
     isFinished: TERMINAL_STATUSES.includes(status),
     isSuccessful: SUCCESS_STATUSES.includes(status),
+    /** 끝났는데 빠진 문항이 있다. 보고서를 내보내면 안 되고, 이어서 분석해야 한다. */
+    isIncomplete: INCOMPLETE_STATUSES.includes(status),
+    failed: progress?.failed ?? 0,
   };
 }
