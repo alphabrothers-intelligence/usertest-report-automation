@@ -23,6 +23,9 @@ export interface CrossAnalysisGroup {
     economic: number;
     social: number;
   };
+  /** **가치 축은 데이터마다 개수·이름이 다르다.** 위 fourValues는 리바랩스 고정 4칸이고,
+   * 렌더러는 이 배열을 쓴다(범용 경로도 같은 배열을 채운다 — lib/agent/toQuantStats.ts). */
+  valueAxes: { name: string; mean: number }[];
   uxQuality: {
     usability: { name: string; mean: number }[];
     fun: { name: string; mean: number }[];
@@ -55,6 +58,12 @@ function summarizeGroup(group: string, members: WallaRecord[]): CrossAnalysisGro
       economic: meanSd(scores(members.map((m) => m.values.economic.score))).mean,
       social: meanSd(scores(members.map((m) => m.values.social.score))).mean,
     },
+    valueAxes: [
+      { name: "기능적 가치", mean: meanSd(scores(members.map((m) => m.values.functional.score))).mean },
+      { name: "심미적 가치", mean: meanSd(scores(members.map((m) => m.values.aesthetic.score))).mean },
+      { name: "경제적 가치", mean: meanSd(scores(members.map((m) => m.values.economic.score))).mean },
+      { name: "사회·공공적 가치", mean: meanSd(scores(members.map((m) => m.values.social.score))).mean },
+    ],
     uxQuality: {
       usability: UX_INDICES.map((idx) => ({
         name: members[0]?.uxQuality[idx]?.usability.name ?? `실용성${idx + 1}`,

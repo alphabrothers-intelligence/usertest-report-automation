@@ -109,14 +109,42 @@ function choiceOf(choices: ChoiceStat[], test: RegExp): CategoryCount[] {
   return choices.find((c) => test.test(c.question))?.distribution ?? [];
 }
 
+/**
+ * 범용 교차 분석(축 배열)을 보고서가 읽는 고정 두 칸(연령·성별)으로 옮긴다.
+ *
+ * **예전엔 이 변환을 "호출부가 해서 넘긴다"고 두고 아무도 안 만들었다** — 그래서 범용 경로로
+ * 만든 보고서는 연령·성별 데이터가 멀쩡히 계산돼 있는데도 교차 분석 장이 통째로 비어 있었다
+ * (2026-09-07 5종 점검에서 케어클·이젠오토·정리습관 3종 확인). 받을 자리만 만들고 채우는 쪽을
+ * 남에게 미루면 이렇게 된다 — 변환은 여기서 한다.
+ */
+function toCrossAnalysis(axes: RoleQuantStats["crossAnalysis"]): CrossAnalysis {
+  const groupsOf = (kind: "age" | "gender") =>
+    (axes.find((axis) => axis.kind === kind)?.groups ?? []).map((group) => ({
+      group: group.group,
+      n: group.n,
+      featureSatisfaction: group.features,
+      // 리바랩스 고정 4칸. 렌더러는 valueAxes를 쓰므로 이름이 다른 데이터에서도 어긋나지 않는다.
+      fourValues: {
+        functional: group.values[0]?.mean ?? 0,
+        aesthetic: group.values[1]?.mean ?? 0,
+        economic: group.values[2]?.mean ?? 0,
+        social: group.values[3]?.mean ?? 0,
+      },
+      valueAxes: group.values,
+      // ponytail: 범용 집계의 UX 값은 계열(실용성/즐거움) 구분이 없는 평평한 배열이라 두 칸으로
+      // 못 나눈다. 지금 5종 중 UX 계열이 있는 건 리바랩스(고정 경로)뿐이라 비워 둔다 —
+      // 계열이 있는 raw data가 실제로 생기면 CrossGroup에 groupKey를 실어 나르면 된다.
+      uxQuality: { usability: [], fun: [] },
+    }));
+  return { byAgeGroup: groupsOf("age"), byGender: groupsOf("gender") };
+}
+
 export function toQuantStats(
   role: RoleQuantStats,
   extra: {
     surveyQuestions?: SurveyQuestionRow[];
     /** 성별×연령대 교차표. 두 문항이 다 있을 때만 계산되므로 호출부가 넘긴다. */
     genderByAgeBracket?: CrossTabRow[];
-    /** Ⅶ 교차 분석. 고정 경로 타입과 모양이 달라 호출부가 변환해 넘긴다. */
-    crossAnalysis?: CrossAnalysis;
   } = {},
 ): QuantStats & { generic: GenericStats } {
   const demographicChoices = role.choices.filter((c) => c.role === "demographic" || c.role === "context");
@@ -158,7 +186,7 @@ export function toQuantStats(
     overallSatisfaction: toMeanSd(role.overall),
     overallSatisfactionDistribution: role.overall?.distribution,
     nps: role.nps ?? { n: 0, promoterPct: 0, passivePct: 0, detractorPct: 0, npsScore: 0, rawMean: 0 },
-    crossAnalysis: extra.crossAnalysis ?? { byAgeGroup: [], byGender: [] },
+    crossAnalysis: toCrossAnalysis(role.crossAnalysis),
     surveyQuestions: extra.surveyQuestions ?? [],
     generic: {
       choices: role.choices,

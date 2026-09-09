@@ -2,9 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getReportByFileUrl } from "@/lib/db/reports";
 import { createQualitativeJob } from "@/lib/db/qualitativeJobs";
-import { loadWallaFromUrl } from "@/lib/walla/loadFromUrl";
-import { normalizeWallaRows } from "@/lib/walla/normalize";
-import { buildQuestionSpecs } from "@/lib/pipeline/questions";
+import { loadQuestionSpecs } from "@/lib/pipeline/questionSource";
 import { estimateQualitativeCallPlan } from "@/lib/pipeline/orchestrate";
 
 const BodySchema = z.object({ fileUrl: z.string().url() });
@@ -20,15 +18,10 @@ export async function POST(request: Request) {
   const report = await getReportByFileUrl(body.data.fileUrl);
   if (!report) return NextResponse.json({ error: "정량 분석을 먼저 완료하세요." }, { status: 409 });
 
-  const loaded = await loadWallaFromUrl(body.data.fileUrl);
-  if (!loaded.ok || !loaded.parsed || !loaded.validation?.valid) {
-    return NextResponse.json(
-      { error: loaded.fetchError ?? "원본 파일의 질문·응답 구조를 확인한 뒤 다시 시도해주세요." },
-      { status: 400 },
-    );
-  }
-  const records = normalizeWallaRows(loaded.parsed.headerRow, loaded.parsed.dataRows);
-  const specs = buildQuestionSpecs(records);
+  // **형식 검증으로 막지 않는다** — 리바랩스 형식이 아니면 역할 분류로 문항을 뽑는다.
+  const source = await loadQuestionSpecs(body.data.fileUrl, report.file_name);
+  if (!source.ok) return NextResponse.json({ error: source.error }, { status: 400 });
+  const specs = source.specs;
   const callPlan = estimateQualitativeCallPlan(specs);
   const job = await createQualitativeJob({ reportId: report.id, specs, callPlan });
   return NextResponse.json({ job, callPlan, next: `/api/qualitative-jobs/${job.id}/run-next` }, { status: 201 });

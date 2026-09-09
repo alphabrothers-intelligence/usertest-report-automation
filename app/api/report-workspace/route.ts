@@ -90,6 +90,8 @@ export async function GET(request: Request) {
       qualitative,
       recommendations,
       sectionAnalyses: report.section_analyses,
+      // 범용 경로로 만든 보고서만 값이 있다 — 없으면 리바랩스 고정 9장 목차를 쓴다.
+      sectionPlan: report.section_plan,
     }),
     reportId: report.id,
     reportName: report.report_name,

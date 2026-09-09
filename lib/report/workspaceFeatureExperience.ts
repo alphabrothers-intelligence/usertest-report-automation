@@ -135,6 +135,7 @@ export function buildFeatureSection(
   const rankedImportance = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
   const segmentNames = [...new Set(stats.rankPositionComposition.flatMap((row) => row.segments.map((segment) => segment.name)))];
   const rankPalette = ["#ff7b7b", "#58b1cf", "#9bcdb8", "#5fc5c1", "#c890d5", "#ffe39a", "#aeb8c8", "#f5ad80"];
+  const hasRanking = stats.rankPositionComposition.length > 0 && rankedImportance.length > 0;
   return [
     headingBlock({ id: "feature-result-heading", variant: "numbered", number: "1", text: "기능별 고객 경험 조사 결과" }),
     ...services.featureQualitativeBlocks(stats, "feature-qualitative", featureQualitative),
@@ -146,22 +147,26 @@ export function buildFeatureSection(
       headers: ["순위", "기능", "평균 만족도", "표준편차"],
       rows: ranked.map((feature, index) => [index + 1, feature.name, feature.mean, feature.sd]),
     }),
-    headingBlock({ id: "feature-q12", variant: "question", number: "Q12", text: services.questionText(stats, 12, "기능 중 중요하다고 생각되는 순위를 순서대로 작성해주세요") }),
-    rankCompositionBlock({
-      id: "feature-rank-composition",
-      title: "기능 중요도 순위 구성",
-      candidates: segmentNames.map((name, index) => ({ name, color: rankPalette[index % rankPalette.length] })),
-      rows: stats.rankPositionComposition.map((row) => ({
-        rank: row.rank,
-        segments: segmentNames.map((name) => ({ name, percentage: row.segments.find((segment) => segment.name === name)?.percentage ?? 0 })),
-      })),
-    }),
-    tableBlock({
-      id: "feature-importance-table",
-      title: "기능별 중요 순위 종합",
-      headers: ["순위", "기능", "상대 중요도"],
-      rows: rankedImportance.map((item, index) => [`${index + 1}위`, item.name, item.score]),
-    }),
+    // **순위 문항이 없는 raw data(이젠오토·정리습관)에서는 이 세 블록을 만들지 않는다** —
+    // 예전엔 Q12 제목과 행 0개짜리 차트·표가 그대로 남았다(2026-09-07 5종 점검).
+    ...(hasRanking ? [
+      headingBlock({ id: "feature-q12", variant: "question", number: "Q12", text: services.questionText(stats, 12, "기능 중 중요하다고 생각되는 순위를 순서대로 작성해주세요") }),
+      rankCompositionBlock({
+        id: "feature-rank-composition",
+        title: "기능 중요도 순위 구성",
+        candidates: segmentNames.map((name, index) => ({ name, color: rankPalette[index % rankPalette.length] })),
+        rows: stats.rankPositionComposition.map((row) => ({
+          rank: row.rank,
+          segments: segmentNames.map((name) => ({ name, percentage: row.segments.find((segment) => segment.name === name)?.percentage ?? 0 })),
+        })),
+      }),
+      tableBlock({
+        id: "feature-importance-table",
+        title: "기능별 중요 순위 종합",
+        headers: ["순위", "기능", "상대 중요도"],
+        rows: rankedImportance.map((item, index) => [`${index + 1}위`, item.name, item.score]),
+      }),
+    ] : []),
     ...quadrantBlocks(stats),
     headingBlock({ id: "feature-analysis-heading", variant: "numbered", number: "2", text: "기능별 고객 경험 분석" }),
     richStaticBlock({

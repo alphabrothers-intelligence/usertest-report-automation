@@ -3,9 +3,7 @@ import { anthropic } from "@/lib/anthropic";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import pLimit from "p-limit";
-import { loadWallaFromUrl } from "@/lib/walla/loadFromUrl";
-import { normalizeWallaRows } from "@/lib/walla/normalize";
-import { buildQuestionSpecs } from "@/lib/pipeline/questions";
+import { loadQuestionSpecs } from "@/lib/pipeline/questionSource";
 import { CLAUDE_TIMEOUT_MS, withClaudeGuard } from "@/lib/pipeline/claudeGuard";
 import {
   QUOTE_ENDING_COMPLETION_SYSTEM,
@@ -58,10 +56,11 @@ export async function POST(request: Request) {
   const parsed = BodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, error: "인용문 정보가 올바르지 않습니다." }, { status: 400 });
 
-  const loaded = await loadWallaFromUrl(parsed.data.source);
-  if (!loaded.ok || !loaded.parsed) return NextResponse.json({ ok: false, error: "원본 데이터를 읽지 못했습니다." }, { status: 404 });
-  const records = normalizeWallaRows(loaded.parsed.headerRow, loaded.parsed.dataRows);
-  const spec = buildQuestionSpecs(records).find((question) => question.id === parsed.data.questionKey);
+  // 문항 추출은 분석 때와 **같은 자리**를 쓴다(lib/pipeline/questionSource.ts) — 여기만 고정
+  // 스키마로 읽으면 리바랩스가 아닌 raw data에서 원문 대조가 통째로 안 된다(2026-09-09 실측).
+  const source = await loadQuestionSpecs(parsed.data.source, null);
+  if (!source.ok) return NextResponse.json({ ok: false, error: source.error }, { status: 404 });
+  const spec = source.specs.find((question) => question.id === parsed.data.questionKey);
   if (!spec) return NextResponse.json({ ok: false, error: "인용문이 사용된 문항을 찾지 못했습니다." }, { status: 404 });
 
   const quotes = [...new Set(parsed.data.quotes)];

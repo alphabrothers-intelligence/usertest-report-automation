@@ -12,9 +12,7 @@ import {
 } from "@/lib/db/qualitativeJobs";
 import { getReportById, getQuestionsWithAllCategories, saveQualitativeQuestionResult, saveRecommendation, saveReportResultSummary } from "@/lib/db/reports";
 import { detectProductType } from "@/lib/report/productType";
-import { loadWallaFromUrl } from "@/lib/walla/loadFromUrl";
-import { normalizeWallaRows } from "@/lib/walla/normalize";
-import { buildQuestionSpecs } from "@/lib/pipeline/questions";
+import { loadQuestionSpecs } from "@/lib/pipeline/questionSource";
 import {
   runQualitativeStage1,
   runQualitativeStage2,
@@ -44,14 +42,11 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
 
   try {
     if (item.phase === "stage1") {
-      const loaded = await loadWallaFromUrl(job.file_url);
-      if (!loaded.ok || !loaded.parsed || !loaded.validation?.valid) {
-        throw new Error(
-          loaded.fetchError ?? "원본 파일을 다시 읽지 못했습니다. 파일을 다시 첨부한 뒤 재시도해주세요.",
-        );
-      }
-      const records = normalizeWallaRows(loaded.parsed.headerRow, loaded.parsed.dataRows);
-      const spec = buildQuestionSpecs(records).find((candidate) => candidate.id === item.question_key);
+      // 문항 추출 경로는 작업 등록과 **같은 자리**를 쓴다(lib/pipeline/questionSource.ts) —
+      // 등록과 실행이 다른 방식으로 뽑으면 실행이 문항을 못 찾아 작업이 통째로 막힌다.
+      const source = await loadQuestionSpecs(job.file_url, null);
+      if (!source.ok) throw new Error(source.error);
+      const spec = source.specs.find((candidate) => candidate.id === item.question_key);
       if (!spec) throw new Error(`원본 raw data에서 ${item.question_key} 문항을 찾지 못했습니다.`);
       const usages: ClaudeUsageRecord[] = [];
       const checkpoint = await runQualitativeStage1(spec, { onUsage: (usage) => usages.push(usage) });

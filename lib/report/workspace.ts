@@ -5,7 +5,7 @@ import type { QuantStats } from "@/lib/quant/compute";
 // 컴파일 시 제거되므로 클라이언트 번들에 DB 클라이언트가 딸려오지 않는다.
 import type { QuestionWithApprovedCategories, CategoryRow, RecommendationRow, SectionAnalyses } from "@/lib/db/reports";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
-import type { SectionPlan } from "@/lib/agent/sectionPlan";
+import { NUMERALS, type SectionPlan } from "@/lib/agent/sectionPlan";
 import { parseFourValueItemTexts } from "@/lib/pipeline/sectionAnalysis";
 import { decodeImprovementLabel } from "@/lib/pipeline/stage2";
 import { categoryPolarityNeedsReview } from "@/lib/pipeline/confidence";
@@ -752,7 +752,7 @@ export function buildReportWorkspaceSeed(input: {
 
   // 에이전트 목차가 있으면 **그 데이터에 실제로 있는 장만** 그 순서·번호로 낸다.
   // 없으면 예전처럼 리바랩스 기준 9장 고정 목차(numeral이 곧 식별자였다).
-  const sections: ReportSectionContent[] = input.sectionPlan
+  const planned: ReportSectionContent[] = input.sectionPlan
     ? input.sectionPlan.chapters.map((chapter) => ({
       numeral: chapter.numeral,
       title: chapter.title,
@@ -763,6 +763,13 @@ export function buildReportWorkspaceSeed(input: {
       title: section.title,
       blocks: blocksById[LEGACY_ID_BY_NUMERAL[section.numeral] ?? section.numeral] ?? [],
     }));
+
+  // **블록이 하나도 없는 장은 빼고 번호를 다시 매긴다.** 그 데이터에 없는 문항이라 안쪽 블록을
+  // 전부 만들지 않은 장(예: 연령·성별 정보가 없는 raw data의 교차 분석)이 제목만 남아 목차와
+  // 본문에 빈 장으로 나왔다(2026-09-07 5종 점검). 빼기만 하면 번호가 건너뛰므로 다시 매긴다.
+  const sections: ReportSectionContent[] = planned
+    .filter((section) => section.blocks.length > 0)
+    .map((section, index) => ({ ...section, numeral: NUMERALS[index] ?? section.numeral }));
 
   return { quantStats: stats, productInfo, resultSummary, sections };
 }

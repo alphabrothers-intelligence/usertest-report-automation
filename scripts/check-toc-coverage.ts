@@ -65,9 +65,21 @@ function expectedDatasets(cell: string): Set<string> | null {
  * 아이디어`로 나온다(투블럭 원본 p27 목차도 그 제목이다). 시트에 이미 적혀 있는 규칙이므로
  * 여기에 제목을 손으로 적지 않는다.
  */
+/** 시트가 "절 제목이 'X'로 바뀐다"처럼 **제목 전체**를 적어둔 변형. */
 function titleVariants(sectionTitle: string, condition: string): string[] {
-  const renamed = [...condition.matchAll(/절 제목이 ['"“”']([^'"“”']+)['"“”']로 바뀐다/g)].map((m) => m[1]);
-  return [sectionTitle, ...renamed];
+  return [sectionTitle, ...[...condition.matchAll(/절 제목이 ['"“”']([^'"“”']+)['"“”']로 바뀐다/g)].map((m) => m[1])];
+}
+
+/**
+ * 시트가 **바꿀 낱말만** 적어둔 변형("'단계별'로 바꾼다" — 정리습관처럼 항목이 태스크
+ * 플로우인 경우). 절 제목의 첫 낱말을 이 말로 갈아 끼운 제목도 같은 절로 본다.
+ *
+ * **장 단위로 모아 적용한다** — 시트는 이 규칙을 그 장의 첫 절에만 적어두는데, 실제로는
+ * 장 제목이 바뀌면 그 장의 절 제목이 다 같이 바뀐다(2026-09-07: 정리습관 Ⅲ장 2절이
+ * "없음"으로 잘못 잡혔다).
+ */
+function renameWords(condition: string): string[] {
+  return [...condition.matchAll(/['"“”']([^'"“”'\s]{2,8})['"“”']로 (?:바꾼다|바뀐다)/g)].map((m) => m[1]);
 }
 
 type SheetRow = {
@@ -76,6 +88,8 @@ type SheetRow = {
   sectionTitle: string;
   /** 같은 절이 데이터에 따라 갖는 제목 전부(시트가 정한다). 하나라도 있으면 그 절이 있는 것이다. */
   titles: string[];
+  /** 시트가 "'단계별'로 바꾼다"처럼 낱말만 적어둔 변형. 장 전체에 적용한다. */
+  renameWords: string[];
   expected: Set<string> | null;
   raw: string;
 };
@@ -99,9 +113,23 @@ function loadSheet(): SheetRow[] {
       chapterTitle,
       sectionTitle,
       titles: titleVariants(sectionTitle, text(row[8])),
+      renameWords: renameWords(text(row[8])),
       expected: expectedDatasets(raw),
       raw,
     });
+  }
+  // 장 안 어느 절에든 적힌 낱말 변형은 그 장 전체에 적용한다.
+  const wordsByChapter = new Map<string, string[]>();
+  for (const row of out) {
+    wordsByChapter.set(row.chapterId, [...(wordsByChapter.get(row.chapterId) ?? []), ...row.renameWords]);
+  }
+  for (const row of out) {
+    const words = wordsByChapter.get(row.chapterId) ?? [];
+    row.titles = [...new Set([
+      ...row.titles,
+      ...titleVariants(row.sectionTitle, ""),
+      ...words.map((word) => row.sectionTitle.replace(/^\S+/, word)),
+    ])];
   }
   return out;
 }
@@ -127,6 +155,8 @@ function classificationFromSheet(profiles: ColumnProfile[], stages: Record<numbe
 const SHEET = loadSheet();
 type Plan = ReturnType<typeof buildSectionPlan>;
 const plans = new Map<string, Plan>();
+/** 제품 경로 대조에서 다시 쓰려고 파싱 결과를 들고 있는다. */
+const parsedRows = new Map<string, unknown[][]>();
 for (const dataset of loadStageAnswerKey()) {
   const buffer = readFileSync(path.join(DATA, dataset.file));
   const { headerRow, dataRows } = parseWallaWorkbook(
@@ -136,6 +166,7 @@ for (const dataset of loadStageAnswerKey()) {
   const classification = classificationFromSheet(profiles, dataset.stages);
   const short = NAMES.find((name) => dataset.name.startsWith(name)) ?? dataset.name;
   plans.set(short, buildSectionPlan(toSectionPlanInput(classification, profiles, dataRows)));
+  parsedRows.set(short, dataRows);
 }
 
 /** 그 계획에 이 절이 있는가. 제목이 데이터에 따라 바뀌는 절은 변형 제목도 인정한다. */
@@ -168,5 +199,63 @@ if (unjudged.length > 0) {
   for (const line of unjudged) console.log(`  · ${line}`);
 }
 
-console.log(`\n${pass}/${pass + fail} PASS`);
-if (fail > 0) process.exit(1);
+/**
+ * **제품이 실제로 쓰는 경로로 한 번 더 잰다.**
+ *
+ * 위 대조는 시트에서 역할을 읽어와 계획을 세운다 — "규칙이 시트대로 구현됐는가"를 본다.
+ * 그런데 실제 보고서는 **AI 역할 분류 결과**로 계획을 세우므로, 분류가 시트와 다르게 판정하면
+ * 결과가 달라지는데 위 대조는 그걸 못 본다(2026-09-07 실측: 케어클 교차 분석이 시트 기준으론
+ * 나와야 하는데 제품 출력에는 없었고, 그때도 이 검사는 통과였다).
+ *
+ * 분류는 **DB에 캐시된 것만** 쓴다 — 없으면 건너뛴다. 검사가 조용히 API를 호출해 과금하지
+ * 않게 하려는 것이다(`npm run check:role-classify`로 따로 만든다).
+ */
+const DEMO_KEY: Record<string, string> = {
+  리바랩스: "rivalabs", 케어클: "carecl", 이젠오토: "ezenauto", 정리습관: "cleanhabit", 투블럭: "twoblock",
+};
+
+async function compareLivePlans() {
+  const { readRolePlan, planSections } = await import("../lib/agent/rolePlan");
+  const live = new Map<string, Plan>();
+  const skipped: string[] = [];
+  for (const name of NAMES) {
+    const rows = parsedRows.get(name);
+    const stored = rows ? await readRolePlan(`demo:${DEMO_KEY[name]}`) : null;
+    if (!stored || !rows) { skipped.push(name); continue; }
+    live.set(name, planSections(stored, rows));
+  }
+
+  console.log("\n=== 제품 경로 대조 (AI 역할 분류 결과로 세운 계획) ===");
+  if (skipped.length > 0) console.log(`  건너뜀(분류 캐시 없음): ${skipped.join(", ")}`);
+  const judged = NAMES.filter((name) => live.has(name));
+  if (judged.length === 0) {
+    console.log("  대조할 분류 캐시가 없습니다.");
+    return;
+  }
+  const diffs: string[] = [];
+  for (const row of SHEET) {
+    if (!row.expected) continue;
+    for (const name of judged) {
+      const want = row.expected.has(name);
+      const got = hasSection(live.get(name), row);
+      if (want !== got) diffs.push(`${row.chapterId} ${row.sectionTitle} — ${name}: 기준 ${want ? "있음" : "없음"} / 제품 ${got ? "있음" : "없음"}`);
+    }
+  }
+  if (diffs.length === 0) {
+    console.log(`  ${judged.join(", ")} — 시트 기준과 모두 일치`);
+    return;
+  }
+  fail += diffs.length;
+  console.log(`  차이 ${diffs.length}건 — AI 분류가 시트와 다르게 판정한 자리다:`);
+  for (const diff of diffs) console.log(`    · ${diff}`);
+  // 차이는 둘 중 하나를 고쳐야 사라진다 — 새 회귀인지 미결 결정인지 구분해서 보라는 뜻이다.
+  console.log("  → 시트와 실제 데이터 중 어느 쪽이 맞는지 정한 뒤 시트나 코드를 고쳐야 사라진다.");
+}
+
+async function main() {
+  await compareLivePlans();
+  console.log(`\n${pass}/${pass + fail} PASS`);
+  if (fail > 0) process.exit(1);
+}
+
+void main();

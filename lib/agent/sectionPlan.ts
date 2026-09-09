@@ -64,7 +64,8 @@ export type SectionPlan = {
   notes: string[];
 };
 
-const NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+/** 장 번호. 블록이 하나도 안 만들어진 장을 뺀 뒤 다시 매기는 데도 쓴다(workspace.ts). */
+export const NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
 
 /** 판정에 쓰는 파생값. 한 번만 계산해 표 순회에서 돌려 쓴다. */
 type Ctx = {

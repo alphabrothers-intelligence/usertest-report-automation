@@ -45,6 +45,11 @@ alter table reports add column if not exists workspace_draft_saved_at timestampt
 -- 재분류해도 덮어쓰지 않는다.
 alter table reports add column if not exists role_plan jsonb;
 
+-- 2026-09-09: 역할 분류로 만든 장 구성(planSections 결과). 업로드 흐름이 범용 경로를 타면
+-- 장 목록이 데이터마다 달라지는데, 보고서를 열 때마다 raw data를 다시 내려받아 계산할 수는
+-- 없으므로 정량 계산 시점에 저장해 둔다.
+alter table reports add column if not exists section_plan jsonb;
+
 -- 마법사 1단계(제품유형 선택, 2026-08-03 신규)에서 사용자가 명시적으로 고른 값.
 -- null이면 lib/report/productType.ts의 detectProductType() 자동추정으로 폴백한다
 -- (레거시 report·마법사 이전에 만들어진 report 호환).

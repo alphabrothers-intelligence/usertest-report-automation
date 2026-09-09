@@ -24,13 +24,17 @@ export function buildCorePurchaseFactorSection(
   const rankedKeyFactors = [...stats.keyFactorDistribution].sort((a, b) => b.percentage - a.percentage);
   return [
     headingBlock({ id: "core-result-heading", variant: "numbered", number: "1", text: "핵심구매요소 조사 결과" }),
-    headingBlock({ id: "core-q13", variant: "question", number: "Q13", text: services.questionText(stats, 13, "서비스를 이용 결정함에 있어서 가장 영향을 미칠 수 있는 핵심 요인은 무엇이라고 생각하십니까?") }),
-    distributionChart("core-factor-dist", "핵심구매요소 조사 결과", stats.keyFactorDistribution),
-    tableBlock({
-      id: "core-factor-result-table",
-      headers: ["No", "핵심 기능", "순위", "비율"],
-      rows: rankedKeyFactors.map((item, i) => [i + 1, item.label, `${i + 1}위`, `${item.percentage}%`]),
-    }),
+    // **분포 문항이 없는 raw data(케어클 — 핵심구매요소가 순위만 있다)에서는 만들지 않는다.**
+    // 예전엔 항목 0개짜리 차트와 행 0개짜리 표가 그대로 남았다(2026-09-07 5종 점검).
+    ...(rankedKeyFactors.length > 0 ? [
+      headingBlock({ id: "core-q13", variant: "question", number: "Q13", text: services.questionText(stats, 13, "서비스를 이용 결정함에 있어서 가장 영향을 미칠 수 있는 핵심 요인은 무엇이라고 생각하십니까?") }),
+      distributionChart("core-factor-dist", "핵심구매요소 조사 결과", stats.keyFactorDistribution),
+      tableBlock({
+        id: "core-factor-result-table",
+        headers: ["No", "핵심 기능", "순위", "비율"],
+        rows: rankedKeyFactors.map((item, i) => [i + 1, item.label, `${i + 1}위`, `${item.percentage}%`]),
+      }),
+    ] : []),
     headingBlock({ id: "core-analysis-heading", variant: "numbered", number: "2", text: "핵심구매요소 분석" }),
     richStaticBlock({
       id: "core-analysis-summary",

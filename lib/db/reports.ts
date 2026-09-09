@@ -3,6 +3,7 @@ import type { QuantStats } from "@/lib/quant/compute";
 import type { PipelineResult, QuestionResult } from "@/lib/pipeline/orchestrate";
 import type { Polarity } from "@/lib/pipeline/stage1";
 import type { ProductInfo } from "@/lib/productInfo/types";
+import type { SectionPlan } from "@/lib/agent/sectionPlan";
 import type { SectionAnalyses } from "@/lib/pipeline/sectionAnalysis";
 import { encodeImprovementLabel, type Stage2ImprovementOutput } from "@/lib/pipeline/stage2";
 import type { ReportSectionContent } from "@/lib/report/sections";
@@ -44,6 +45,8 @@ export interface ReportRow {
    * 이 경우 스튜디오는 정량/정성 결과로 새로 조립한 기본 섹션을 보여준다. */
   workspace_draft: ReportSectionContent[] | null;
   workspace_draft_saved_at: string | null;
+  /** 역할 분류로 만든 장 구성(범용 경로만). null이면 리바랩스 고정 목차를 쓴다. */
+  section_plan: SectionPlan | null;
   created_at: string;
   updated_at: string;
 }
@@ -215,6 +218,14 @@ export async function saveReportResultSummary(reportId: string, resultSummary: s
 }
 
 /** 섹션 단위 정성 분석을 저장한다(부분 병합 — 이미 저장된 섹션은 이번에 없으면 유지). */
+/** 역할 분류로 만든 장 구성. 범용 경로로 만든 보고서만 값이 있다(고정 경로는 null). */
+export async function saveReportSectionPlan(fileUrl: string, sectionPlan: unknown): Promise<void> {
+  await sql`
+    update reports set section_plan = ${sql.json(JSON.parse(JSON.stringify(sectionPlan)))}::jsonb, updated_at = now()
+    where file_url = ${fileUrl}
+  `;
+}
+
 export async function saveReportSectionAnalyses(
   reportId: string,
   analyses: Partial<SectionAnalyses>,

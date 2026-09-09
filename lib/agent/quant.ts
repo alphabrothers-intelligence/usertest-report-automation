@@ -69,8 +69,9 @@ export type CrossGroup = {
   uxQuality: { name: string; mean: number }[];
 };
 
-/** 인적 범주 하나를 기준으로 한 교차 분석(연령대별·성별 등). */
-export type CrossAxis = { columnIndex: number; by: string; groups: CrossGroup[] };
+/** 인적 범주 하나를 기준으로 한 교차 분석(연령대별·성별 등).
+ * `kind`는 보고서의 "연령대별 차이"/"연령에 따른 차이"(실제로는 성별) 두 구간에 배정할 때 쓴다. */
+export type CrossAxis = { columnIndex: number; by: string; kind: "age" | "gender"; groups: CrossGroup[] };
 
 export type RoleQuantStats = {
   respondentCount: number;
@@ -119,8 +120,12 @@ function asNumber(row: unknown[], index: number): number | null {
  * 항목명. **코드가 아는 값을 먼저 쓴다**(classify.ts "하는 일 ③"과 같은 원칙) — 헤더 따옴표
  * 안 이름이 있으면 그것, 계열 접두가 있으면 접두 뒤 문항명, 둘 다 없으면 모델이 뽑은 이름.
  */
-function itemNameOf(profile: ColumnProfile, fromModel?: string): string {
-  if (profile.quotedName) return profile.quotedName;
+/** 항목명(기능명·가치축 이름). **정량과 정성이 같은 이름을 써야** 보고서에서 짝이 맞는다 —
+ * 그래서 정성 문항 추출(lib/pipeline/questions.ts)도 이 함수를 그대로 쓴다. */
+export function itemNameOf(profile: ColumnProfile, fromModel?: string): string {
+  // 따옴표 안에 앞뒤 공백이 들어간 헤더가 있다(케어클 "제품의 ' LED 컬러 변경' 기능…").
+  // 그대로 두면 보고서 항목명이 " LED 컬러 변경"으로 나온다.
+  if (profile.quotedName) return profile.quotedName.trim();
   const header = profile.header.replace(/\s+/g, " ").trim();
   if (profile.groupPrefix) {
     const stripped = header.replace(/^[가-힣A-Za-z]+\s*\d+\s*\)\s*/, "").trim();
@@ -351,13 +356,19 @@ export function computeRoleQuantStats(
     crossAnalysis.push({
       columnIndex: question.columnIndex,
       by: profile.header.replace(/\s+/g, " ").trim(),
+      kind: question.columnIndex === ageQuestion?.columnIndex ? "age" : "gender",
       groups: groups.map(([group, members]) => summarize(group, members)),
     });
   }
 
   // ── 타사 경험 ───────────────────────────────────────────────────────────────
   const priorQuestions = of("prior_service");
-  const gate = priorQuestions.find((question) => profileOf.get(question.columnIndex)?.type === "single");
+  // **`single`만 찾으면 안 된다** — "경험 유무"가 쉼표 섞인 응답 때문에 `multi`로 프로파일링
+  // 되는 일이 있다(리바랩스 24번 실측, 2026-09-09). 게이트는 "척도도 서술도 아닌 선택형"이다.
+  const gate = priorQuestions.find((question) => {
+    const type = profileOf.get(question.columnIndex)?.type;
+    return type === "single" || type === "multi";
+  });
   const priorSatisfaction = priorQuestions.find(isScale);
   const experienced = gate
     ? rows.filter((row) => /있|네|예/.test(cell(row, gate.columnIndex)))
