@@ -30,6 +30,7 @@ import { useReportExport } from "@/components/report-web-document/useReportExpor
 import { useReportNavigation } from "@/components/report-web-document/useReportNavigation";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
+import { paginateBlocks, SECTION_BANNER_RESERVE_PX } from "@/lib/report/paginate";
 import type { ProductInfo } from "@/lib/productInfo/types";
 
 export { applyTextFormat, BlockView, FormatButton, insertArrowLine } from "@/components/report-web-document/ReportBlockView";
@@ -185,27 +186,22 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     const pageContentHeight = (297 - 18 - 26) * pxPerMm;
     const next: Record<string, string[][]> = {};
     for (const section of sections) {
-      const pages: string[][] = [];
-      let current: string[] = [];
-      // 첫 물리 페이지에는 장 제목 배너가 들어가므로 그 높이를 먼저 예약한다.
-      let used = 110;
-      for (const block of section.blocks) {
+      const metrics = section.blocks.map((block) => {
         const element = root.querySelector<HTMLElement>(`[data-report-block-id="${CSS.escape(block.id)}"]`);
         // 블록 사이 간격은 안쪽 요소의 margin-bottom인데, 그 여백은 테두리 없는 래퍼 밖으로
         // 상쇄돼(margin collapsing) getBoundingClientRect에 안 잡힌다. 고정 8px로 어림하던
         // 예전 코드는 블록마다 4~5mm씩 적게 세어 쪽이 넘쳤다 — 실제 값을 읽어 더한다.
         const inner = element?.firstElementChild;
         const gap = inner ? parseFloat(getComputedStyle(inner).marginBottom) || 0 : 0;
-        const height = element ? Math.ceil(element.getBoundingClientRect().height + Math.max(gap, 8)) : 0;
-        if (current.length > 0 && used + height > pageContentHeight) {
-          pages.push(current);
-          current = [];
-          used = 0;
-        }
-        current.push(block.id);
-        used += height;
-      }
-      if (current.length > 0) pages.push(current);
+        return {
+          id: block.id,
+          height: element ? Math.ceil(element.getBoundingClientRect().height + Math.max(gap, 8)) : 0,
+          isHeading: block.kind === "heading",
+        };
+      });
+      // 묶는 규칙은 축소판(`/brief`)과 공유한다 — lib/report/paginate.ts 참고.
+      // 첫 물리 페이지에는 장 제목 배너가 들어가므로 그 높이를 먼저 예약한다.
+      const pages = paginateBlocks(metrics, pageContentHeight, SECTION_BANNER_RESERVE_PX);
       next[section.numeral] = pages.length > 0 ? pages : [section.blocks.map((block) => block.id)];
     }
     setPageGroups((previous) => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
