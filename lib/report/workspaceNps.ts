@@ -12,6 +12,15 @@ import {
   type ReportBlock,
 } from "@/lib/report/sections";
 
+/** NPS 판정 문구는 **여기서만** 정한다. 결정론적 본문(Ⅶ장)과 Ⅸ장 결과요약 프롬프트가 같은
+ * 값을 써야 한 보고서 안에서 NPS 0을 두고 "양호한"과 "낮은"이 동시에 나오지 않는다
+ * (2026-09-09 이젠오토 실측 — 모델이 0을 음수처럼 판정했다). */
+export function npsJudgment(npsScore: number): { marketability: string; urgency: string } {
+  return npsScore >= 0
+    ? { marketability: "양호한 시장성", urgency: "추세를 지속적으로 관리할 필요가 있음" }
+    : { marketability: "낮은 시장성", urgency: "개선 전략의 수립이 시급하다고 사료됨" };
+}
+
 export type NpsSectionServices = {
   questionsByKeys: (questions: QuestionWithApprovedCategories[], keys: string[]) => QuestionWithApprovedCategories[];
   findSurveyQuestion: (stats: QuantStats, stage: string, occurrenceIndex: number) => { qno: number; question: string } | null;
@@ -61,8 +70,7 @@ function npsJudgmentHtml(
       `</div>`,
     ].join("");
   }
-  const marketability = nps.npsScore >= 0 ? "양호한 시장성" : "낮은 시장성";
-  const urgency = nps.npsScore >= 0 ? "추세를 지속적으로 관리할 필요가 있음" : "개선 전략의 수립이 시급하다고 사료됨";
+  const { marketability, urgency } = npsJudgment(nps.npsScore);
   return [
     `<div style="margin:8pt 0 0;font-family:'맑은 고딕','Malgun Gothic',sans-serif;font-size:10.5pt;line-height:1.7">`,
     `<p style="margin:0 0 5pt;padding-left:14pt;text-indent:-12pt">▶ 구매의향, 추천의향을 NPS 지수로 환산했을 때, ${nps.npsScore}으로 <strong><u>'${marketability}'</u></strong> 수준으로 판단되어 ${urgency}</p>`,

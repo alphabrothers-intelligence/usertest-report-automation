@@ -214,7 +214,7 @@ function findFeatureSurveyQuestion(stats: QuantStats, featureName: string): { qn
  * Q번호 문항 → 만족도 점수 평균/표준편차 배너 → [만족도 분포도 | 주요 키워드 도출] 2열 →
  * [주관식 응답 감정 분석 도넛+%표 | 응답 요약] 2열 → 1.긍정/2.부정/3.중립 상세 카테고리.
  * 도넛·히스토그램·키워드 클라우드는 SVG/표라 rich-static, 편집 대상 프로즈(카테고리)는 styled. */
-function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions: QuestionWithApprovedCategories[]): ReportBlock[] {
+function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions: QuestionWithApprovedCategories[], reportHasQualitative = false): ReportBlock[] {
   const blocks: ReportBlock[] = [];
   let qi = 0;
   const border = CSS.border;
@@ -267,7 +267,14 @@ function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions
     }));
 
     // (3)(4)는 정성 결과가 있을 때만. 없으면 이 문항 페이지가 사라지는 대신 대기 안내만 남는다.
+    //
+    // **단, 이 보고서에 정성 결과가 이미 있으면 대기 안내를 붙이지 않는다**(2026-09-09 정리습관
+    // 실측). 그 데이터는 정량 만족도 문항 11개 중 주관식이 딸린 것이 8개뿐이라, 나머지 3개에
+    // "정성 분석 승인 후 표시됩니다"가 남아 **영영 오지 않을 것을 기다리라고** 말하고 있었다.
+    // 원본도 주관식이 없는 문항은 점수 박스까지만 싣는다. 분석 자체가 아직 안 돈 보고서
+    // (questions가 통째로 비어 있음)에서는 대기 안내가 여전히 맞다.
     if (!q) {
+      if (reportHasQualitative) continue;
       blocks.push(textBlock({
         id: `${idPrefix}-q${qi}-detail`,
         label: feature.name,
@@ -473,7 +480,7 @@ export function valueSummaryBoxHtml(label: string, summaries: PolaritySummaryTex
   );
 }
 
-function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questions: QuestionWithApprovedCategories[], itemsText?: string): ReportBlock[] {
+function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questions: QuestionWithApprovedCategories[], itemsText?: string, reportHasQualitative = false): ReportBlock[] {
   // 2026-08-03: sectionAnalysis.ts의 runFourValueItemAnalysis(항상 파이프라인의 일부로 자동
   // 생성)가 있으면 그 텍스트를 쓴다 — opt-in "AI 요약 생성" 버튼(polaritySummary.ts)은 이
   // 자동 생성이 아직 없는(구버전 report 등) 경우의 폴백으로만 남긴다. 원본은 이 문단이
@@ -507,7 +514,9 @@ function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questio
         summaryQuestionKey: question.question_key,
         summaryKind: "value",
       }));
-    } else {
+    } else if (!reportHasQualitative) {
+      // 정성 분석이 끝난 보고서인데 이 가치에 주관식이 없으면(투블럭 실측) 기다릴 것이 없다 —
+      // 대기 안내 대신 점수 표까지만 싣는다. 기능 문항과 같은 규칙이다.
       blocks.push(textBlock({ id: `${idPrefix}-pending-${index + 1}`, label: `${value.name} 정성 분석`, html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`, pending: true }));
     }
   });
@@ -598,6 +607,13 @@ function normalizeQuantStats(stats: QuantStats): QuantStats {
     demographics: {
       ...stats.demographics,
       genderByAgeBracket: stats.demographics.genderByAgeBracket ?? [],
+    },
+    // 2026-09-09: valueAxes가 생기기 전(~2026-09-04)에 저장된 보고서는 이 필드가 없어서 Ⅶ장
+    // 교차 분석이 `undefined.map`으로 터졌다 — 웹뷰가 500으로 아예 열리지 않았다(리바랩스
+    // 9/4 보고서 실측). 새 필드를 QuantStats에 더할 때는 옛 저장본을 여기서 같이 메울 것.
+    crossAnalysis: {
+      byAgeGroup: (stats.crossAnalysis?.byAgeGroup ?? []).map((group) => ({ ...group, valueAxes: group.valueAxes ?? [] })),
+      byGender: (stats.crossAnalysis?.byGender ?? []).map((group) => ({ ...group, valueAxes: group.valueAxes ?? [] })),
     },
   };
 }

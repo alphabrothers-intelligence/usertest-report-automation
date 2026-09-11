@@ -15,6 +15,7 @@ export type FourValuesServices = {
     idPrefix: string,
     questions: QuestionWithApprovedCategories[],
     itemsText?: string,
+    reportHasQualitative?: boolean,
   ) => ReportBlock[];
   questionsByKeyPrefix: (questions: QuestionWithApprovedCategories[], prefix: string) => QuestionWithApprovedCategories[];
   sectionAnalysisPanelHtml: (analysis: string) => string;
@@ -104,7 +105,7 @@ export function buildFourValuesSection(
   if (rows.length === 0) return [];
   return [
     headingBlock({ id: "values-result-heading", variant: "numbered", number: "1", text: "4대 가치 만족도 조사 결과" }),
-    ...services.fourValueQualitativeBlocks(stats, "four-values-qualitative", services.questionsByKeyPrefix(qualitative, "values:"), itemsText),
+    ...services.fourValueQualitativeBlocks(stats, "four-values-qualitative", services.questionsByKeyPrefix(qualitative, "values:"), itemsText, qualitative.length > 0),
     headingBlock({ id: "values-analysis-heading", variant: "numbered", number: "2", text: "4대 가치 만족도 조사 결과 분석" }),
     meanChart("four-values-chart", "4대 가치 만족도 종합 결과", rows.map((r) => ({ name: r.label, mean: r.mean }))),
     tableBlock({

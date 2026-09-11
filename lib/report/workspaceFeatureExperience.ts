@@ -13,7 +13,7 @@ import {
 } from "@/lib/report/sections";
 
 export type FeatureExperienceServices = {
-  featureQualitativeBlocks: (stats: QuantStats, idPrefix: string, questions: QuestionWithApprovedCategories[]) => ReportBlock[];
+  featureQualitativeBlocks: (stats: QuantStats, idPrefix: string, questions: QuestionWithApprovedCategories[], reportHasQualitative?: boolean) => ReportBlock[];
   questionsByKeyPrefix: (questions: QuestionWithApprovedCategories[], prefix: string) => QuestionWithApprovedCategories[];
   questionText: (stats: QuantStats, questionNumber: number, fallback: string) => string;
   sectionAnalysisPanelHtml: (analysis: string) => string;
@@ -138,7 +138,7 @@ export function buildFeatureSection(
   const hasRanking = stats.rankPositionComposition.length > 0 && rankedImportance.length > 0;
   return [
     headingBlock({ id: "feature-result-heading", variant: "numbered", number: "1", text: "기능별 고객 경험 조사 결과" }),
-    ...services.featureQualitativeBlocks(stats, "feature-qualitative", featureQualitative),
+    ...services.featureQualitativeBlocks(stats, "feature-qualitative", featureQualitative, qualitative.length > 0),
     headingBlock({ id: "feature-satisfaction-heading", variant: "subheading", text: "기능별 만족도" }),
     meanChart("feature-satisfaction", "기능별 만족도 조사 결과", ranked),
     tableBlock({

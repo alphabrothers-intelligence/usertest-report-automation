@@ -61,13 +61,15 @@ function conclusionFeatureTableHtml(
     return `<td style="${CSS.cellWith(background)}">${value}</td>`;
   };
   const head = (label: string) => `<th style="${CSS.header}">${label}</th>`;
+  // 순위 문항이 없는 raw data는 상대중요도가 없다 — 0.00으로 채우면 없는 값을 말하는 셈이라 열을 뺀다.
+  const hasImportance = stats.relativeImportance.length > 0;
 
   return [
     `<table style="${CSS.table};table-layout:fixed;margin:0 0 10pt;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;line-height:1.35">`,
     `<thead><tr>`,
-    head("기능명") + head("평균 만족도<br>(점)") + head("상대 중요도") + head("긍정 비율<br>(%)") + head("중립 비율<br>(%)") + head("부정 의견<br>(%)"),
+    head("기능명") + head("평균 만족도<br>(점)") + (hasImportance ? head("상대 중요도") : "") + head("긍정 비율<br>(%)") + head("중립 비율<br>(%)") + head("부정 의견<br>(%)"),
     `</tr></thead><tbody>`,
-    ...rows.map((row) => `<tr>${cell(escapeHtml(row.name))}${cell(row.satisfaction.toFixed(2), row.satisfaction === maxSatisfaction ? "best" : row.satisfaction === minSatisfaction ? "worst" : undefined)}${cell(row.importance.toFixed(2), row.importance === maxImportance ? "best" : row.importance === minImportance ? "worst" : undefined)}${cell(row.positive.toFixed(1), maxPositive > 0 && row.positive === maxPositive ? "best" : undefined)}${cell(row.neutral.toFixed(1), maxNeutral > 0 && row.neutral === maxNeutral ? "neutral" : undefined)}${cell(row.negative.toFixed(1), maxNegative > 0 && row.negative === maxNegative ? "worst" : undefined)}</tr>`),
+    ...rows.map((row) => `<tr>${cell(escapeHtml(row.name))}${cell(row.satisfaction.toFixed(2), row.satisfaction === maxSatisfaction ? "best" : row.satisfaction === minSatisfaction ? "worst" : undefined)}${hasImportance ? cell(row.importance.toFixed(2), row.importance === maxImportance ? "best" : row.importance === minImportance ? "worst" : undefined) : ""}${cell(row.positive.toFixed(1), maxPositive > 0 && row.positive === maxPositive ? "best" : undefined)}${cell(row.neutral.toFixed(1), maxNeutral > 0 && row.neutral === maxNeutral ? "neutral" : undefined)}${cell(row.negative.toFixed(1), maxNegative > 0 && row.negative === maxNegative ? "worst" : undefined)}</tr>`),
     `</tbody></table>`,
   ].join("");
 }
@@ -163,8 +165,13 @@ export function buildConclusionSection(
   qualitative: QuestionWithApprovedCategories[],
   recommendations: RecommendationRow[],
 ): ReportBlock[] {
-  const rankedImportance = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
+  // 순위 문항이 없는 raw data(이젠오토 실측)는 relativeImportance가 비어 있어, 그대로 두면
+  // Ⅸ.1 요약 표가 **머리행만 있는 빈 표**로 나온다. 기능 만족도로 대체해 행을 채운다.
+  const rankedImportance = stats.relativeImportance.length > 0
+    ? [...stats.relativeImportance].sort((a, b) => b.score - a.score)
+    : [...new Map([...stats.featureSatisfaction].sort((a, b) => b.mean - a.mean).map((item) => [item.name, { name: item.name, score: 0 }])).values()];
   const quadrantSummaryItems = quadrantItems(stats);
+  const featureCustomerHtml = featureCustomerRecommendationsHtml(recommendations);
   return [
     headingBlock({ id: "conclusion-result-heading", variant: "numbered", number: "1", text: "사용성테스트 결과 요약" }),
     // 원본처럼 머리행부터 마지막 행까지 이어지는 표 하나. 기능별 고객 경험 평가 행만 차트를
@@ -202,7 +209,12 @@ export function buildConclusionSection(
     }),
     headingBlock({ id: "conclusion-strategy-heading", variant: "numbered", number: "2", text: "개선 전략 제언" }),
     richStaticBlock({ id: "conclusion-strategy-table", html: conclusionStrategyTableHtml(stats, recommendations) }),
-    headingBlock({ id: "conclusion-feature-customer-heading", variant: "numbered", number: "3", text: "기능별 고객 제언 종합" }),
-    richStaticBlock({ id: "conclusion-feature-customer-table", html: featureCustomerRecommendationsHtml(recommendations) }),
+    // 기능 제언이 하나도 없는 raw data에서는 제목만 남은 빈 절이 된다 — 그 자리는 만들지 않는다.
+    ...(featureCustomerHtml
+      ? [
+        headingBlock({ id: "conclusion-feature-customer-heading", variant: "numbered", number: "3", text: "기능별 고객 제언 종합" }),
+        richStaticBlock({ id: "conclusion-feature-customer-table", html: featureCustomerHtml }),
+      ]
+      : []),
   ];
 }

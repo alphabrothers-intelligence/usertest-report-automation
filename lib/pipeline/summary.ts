@@ -17,6 +17,7 @@ import type { QuestionWithApprovedCategories, SectionAnalyses } from "@/lib/db/r
 import { detectProductType, type ProductType } from "@/lib/report/productType";
 import { splitCrossAnalysisText, shortenFactorLabel } from "./sectionAnalysis";
 import { SUMMARY_SYSTEM_PROMPT, FALLBACK_SUMMARY_SYSTEM_PROMPT as FALLBACK_SYSTEM_PROMPT } from "./prompts";
+import { npsJudgment } from "@/lib/report/workspaceNps";
 
 const SUMMARY_MODEL = process.env.ANTHROPIC_SUMMARY_MODEL ?? "claude-sonnet-5";
 
@@ -42,7 +43,13 @@ function satisfactionLabel3(rank: number): string {
 /** Ⅸ.1 "기능별 고객 경험 평가" 행 재료 — Ⅲ.2의 우선/차우선 tier만(비우선 제외). 원본 표현어·판정
  * 후보를 코드에서 확정해 넘기고, 개선 동작으로 바꿀 부정 카테고리 라벨을 재료로 준다. */
 function buildFeatureRowMaterial(stats: QuantStats, qualitative: QuestionWithApprovedCategories[]): Record<string, unknown>[] {
-  const ranked = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
+  // 순위 문항이 없는 raw data(이젠오토 실측)는 relativeImportance가 비어 있다. 그대로 두면
+  // 이 행의 재료가 0건이 되어 모델이 "제공된 재료가 없어 작성하지 않음"을 쓴다 — 기능 만족도는
+  // 있으므로 만족도 내림차순으로 같은 순서 규칙을 이어간다(Ⅸ.3 고객 제언과 같은 처방).
+  const hasImportance = stats.relativeImportance.length > 0;
+  const ranked = hasImportance
+    ? [...stats.relativeImportance].sort((a, b) => b.score - a.score)
+    : [...new Map([...stats.featureSatisfaction].sort((a, b) => b.mean - a.mean).map((item) => [item.name, { name: item.name, score: 0 }])).values()];
   const total = ranked.length;
   const firstGroupSize = Math.ceil(total / 3);
   const secondGroupSize = Math.ceil((total - firstGroupSize) / 2);
@@ -65,7 +72,8 @@ function buildFeatureRowMaterial(stats: QuantStats, qualitative: QuestionWithApp
       .map((c) => c.label) ?? [];
     return {
       기능명: item.name,
-      중요도표현: importanceLabel3(item.score),
+      // 순위 문항이 없으면 중요도를 **말하지 않는다** — 0점을 "낮음"으로 옮기면 없는 사실이 된다.
+      ...(hasImportance ? { 중요도표현: importanceLabel3(item.score) } : {}),
       만족도표현: satisfactionLabel3(satisfactionRank.get(item.name) ?? index + 1),
       tier,
       // 우선 tier의 판정 후보 2종, 차우선 tier의 판정 후보 2종(원본 51쪽 문구)
@@ -131,6 +139,10 @@ export function buildResultSummaryInput(
     종합만족도평균: quantStats.overallSatisfaction.mean.toFixed(2),
     종합만족도중립구간비율,
     NPS점수: quantStats.nps.npsScore,
+    // 시장성 판정을 모델이 부호로 추론하게 두면 NPS=0에서 틀린다(2026-09-09 이젠오토 실측).
+    // 본문(Ⅶ장)과 같은 함수가 정한 문구를 그대로 넘겨 문서 안에서 두 판정이 엇갈리지 않게 한다.
+    시장성판정: npsJudgment(quantStats.nps.npsScore).marketability,
+    후속조치: npsJudgment(quantStats.nps.npsScore).urgency,
     구매고객비율: quantStats.nps.promoterPct,
     중립고객비율: quantStats.nps.passivePct,
     비추천고객비율: quantStats.nps.detractorPct,
@@ -209,6 +221,8 @@ function buildFallbackInput(
   input["종합 만족도 및 NPS 지수"] = {
     종합만족도평균: quantStats.overallSatisfaction.mean,
     NPS점수: quantStats.nps.npsScore,
+    시장성판정: npsJudgment(quantStats.nps.npsScore).marketability,
+    후속조치: npsJudgment(quantStats.nps.npsScore).urgency,
     구매고객비율: quantStats.nps.promoterPct,
     중립고객비율: quantStats.nps.passivePct,
     비추천고객비율: quantStats.nps.detractorPct,
