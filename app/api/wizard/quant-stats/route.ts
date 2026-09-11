@@ -3,10 +3,8 @@ import { z } from "zod";
 import { loadWallaFromUrl } from "@/lib/walla/loadFromUrl";
 import { normalizeWallaRows } from "@/lib/walla/normalize";
 import { computeQuantStats } from "@/lib/quant/compute";
-import { upsertReportQuantStats, saveReportSectionPlan } from "@/lib/db/reports";
-import { getOrCreateRolePlan, applyOverrides, planSections } from "@/lib/agent/rolePlan";
-import { computeRoleQuantStats } from "@/lib/agent/quant";
-import { toQuantStats, surveyQuestionRowsFromRoles } from "@/lib/agent/toQuantStats";
+import { upsertReportQuantStats } from "@/lib/db/reports";
+import { saveRoleQuantStats } from "@/lib/agent/saveRoleQuantStats";
 
 // app/api/chat/route.ts의 computeQuantStats 도구 본문을 그대로 옮긴 것 — 정량 계산은 항상
 // 규칙 기반(LLM 미사용)이라 채팅 없이도 안전하게 재사용 가능하다.
@@ -33,21 +31,8 @@ export async function POST(request: Request) {
   // 배선돼 있었고 담당자가 파일을 올리는 진짜 흐름은 리바랩스 전용이었다.
   if (!loaded.validation.valid) {
     // 컬럼 역할은 파일당 한 번만 판정하고 reports.role_plan에 저장된다(재요청 시 0회 호출).
-    const plan = await getOrCreateRolePlan({ fileUrl, fileName: fileName ?? null, headerRow, dataRows });
-    const classification = applyOverrides(plan);
-    const roleStats = computeRoleQuantStats(classification, plan.profiles, dataRows);
-    const stats = toQuantStats(roleStats, {
-      surveyQuestions: surveyQuestionRowsFromRoles(classification, plan.profiles),
-    });
-    await upsertReportQuantStats({
-      fileUrl,
-      fileName: fileName ?? null,
-      respondentCount: roleStats.respondentCount,
-      quantStats: stats,
-    });
-    // 장 구성은 데이터마다 다르다 — 보고서를 열 때마다 raw data를 다시 받아 계산할 수 없으므로
-    // 여기서 저장한다(reports.section_plan).
-    await saveReportSectionPlan(fileUrl, planSections(plan, dataRows));
+    // 확인 카드에서 역할을 고쳤을 때도 같은 함수를 다시 돌린다(lib/agent/saveRoleQuantStats.ts).
+    const stats = await saveRoleQuantStats({ fileUrl, fileName: fileName ?? null, headerRow, dataRows });
     return NextResponse.json({ ok: true, stats });
   }
 

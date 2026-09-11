@@ -14,6 +14,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BlockView } from "@/components/report-web-document/ReportBlockView";
+import { RoleReviewCard } from "@/components/RoleReviewCard";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
 
 /** 블록 종류 → 담당자가 알아볼 이름. 카드 상단 칩에 쓴다. */
@@ -150,6 +151,9 @@ export function QuestionLayoutCards({
 }) {
   const [sections, setSections] = useState<ReportSectionContent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 역할 판정을 고치면 서버가 도표·장 구성을 다시 계산한다 — 여기서도 다시 받아야
+  // 담당자가 고친 결과를 눈으로 확인할 수 있다(고쳤는데 화면이 그대로면 확인이 안 된다).
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const url = source
@@ -162,7 +166,7 @@ export function QuestionLayoutCards({
         setSections(json.workspace.sections);
       })
       .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
-  }, [dataset, source]);
+  }, [dataset, source, reloadKey]);
 
   const cards = useMemo(() => (sections ? toCards(sections) : []), [sections]);
 
@@ -179,6 +183,10 @@ export function QuestionLayoutCards({
       </p>
 
       <p className="mt-3 text-[13px] text-[#a1a1aa]">문항 {cards.length}개 · 위에서 아래로 보고서 순서 그대로입니다.</p>
+
+      {/* 판정이 헷갈린 문항이 있을 때만 나타난다. 게이트가 아니라 표시다 — 고치지 않아도
+          아래 "이 구성으로 보고서 생성하기"는 그대로 눌린다. */}
+      {source && <div className="mt-5"><RoleReviewCard source={source} onFixed={() => setReloadKey((key) => key + 1)} /></div>}
 
       <div className="mt-5 space-y-5">
         {cards.map((card) => (
