@@ -43,7 +43,8 @@
     "check:quote-evidence": "tsx scripts/check-quote-evidence.ts",
     "check:fast-polarity": "tsx --env-file=.env.local scripts/check-fast-polarity.ts",
     "check:empty-blocks": "tsx scripts/check-empty-blocks.ts",
-    "check:customer-recommendations": "tsx scripts/check-customer-recommendations.ts"
+    "check:customer-recommendations": "tsx scripts/check-customer-recommendations.ts",
+    "check:quant-recompute": "tsx --env-file=.env.local scripts/check-quant-recompute.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.15",

@@ -111,8 +111,19 @@ export async function upsertReportQuantStats(params: {
       file_name = excluded.file_name,
       respondent_count = excluded.respondent_count,
       quant_stats = excluded.quant_stats,
-      result_summary = null,
-      section_analyses = null,
+      -- **수치가 실제로 바뀐 경우에만** 그 위에 쓴 해석을 버린다(2026-09-11).
+      --
+      -- 예전엔 재계산이면 무조건 null로 지웠다. 그런데 이 함수는 같은 파일을 다시 열거나
+      -- 역할 판정을 고칠 때마다 불린다 — 수치가 한 글자도 안 바뀌는 경우가 대부분인데도
+      -- Ⅸ장 결과 요약과 섹션 분석 6종이 통째로 날아갔다(2026-09-10 케어클 실측: 정량만 다시
+      -- 돌렸는데 result_summary 0자·section_analyses 없음이 됐고, 되살리려면 API 재호출이
+      -- 필요했다). jsonb 비교는 키 순서와 무관하므로 같은 계산이면 항상 같다고 판정된다.
+      --
+      -- 수치가 진짜 바뀌면 예전처럼 지운다 — 낡은 해석이 틀린 숫자를 말하는 것이 더 위험하다.
+      result_summary = case when reports.quant_stats is distinct from excluded.quant_stats
+        then null else reports.result_summary end,
+      section_analyses = case when reports.quant_stats is distinct from excluded.quant_stats
+        then null else reports.section_analyses end,
       updated_at = now()
     returning id
   `;
