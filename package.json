@@ -45,7 +45,8 @@
     "check:empty-blocks": "tsx scripts/check-empty-blocks.ts",
     "check:customer-recommendations": "tsx scripts/check-customer-recommendations.ts",
     "check:quant-recompute": "tsx --env-file=.env.local scripts/check-quant-recompute.ts",
-    "check:pagination": "tsx scripts/check-pagination.ts"
+    "check:pagination": "tsx scripts/check-pagination.ts",
+    "check:brief": "tsx scripts/check-brief.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.15",
