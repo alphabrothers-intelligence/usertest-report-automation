@@ -68,3 +68,7 @@ docs/STAGE_MAPPING.backup-*.xlsx
 
 # Serena 로컬 설정
 /.serena/
+
+# 조사용 임시 스크립트 — 하드코딩된 blob URL과 로컬 dev 서버를 전제로 해서 정식 검사(check:*)의
+# 기준을 못 맞춘다. 남은 작업에 계속 쓰므로 파일은 두되 커밋에는 섞이지 않게 한다.
+scripts/_tmp-*
