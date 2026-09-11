@@ -6,6 +6,7 @@ import { genericOf } from "@/lib/report/genericStats";
 import { quadrantItems } from "@/lib/report/quadrantItems";
 import { headingBlock, quadrantBlock, richStaticBlock, rowGroupBlock, type ReportBlock } from "@/lib/report/sections";
 import { dataTableCss, REPORT_TEXT } from "@/lib/report/sectionStyle";
+import { rankedFeatures, hasFeatureImportance, type RankedFeature } from "@/lib/quant/featureRanking";
 
 /** 표 서식은 문서 전체가 같은 토큰을 쓴다(sectionStyle.ts). */
 const CSS = dataTableCss();
@@ -38,12 +39,12 @@ function polarityPercentages(qualitative: QuestionWithApprovedCategories[], feat
 function conclusionFeatureTableHtml(
   stats: QuantStats,
   qualitative: QuestionWithApprovedCategories[],
-  ranked: QuantStats["relativeImportance"],
+  ranked: RankedFeature[],
 ): string {
   const rows = ranked.map((item) => ({
     name: item.name,
-    satisfaction: stats.featureSatisfaction.find((feature) => feature.name === item.name)?.mean ?? 0,
-    importance: item.score,
+    satisfaction: item.mean,
+    importance: item.importance ?? 0,
     ...polarityPercentages(qualitative, item.name),
   }));
   const maxSatisfaction = Math.max(...rows.map((row) => row.satisfaction));
@@ -61,8 +62,8 @@ function conclusionFeatureTableHtml(
     return `<td style="${CSS.cellWith(background)}">${value}</td>`;
   };
   const head = (label: string) => `<th style="${CSS.header}">${label}</th>`;
-  // 순위 문항이 없는 raw data는 상대중요도가 없다 — 0.00으로 채우면 없는 값을 말하는 셈이라 열을 뺀다.
-  const hasImportance = stats.relativeImportance.length > 0;
+  // 상대중요도는 **기능명과 맞는 항목이 있을 때만** 쓴다(케어클은 구매요소 순위라 안 맞는다).
+  const hasImportance = hasFeatureImportance(stats);
 
   return [
     `<table style="${CSS.table};table-layout:fixed;margin:0 0 10pt;font-family:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo',sans-serif;line-height:1.35">`,
@@ -165,11 +166,8 @@ export function buildConclusionSection(
   qualitative: QuestionWithApprovedCategories[],
   recommendations: RecommendationRow[],
 ): ReportBlock[] {
-  // 순위 문항이 없는 raw data(이젠오토 실측)는 relativeImportance가 비어 있어, 그대로 두면
-  // Ⅸ.1 요약 표가 **머리행만 있는 빈 표**로 나온다. 기능 만족도로 대체해 행을 채운다.
-  const rankedImportance = stats.relativeImportance.length > 0
-    ? [...stats.relativeImportance].sort((a, b) => b.score - a.score)
-    : [...new Map([...stats.featureSatisfaction].sort((a, b) => b.mean - a.mean).map((item) => [item.name, { name: item.name, score: 0 }])).values()];
+  // 행은 항상 기능 만족도에서 나온다 — lib/quant/featureRanking.ts 주석 참고.
+  const rankedImportance = rankedFeatures(stats);
   const quadrantSummaryItems = quadrantItems(stats);
   const featureCustomerHtml = featureCustomerRecommendationsHtml(recommendations);
   return [

@@ -13,6 +13,7 @@ import type { QuantStats } from "@/lib/quant/compute";
 import type { QuestionWithApprovedCategories } from "@/lib/db/reports";
 import type { ProductType } from "@/lib/report/productType";
 import { buildDevPriorityBodySystemPrompt, buildOverallDirectionSystemPrompt, FEATURE_IMPROVEMENT_SYSTEM } from "./prompts";
+import { rankedFeatures } from "@/lib/quant/featureRanking";
 
 const RECOMMENDATION_MODEL = process.env.ANTHROPIC_RECOMMENDATION_MODEL ?? "claude-sonnet-5";
 
@@ -28,12 +29,15 @@ const RECOMMENDATION_MODEL = process.env.ANTHROPIC_RECOMMENDATION_MODEL ?? "clau
  * 로직이 두 곳에서 따로 어긋나지 않게 한다.
  */
 export function buildDevPriorityDataSummary(stats: QuantStats, qualitative: QuestionWithApprovedCategories[]) {
-  const ranked = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
+  // 기능 목록의 출처는 항상 기능 만족도다 — `lib/quant/featureRanking.ts` 주석 참고. 예전에는
+  // relativeImportance에서 뽑아, 순위 문항이 없는 raw data(이젠오토)는 목록이 통째로 비었고
+  // 모델이 "기능별 중요도·만족도 데이터가 입력에 확인되지 않아 작성하지 않음"을 **보고서
+  // 본문에** 썼다(2026-09-11 실측). 중요도는 이름이 맞는 항목에만 싣는다.
+  const ranked = rankedFeatures(stats);
   const total = ranked.length;
   const firstGroupSize = Math.ceil(total / 3);
   const secondGroupSize = Math.ceil((total - firstGroupSize) / 2);
   const withTier = ranked.map((item, index) => {
-    const satisfaction = stats.featureSatisfaction.find((f) => f.name === item.name)?.mean ?? 0;
     const negatives = qualitative
       .find((q) => q.question_key === `feature:${item.name}`)
       ?.categories.filter((c) => c.polarity === "negative")
@@ -41,8 +45,8 @@ export function buildDevPriorityDataSummary(stats: QuantStats, qualitative: Ques
     return {
       기능명: item.name,
       순위: index + 1,
-      상대중요도: item.score,
-      만족도: satisfaction,
+      ...(item.importance !== null ? { 상대중요도: item.importance } : {}),
+      만족도: item.mean,
       tier: index < firstGroupSize ? "우선" : index < firstGroupSize + secondGroupSize ? "차우선" : "비우선",
       부정인사이트: negatives,
     };

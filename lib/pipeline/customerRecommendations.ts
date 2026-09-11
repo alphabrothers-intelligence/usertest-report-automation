@@ -13,6 +13,7 @@ import type { QuestionWithApprovedCategories } from "@/lib/db/reports";
 import { streamStructured, withClaudeGuard } from "./claudeGuard";
 import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 import { CUSTOMER_RECOMMENDATIONS_SYSTEM as SYSTEM } from "./prompts";
+import { rankedFeatures } from "@/lib/quant/featureRanking";
 
 const MODEL = process.env.ANTHROPIC_CUSTOMER_RECOMMENDATION_MODEL ?? "claude-sonnet-5";
 
@@ -45,16 +46,11 @@ export async function runFeatureCustomerRecommendations(
   // 임의 배치"라고 보고 raw data 컬럼 순서를 썼는데, 실제 대조해보니 이 순서는 정확히
   // 상대중요도(relativeImportance) 내림차순과 일치했다 — 일반화 가능한 규칙이었다. raw data가
   // 달라져도 항상 계산되는 결정론적 기준이므로 그대로 채택한다(raw 컬럼 순서가 아님).
-  // 순위 문항이 없는 raw data(이젠오토 실측)는 relativeImportance가 비어 있다. 그 데이터에도
-  // 기능 만족도 문항은 있으므로, 없으면 만족도 내림차순으로 같은 순서 규칙을 이어간다.
-  const rankedByImportance = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
-  // 같은 기능명이 여러 컬럼에 걸쳐 있는 raw data가 있다(이젠오토 "셀프 정비 콘텐츠" 3개 실측).
-  // 재료(`feature:이름`)는 어차피 하나뿐이라 그대로 두면 **똑같은 행이 여러 번** 나온다.
-  const orderedNames = [...new Set(
-    rankedByImportance.length > 0
-      ? rankedByImportance.map((item) => item.name)
-      : [...stats.featureSatisfaction].sort((a, b) => b.mean - a.mean).map((item) => item.name),
-  )];
+  // **기능 목록의 출처는 항상 기능 만족도다** — `lib/quant/featureRanking.ts` 주석 참고.
+  // 예전에는 relativeImportance에서 뽑아, 그것이 구매요소 순위인 케어클에서는 기능이 아닌
+  // 이름(사용 편의성·피부 개선 효과)으로 표를 만들고 있었다. 중요도가 기능명과 맞으면 그
+  // 순서를, 아니면 만족도 내림차순을 쓰고 같은 이름은 합친다(이젠오토 "셀프 정비 콘텐츠" 3개).
+  const orderedNames = rankedFeatures(stats).map((item) => item.name);
   // **재료가 없는 기능은 아예 묻지 않는다**(2026-09-10). 부정 카테고리가 하나도 없으면 쓸 말이
   // 없어 모델이 빈 배열을 내고, 그 하나 때문에 응답 전체가 스키마 검증에 걸렸다. 지어내지 않는
   // 것이 맞으므로(6.5절 헤지 원칙) 입력에서 빼는 것이 옳다.

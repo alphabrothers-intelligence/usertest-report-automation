@@ -18,6 +18,7 @@ import { detectProductType, type ProductType } from "@/lib/report/productType";
 import { splitCrossAnalysisText, shortenFactorLabel } from "./sectionAnalysis";
 import { SUMMARY_SYSTEM_PROMPT, FALLBACK_SUMMARY_SYSTEM_PROMPT as FALLBACK_SYSTEM_PROMPT } from "./prompts";
 import { npsJudgment } from "@/lib/report/workspaceNps";
+import { rankedFeatures } from "@/lib/quant/featureRanking";
 
 const SUMMARY_MODEL = process.env.ANTHROPIC_SUMMARY_MODEL ?? "claude-sonnet-5";
 
@@ -46,10 +47,9 @@ function buildFeatureRowMaterial(stats: QuantStats, qualitative: QuestionWithApp
   // 순위 문항이 없는 raw data(이젠오토 실측)는 relativeImportance가 비어 있다. 그대로 두면
   // 이 행의 재료가 0건이 되어 모델이 "제공된 재료가 없어 작성하지 않음"을 쓴다 — 기능 만족도는
   // 있으므로 만족도 내림차순으로 같은 순서 규칙을 이어간다(Ⅸ.3 고객 제언과 같은 처방).
-  const hasImportance = stats.relativeImportance.length > 0;
-  const ranked = hasImportance
-    ? [...stats.relativeImportance].sort((a, b) => b.score - a.score)
-    : [...new Map([...stats.featureSatisfaction].sort((a, b) => b.mean - a.mean).map((item) => [item.name, { name: item.name, score: 0 }])).values()];
+  // 행의 출처는 항상 기능 만족도다 — lib/quant/featureRanking.ts 주석 참고(케어클은
+  // relativeImportance가 구매요소 순위라 기능명과 안 맞는다).
+  const ranked = rankedFeatures(stats);
   const total = ranked.length;
   const firstGroupSize = Math.ceil(total / 3);
   const secondGroupSize = Math.ceil((total - firstGroupSize) / 2);
@@ -59,11 +59,10 @@ function buildFeatureRowMaterial(stats: QuantStats, qualitative: QuestionWithApp
   // 같은 이유로 절대 점수에서 순위로 바꿨다.
   const satisfactionRank = new Map(
     [...shown]
-      .sort((a, b) => (stats.featureSatisfaction.find((f) => f.name === b.name)?.mean ?? 0) - (stats.featureSatisfaction.find((f) => f.name === a.name)?.mean ?? 0))
+      .sort((a, b) => b.mean - a.mean)
       .map((item, i) => [item.name, i + 1]),
   );
   return shown.map((item, index) => {
-    const mean = stats.featureSatisfaction.find((f) => f.name === item.name)?.mean ?? 0;
     const tier = index < firstGroupSize ? "우선" : "차우선";
     const negatives = qualitative
       .find((q) => q.question_key === `feature:${item.name}`)
@@ -73,7 +72,7 @@ function buildFeatureRowMaterial(stats: QuantStats, qualitative: QuestionWithApp
     return {
       기능명: item.name,
       // 순위 문항이 없으면 중요도를 **말하지 않는다** — 0점을 "낮음"으로 옮기면 없는 사실이 된다.
-      ...(hasImportance ? { 중요도표현: importanceLabel3(item.score) } : {}),
+      ...(item.importance !== null ? { 중요도표현: importanceLabel3(item.importance) } : {}),
       만족도표현: satisfactionLabel3(satisfactionRank.get(item.name) ?? index + 1),
       tier,
       // 우선 tier의 판정 후보 2종, 차우선 tier의 판정 후보 2종(원본 51쪽 문구)
@@ -147,6 +146,16 @@ export function buildResultSummaryInput(
     중립고객비율: quantStats.nps.passivePct,
     비추천고객비율: quantStats.nps.detractorPct,
   };
+
+  // **재료가 없는 항목은 쓰라고 시키지 않는다**(2026-09-11). 케어클은 핵심구매요소 분포 문항과
+  // 4대 가치 주관식이 둘 다 없어 두 행의 재료가 빈 배열인데, 프롬프트가 네 제목을 모두 요구해서
+  // 모델이 "재료를 보완해 주시면 작성하겠습니다"를 **보고서 본문에** 썼다. 빼야 할 제목을
+  // 명시하면 그 행은 규칙 기반 fallback 문구로 채워진다(`resultSummaryPart`).
+  const excluded: string[] = [];
+  if ((input["기능별_행_재료"] as unknown[]).length === 0) excluded.push("기능별 고객 경험 평가");
+  if ((input["핵심구매요소_재료"] as { 상위3: unknown[] }).상위3.length === 0) excluded.push("핵심구매요소");
+  if ((input["4대가치_재료"] as unknown[]).length === 0) excluded.push("4대 가치 만족도");
+  if (excluded.length > 0) input["작성_제외_항목"] = excluded;
 
   return input;
 }
