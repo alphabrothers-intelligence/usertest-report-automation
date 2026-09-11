@@ -125,6 +125,15 @@ function looseRange(haystack: string, needle: string): [number, number] | null {
 const MIN_EVIDENCE_CHARS = 4;
 /** 인용문의 이 비율을 넘게 강조하면 "무분별한 볼드"가 된다 — 강조는 안 하느니만 못하다. */
 const MAX_EVIDENCE_RATIO = 0.9;
+/**
+ * **이 길이 이하의 인용문에는 90% 상한을 적용하지 않는다**(2026-09-10 실측).
+ *
+ * 길이 구간별 강조율을 재보니 15자 이하 17% · 16~25자 62% · 26자 이상 85~87%로, 짧을수록
+ * 강조가 빠졌다. 원인은 상한이다 — "버튼이 사용중 자꾸 눌리는것"(15자)처럼 짧은 답변은 문장
+ * 전체가 곧 논점이라 근거 구간이 90%를 넘고, 그러면 강조가 통째로 생략됐다. 짧은 구절을
+ * 통째로 강조하는 것은 "무분별한 볼드"가 아니므로 이 경우만 상한을 푼다.
+ */
+const FULL_EMPHASIS_MAX_CHARS = 25;
 
 /**
  * quoteEvidence가 지목한 reasonSpan을 quote 안에서 찾아 볼드+밑줄 마커를 스플라이스한 표시용
@@ -153,7 +162,8 @@ export function buildQuoteDisplayText(
       : looseRange(quote, item.reasonSpan);
     if (!range) continue;
     const span = quote.slice(range[0], range[1]);
-    if (span.length < MIN_EVIDENCE_CHARS || span.length > quote.length * MAX_EVIDENCE_RATIO) continue;
+    const tooWide = quote.length > FULL_EMPHASIS_MAX_CHARS && span.length > quote.length * MAX_EVIDENCE_RATIO;
+    if (span.length < MIN_EVIDENCE_CHARS || tooWide) continue;
     return `${quote.slice(0, range[0])}**__${span}__**${quote.slice(range[1])}`;
   }
   return quote;

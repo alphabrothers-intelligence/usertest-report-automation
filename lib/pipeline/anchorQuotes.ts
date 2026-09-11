@@ -126,6 +126,10 @@ export type AnchorResolveStats = {
   overlongDropped: number;
   /** 버리면 그 카테고리에 인용이 하나도 안 남아 예외로 남긴 긴 인용문 건수. */
   overlongKept: number;
+  /** 모델이 근거 구간(reason_from/to)을 아예 안 준 건수. */
+  evidenceMissing: number;
+  /** 근거 구간을 줬는데 인용문 안에서 못 찾은 건수. 늘면 프롬프트가 아니라 매칭을 손볼 신호다. */
+  evidenceUnresolved: number;
 };
 
 /**
@@ -284,6 +288,29 @@ export function narrowQuoteToEvidence(quote: string, span: string | null): strin
   return quote.slice(from, to).trim();
 }
 
+/**
+ * 근거 구간이 없어 좁힐 기준이 없는 긴 인용문을 **앞에서부터** 상한까지 자른다.
+ * 조각(문장·목록) 경계에서만 자르므로 말이 중간에 끊기지 않고, 원문의 연속 구간이라
+ * verbatim도 유지된다. 첫 조각 하나가 이미 상한을 넘으면 그 조각만 쓴다.
+ */
+export function headTrim(quote: string, limit = MAX_QUOTE_CHARS): string {
+  if (quote.length <= limit) return quote;
+  const segments: [number, number][] = [];
+  let cursor = 0;
+  for (const match of quote.matchAll(SEGMENT_BREAK)) {
+    if (match.index > cursor) segments.push([cursor, match.index]);
+    cursor = match.index + match[0].length;
+  }
+  segments.push([cursor, quote.length]);
+
+  let end = segments[0][1];
+  for (const [, segmentEnd] of segments.slice(1)) {
+    if (quote.slice(0, segmentEnd).trim().length > limit) break;
+    end = segmentEnd;
+  }
+  return quote.slice(0, end).trim();
+}
+
 export function resolveAnchorQuotes(
   output: AnchorCombinedOutput,
   inputs: { respondent_id: number; reason: string }[],
@@ -298,6 +325,8 @@ export function resolveAnchorQuotes(
     narrowed: 0,
     overlongDropped: 0,
     overlongKept: 0,
+    evidenceMissing: 0,
+    evidenceUnresolved: 0,
   };
   const knownRespondents = new Set(inputs.map((input) => input.respondent_id));
 
@@ -341,9 +370,12 @@ export function resolveAnchorQuotes(
         }
 
         // 근거 구간은 **인용문 안에서** 다시 찾는다. 없으면 표시만 생략되고 인용문은 남는다.
-        const span = anchor.reason_from && anchor.reason_to
-          ? resolveOne(resolved.text, anchor.reason_from, anchor.reason_to)
-          : null;
+        // 실패를 두 갈래로 센다 — 모델이 안 준 것과 줬는데 못 찾은 것은 처방이 다르다
+        // (2026-09-10: 강조가 32% 비는 원인을 가리려고 추가).
+        const hasAnchorSpan = Boolean(anchor.reason_from && anchor.reason_to);
+        const span = hasAnchorSpan ? resolveOne(resolved.text, anchor.reason_from!, anchor.reason_to!) : null;
+        if (!hasAnchorSpan) stats.evidenceMissing += 1;
+        else if (!span) stats.evidenceUnresolved += 1;
         // 여러 논점이 한 덩어리로 잡힌 인용문은 근거 구간이 있는 조각으로 좁힌다.
         const text = narrowQuoteToEvidence(resolved.text, span?.text ?? null);
         if (!text) {
@@ -359,7 +391,10 @@ export function resolveAnchorQuotes(
         if (span) quoteEvidence.push({ quote: text, reasonSpan: span.text });
       }
       if (quotes.length === 0 && overlong.length > 0) {
-        quotes.push(overlong[0]);
+        // **통째로 싣지 않는다**(2026-09-10 담당자 지적 — 502자짜리가 그대로 실렸다).
+        // 좁힐 기준(근거 구간)이 없으니 앞에서부터 상한까지 조각 경계로 자른다. 연속 구간을
+        // 고르는 것뿐이라 verbatim은 그대로다.
+        quotes.push(headTrim(overlong[0]));
         stats.overlongKept += 1;
       }
       stats.overlongDropped += overlong.length - (quotes.length === 1 && overlong.length > 0 && quotes[0] === overlong[0] ? 1 : 0);
