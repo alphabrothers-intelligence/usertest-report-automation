@@ -114,6 +114,10 @@ create index if not exists categories_question_id_idx on categories (question_id
 -- 검증 기준이라 건드리지 않고, 렌더링은 이 컬럼을 우선 쓴다(없으면 quotes로 폴백).
 alter table categories add column if not exists quotes_display text[];
 
+-- 인사이트 한 줄을 실무로 옮기는 분야별 액션 플랜(2026-09-16 담당자 요청).
+-- [{ "field": "제품 기획", "action": "..." }] 형태. 액션이 없는 카테고리는 빈 배열이다.
+alter table categories add column if not exists field_actions jsonb not null default '[]'::jsonb;
+
 -- 극성 판정 확인(2026-09-02): 부정↔중립 경계에 걸린 묶음을 담당자가 확인했는지. 확인했거나
 -- 극성을 바꾼 뒤에는 웹뷰 왼쪽 패널이 같은 묶음을 다시 물어보지 않는다. 승인 게이트가 아니라
 -- "이미 봤다"는 표시일 뿐이라 기본값은 false이고 PDF 발행을 막지 않는다.

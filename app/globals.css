@@ -140,13 +140,15 @@ body {
 .rivalabs-image-add--overlay > span, .rivalabs-image-add--overlay small { display: none; }
 .rivalabs-image-add--overlay strong { font-size: 8pt; }
 .rivalabs-image-slots--wordcloud .rivalabs-image-add { min-height: 59mm; }
-.rivalabs-two-column { display: grid; grid-template-columns: 2fr 1fr; border: 1px solid #6182d6; }
+.rivalabs-chart-frame { display: grid; grid-template-columns: 1fr; border: 1px solid #6182d6; }
 .rivalabs-cell + .rivalabs-cell { border-left: 1px solid #6182d6; }
 .rivalabs-cell-title { margin: 0; padding: 2.3mm 2mm; border-bottom: 1px solid #6182d6; background: #c0cdef; text-align: center; font-size: 14pt; font-weight: 700; }
 .rivalabs-chart-slot { min-height: 59mm; overflow: hidden; padding: 3mm; }
 .rivalabs-chart-slot > table { width: 100% !important; margin: 0 !important; }
 .rivalabs-chart-slot > table td { border: 0 !important; padding: 0 !important; }
-.rivalabs-chart-slot svg { width: 100%; height: 53mm; }
+/* 높이를 고정하지 않는다 — viewBox 비율대로 칸 전체 폭을 쓴다. 인라인 max-width(그래프가
+   자기 자연 크기로 갖고 나오는 값)를 풀어야 하므로 !important가 필요하다. */
+.rivalabs-chart-slot svg { width: 100%; height: auto; max-width: none !important; }
 .rivalabs-emotion-frame { margin: 0; overflow: hidden; border: 1px solid #6182d6; }
 .rivalabs-emotion-frame > table, .rivalabs-emotion-frame > div > div > table { width: 100% !important; margin: 0 !important; border-collapse: collapse !important; table-layout: fixed !important; }
 .rivalabs-emotion-frame > table > tbody > tr > td, .rivalabs-emotion-frame > div > div > table > tbody > tr > td { width: 50% !important; padding: 0 !important; vertical-align: top; }
@@ -288,6 +290,9 @@ body {
 }
 
 @media print {
+  /* 화면에서만 문서를 줄여 본다(ReportWebDocument의 DOC_ZOOM) — 인쇄는 실제 A4다. */
+  article[style*="zoom"] { zoom: 1 !important; }
+
   @page { size: A4 portrait; margin: 0; }
   html, body { width: 210mm; background: #fff !important; }
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -369,6 +374,14 @@ body {
     break-inside: avoid;
     page-break-inside: avoid;
   }
+  /* **한 쪽보다 큰 블록은 예외다.** `avoid`를 걸면 브라우저가 통째로 다음 쪽으로 밀었다가
+     거기서도 못 넣어 **빈 쪽을 하나 만들고** 그제서야 쪼갠다(2026-09-11 실측: 케어클 PDF
+     78쪽 중 50쪽이 완전한 빈 쪽). 표시는 ReportWebDocument의 측정 패스가 붙인다 —
+     "한 쪽보다 큰가"는 CSS가 알 수 없는 값이다. */
+  body:has([data-workspace-status]) [data-oversized] {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
   body:has([data-workspace-status]) [data-report-block-id] table tr,
   body:has([data-workspace-status]) [data-report-block-id] [data-quote-group] {
     break-inside: avoid;
@@ -397,3 +410,13 @@ body {
 .report-rich-editor h2 {
   font-size: 1.22em;
 }
+
+/* 웹뷰 작업 화면(왼쪽 근거 패널·오른쪽 작업 패널·검토 모달) 전용 글꼴.
+   문서 본문은 원본 재현이라 '맑은 고딕' 계열 그대로 두고, 그 바깥 화면만 SF Pro 계열을 쓴다
+   (2026-09-11 담당자 결정 — 애플 디자인 시스템 적용 범위는 문서 밖까지다). */
+.studio-ui {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Apple SD Gothic Neo", "맑은 고딕", "Malgun Gothic", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+

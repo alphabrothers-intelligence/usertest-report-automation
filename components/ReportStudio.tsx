@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import { withDefaultQuadrantZones, type ReportBlock, type ReportSectionContent } from "@/lib/report/sections";
 import { ReportWebWorkspace } from "@/components/ReportWebWorkspace";
+import type { ToolbarActions } from "@/components/ReportWebDocument";
 import { applyTextFormat, insertArrowLine, FormatButton, FormatGlyph, SidebarIcon, UndoIcon } from "@/components/report-web-document/ReportBlockView";
 import type { ProductInfo } from "@/lib/productInfo/types";
 import type { ReviewFlag } from "@/lib/quant/reviewFlags";
@@ -134,6 +135,19 @@ function formatSavedAt(iso: string | null): string | null {
   return iso ? new Date(iso).toLocaleString("ko-KR") : null;
 }
 
+/** 정렬 아이콘 — 가로줄 네 개의 좌우 위치로 방향을 나타낸다(글자 라벨 대신 아이콘 원칙). */
+function AlignGlyph({ variant }: { variant: "left" | "center" | "right" }) {
+  const widths = [12, 8, 12, 8];
+  const x = (index: number) => (variant === "left" ? 2 : variant === "right" ? 14 - widths[index] : (16 - widths[index]) / 2);
+  return (
+    <svg viewBox="0 0 16 12" aria-hidden className="size-4 text-[#3f4c5f]">
+      {widths.map((width, index) => (
+        <rect key={index} x={x(index)} y={1 + index * 3} width={width} height="1.6" rx="0.8" fill="currentColor" />
+      ))}
+    </svg>
+  );
+}
+
 export function ReportStudio({
   pdfUrl,
   sourceFileUrl,
@@ -176,10 +190,9 @@ export function ReportStudio({
   const [nameSaving, setNameSaving] = useState(false);
   const [draftSaving, setDraftSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState<"hwpx" | null>(null);
   // 텍스트 서식·전체 복사·인용문 검토 버튼(2026-08-12, 헤더로 이전) — activeSection이
   // 바뀔 때마다 ReportWebDocument가 최신 핸들러로 갱신해준다.
-  const [toolbarActions, setToolbarActions] = useState<{ copy: () => void; openCorrections: () => void; toggleToc: () => void; tocOpen: boolean } | null>(null);
+  const [toolbarActions, setToolbarActions] = useState<ToolbarActions | null>(null);
   const inlinePdfUrl = useMemo(() => withInlinePdf(pdfUrl), [pdfUrl]);
 
   useEffect(() => {
@@ -373,34 +386,6 @@ export function ReportStudio({
     }
   }
 
-  async function downloadHwpx() {
-    if (!sourceFileUrl) return;
-    setExporting("hwpx");
-    setSaveError(null);
-    try {
-      const response = await fetch("/api/report-workspace/hwpx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: sourceFileUrl, sections, productInfo }),
-      });
-      if (!response.ok) {
-        const payload = await response.json() as { error?: string };
-        throw new Error(payload.error ?? "HWPX를 만들지 못했습니다.");
-      }
-      const blobUrl = URL.createObjectURL(await response.blob());
-      const disposition = response.headers.get("Content-Disposition") ?? "";
-      const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
-      const anchor = document.createElement("a");
-      anchor.href = blobUrl;
-      anchor.download = encodedName ? decodeURIComponent(encodedName) : "사용성테스트_결과보고서.hwpx";
-      anchor.click();
-      URL.revokeObjectURL(blobUrl);
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "HWPX를 만들지 못했습니다.");
-    } finally {
-      setExporting(null);
-    }
-  }
 
   async function resetWorkspaceDraft() {
     if (sourceFileUrl) {
@@ -453,7 +438,7 @@ export function ReportStudio({
       <header className="sticky top-0 z-20 bg-white shadow-[0_1px_0_rgba(35,45,65,0.1)]">
         <div className="mx-auto flex min-h-[68px] max-w-[2000px] items-center justify-between gap-4 px-5 sm:px-8">
           <div>
-            <h1 className="text-[17px] font-bold tracking-[-0.02em] text-[#20242c]">Usability Report Studio</h1>
+            <h1 className="text-[13px] font-bold tracking-[-0.02em] text-[#20242c]">Usability Report Studio</h1>
             {sourceFileUrl && (
               <div className="mt-0.5 flex items-center gap-1.5">
                 <input
@@ -474,24 +459,34 @@ export function ReportStudio({
               {pdfUrl && <button type="button" onClick={() => setWorkspaceMode("pdf")} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${workspaceMode === "pdf" ? "bg-white text-[#1473e6] shadow-sm" : "text-[#667085]"}`}>PDF 미리보기</button>}
             </div>
             <button type="button" onClick={() => window.print()} disabled={workspaceStatus !== "ready"} className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-semibold text-[#475467] hover:bg-[#f7f9fc] disabled:opacity-50">PDF 저장</button>
-            {sourceFileUrl && <button type="button" onClick={() => void downloadHwpx()} disabled={workspaceStatus !== "ready" || exporting === "hwpx"} className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-semibold text-[#475467] hover:bg-[#f7f9fc] disabled:opacity-50">{exporting === "hwpx" ? "HWPX 생성 중..." : "HWPX 다운로드"}</button>}
             <Link href="/new" className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-medium text-[#475467] hover:bg-[#f7f9fc]">나가기</Link>
           </div>
         </div>
         <div className="border-t border-[#e4e8ef] bg-[#f8f9fc]">
-          <div className="mx-auto flex min-h-[54px] max-w-[2000px] items-center gap-2 px-5 sm:px-8">
+          <div className="mx-auto flex min-h-[54px] max-w-[2000px] items-center gap-2 overflow-x-auto px-5 sm:px-8">
+            {/* 세 패널을 여닫는 버튼을 한 자리에 모은다. 접힌 패널을 문서 옆 세로 탭으로 남기면
+                (세로로 쌓인 한글이 읽히지도 않고) 본문 옆에 정체불명의 조각으로 보인다는 지적
+                (2026-09-11) — 목차가 2026-09-02에 이미 같은 이유로 이 방식으로 바뀌었다. */}
             {workspaceMode === "web" && toolbarActions && (
               <>
-                <button
-                  type="button"
-                  title={toolbarActions.tocOpen ? "목차 접기" : "목차 펼치기"}
-                  aria-label={toolbarActions.tocOpen ? "목차 접기" : "목차 펼치기"}
-                  aria-pressed={toolbarActions.tocOpen}
-                  onClick={toolbarActions.toggleToc}
-                  className={`flex size-9 items-center justify-center rounded-md hover:bg-white ${toolbarActions.tocOpen ? "text-[#1473e6]" : "text-[#526174]"}`}
-                >
-                  <SidebarIcon />
-                </button>
+                {([
+                  { key: "toc", label: "목차", open: toolbarActions.tocOpen, toggle: toolbarActions.toggleToc, side: "left" as const },
+                  { key: "evidence", label: "분석 근거", open: toolbarActions.evidenceOpen, toggle: toolbarActions.toggleEvidence, side: "left" as const },
+                  { key: "action", label: "보고서 작업", open: toolbarActions.actionOpen, toggle: toolbarActions.toggleAction, side: "right" as const },
+                ]).map((panel) => (
+                  <button
+                    key={panel.key}
+                    type="button"
+                    title={panel.open ? `${panel.label} 접기` : `${panel.label} 펼치기`}
+                    aria-label={panel.open ? `${panel.label} 접기` : `${panel.label} 펼치기`}
+                    aria-pressed={panel.open}
+                    onClick={panel.toggle}
+                    className={`flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-semibold hover:bg-white ${panel.open ? "text-[#1473e6]" : "text-[#8a94a3]"}`}
+                  >
+                    <SidebarIcon side={panel.side} />
+                    <span className="hidden lg:inline">{panel.label}</span>
+                  </button>
+                ))}
                 <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
               </>
             )}
@@ -500,24 +495,33 @@ export function ReportStudio({
             <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
             {workspaceMode === "web" && toolbarActions && (
               <>
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex shrink-0 items-center gap-1">
                   <FormatButton label={<FormatGlyph variant="bold" />} title="굵게" onApply={() => applyTextFormat("bold")} />
                   <FormatButton label={<FormatGlyph variant="italic" />} title="기울임" onApply={() => applyTextFormat("italic")} />
                   <FormatButton label={<FormatGlyph variant="underline" />} title="밑줄" onApply={() => applyTextFormat("underline")} />
-                  <FormatButton label={<span className="text-[15px]">→</span>} title="제언 화살표 문단 추가" onApply={insertArrowLine} />
+                  <FormatButton label={<span className="text-[13px]">→</span>} title="제언 화살표 문단 추가" onApply={insertArrowLine} />
+                  {/* 1단계 자유 서식(2026-09-17): 글자 크기·정렬·목록. 선택한 구간에만 적용되고
+                      쪽 나눔은 기존 자동 규칙이 그대로 다시 계산한다. */}
+                  <FormatButton label={<span className="text-[15px] font-semibold">가</span>} title="글자 크게" onApply={() => applyTextFormat("sizeUp")} />
+                  <FormatButton label={<span className="text-[11px] font-semibold">가</span>} title="글자 작게" onApply={() => applyTextFormat("sizeDown")} />
+                  <FormatButton label={<AlignGlyph variant="left" />} title="왼쪽 정렬" onApply={() => applyTextFormat("alignLeft")} />
+                  <FormatButton label={<AlignGlyph variant="center" />} title="가운데 정렬" onApply={() => applyTextFormat("alignCenter")} />
+                  <FormatButton label={<AlignGlyph variant="right" />} title="오른쪽 정렬" onApply={() => applyTextFormat("alignRight")} />
+                  <FormatButton label={<span className="text-[12px]">•≡</span>} title="글머리 기호 목록" onApply={() => applyTextFormat("bullet")} />
+                  <FormatButton label={<span className="text-[12px]">1≡</span>} title="번호 매기기 목록" onApply={() => applyTextFormat("number")} />
                 </div>
                 <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button type="button" onClick={toolbarActions.copy} className="rounded border border-[#d7dce8] px-2.5 py-1.5 text-sm font-semibold text-[#315f9d] hover:bg-[#f2f7ff]">내용 전체 복사하기</button>
-                  <button type="button" onClick={toolbarActions.openCorrections} className="rounded border border-[#d7dce8] px-2.5 py-1.5 text-sm font-semibold text-[#315f9d] hover:bg-[#f2f7ff]">인용문 일괄 검토</button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button type="button" onClick={toolbarActions.copy} className="shrink-0 whitespace-nowrap rounded border border-[#d7dce8] px-2.5 py-1.5 text-xs font-semibold text-[#315f9d] hover:bg-[#f2f7ff]">내용 전체 복사하기</button>
+                  <button type="button" onClick={toolbarActions.openCorrections} className="shrink-0 whitespace-nowrap rounded border border-[#d7dce8] px-2.5 py-1.5 text-xs font-semibold text-[#315f9d] hover:bg-[#f2f7ff]">인용문 일괄 검토</button>
                 </div>
                 <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
               </>
             )}
-            <span className={`hidden text-xs md:block ${saveError ? "text-[#b54747]" : "text-[#8a94a3]"}`}>{saveError ?? (savedAt ? `저장됨 · ${savedAt}` : "수정 내용을 저장할 수 있습니다")}</span>
+            <span className={`hidden shrink-0 whitespace-nowrap text-xs xl:block ${saveError ? "text-[#b54747]" : "text-[#8a94a3]"}`}>{saveError ?? (savedAt ? `저장됨 · ${savedAt}` : "수정 내용을 저장할 수 있습니다")}</span>
             <div className="ml-auto flex items-center gap-2">
-              <button type="button" onClick={resetWorkspaceDraft} className="rounded-lg px-3 py-2 text-xs font-semibold text-[#667085] hover:bg-white">초기화</button>
-              <button type="button" onClick={() => void saveDraft()} disabled={draftSaving} className="rounded-lg bg-[#1473e6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#0f65cf] disabled:opacity-60">{draftSaving ? "저장 중..." : "변경사항 저장"}</button>
+              <button type="button" onClick={resetWorkspaceDraft} className="shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold text-[#667085] hover:bg-white">초기화</button>
+              <button type="button" onClick={() => void saveDraft()} disabled={draftSaving} className="shrink-0 whitespace-nowrap rounded-lg bg-[#1473e6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#0f65cf] disabled:opacity-60">{draftSaving ? "저장 중..." : "변경사항 저장"}</button>
             </div>
           </div>
         </div>

@@ -32,6 +32,12 @@ export const CategorySchema = z.object({
     .default([])
     .describe("quotes 각각에 대해 근거/이유 구간을 지목 — 위치 표시용"),
   insight: z.string().describe("관찰·시사점 톤의 인사이트 한 줄. 화살표 기호는 붙이지 않음"),
+  // 분야별 액션 플랜(2026-09-16). 앵커 경로가 채우고, 옛 상세 경로는 빈 배열로 둔다 —
+  // 그쪽은 이 필드를 요구하지 않으므로 default가 호환을 맡는다.
+  fieldActions: z
+    .array(z.object({ field: z.string(), action: z.string() }))
+    .default([])
+    .describe("insight를 실무로 옮길 분야별 액션 플랜(0~3개)"),
 });
 
 export const Stage2OutputSchema = z.object({

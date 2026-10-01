@@ -1,23 +1,29 @@
 import { ReportStudio } from "@/components/ReportStudio";
+import { getReportById } from "@/lib/db/reports";
 
 export const metadata = {
   title: "보고서 스튜디오 | 사용성테스트 결과보고서 자동생성",
 };
+
+async function resolveSource(report?: string | string[], source?: string | string[]) {
+  if (typeof report === "string") return (await getReportById(report))?.file_url;
+  return typeof source === "string" && /^https?:\/\//.test(source) ? source : undefined;
+}
 
 const VALID_NUMERALS = new Set(["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"]);
 
 export default async function ViewerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ pdf?: string | string[]; source?: string | string[]; section?: string | string[]; dataset?: string | string[]; job?: string | string[] }>;
+  searchParams: Promise<{ pdf?: string | string[]; report?: string | string[]; source?: string | string[]; section?: string | string[]; dataset?: string | string[]; job?: string | string[] }>;
 }) {
   const params = await searchParams;
   const pdfUrl = typeof params.pdf === "string" && params.pdf.startsWith("/api/download?")
     ? params.pdf
     : undefined;
-  const sourceFileUrl = typeof params.source === "string" && /^https?:\/\//.test(params.source)
-    ? params.source
-    : undefined;
+  // ?report=<uuid> 는 raw data URL(길고 자모 분리된 한글이 퍼센트 인코딩돼 500자가 넘는다)
+  // 대신 쓰는 짧은 주소다. 여는 대상은 ?source= 와 완전히 같다 — 여기서 URL만 찾아준다.
+  const sourceFileUrl = await resolveSource(params.report, params.source);
   // 목차 클릭으로 전환한 섹션을 URL(?section=)에 동기화해두면 새로고침·공유 링크로도 같은
   // 섹션이 유지된다(components/ReportStudio.tsx의 changeActiveSection 참고).
   const initialSection = typeof params.section === "string" && VALID_NUMERALS.has(params.section)

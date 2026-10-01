@@ -196,7 +196,7 @@ export function QuestionLayoutCards({
                 {card.chapter}
                 {card.section ? ` · ${card.section}` : ""}
               </p>
-              <h2 className="mt-0.5 text-[15px] font-bold leading-snug text-[#18181b]">
+              <h2 className="mt-0.5 text-[13px] font-bold leading-snug text-[#18181b]">
                 {card.title || <span className="text-[#a1a1aa]">(제목 없음)</span>}
               </h2>
               <div className="mt-2 flex flex-wrap gap-1">
@@ -230,7 +230,7 @@ export function QuestionLayoutCards({
           <button
             type="button"
             onClick={onGenerate}
-            className="w-full rounded-lg bg-[#356df3] px-6 py-3 text-[15px] font-bold text-white hover:bg-[#2d60da]"
+            className="w-full rounded-lg bg-[#356df3] px-6 py-3 text-[13px] font-bold text-white hover:bg-[#2d60da]"
           >
             이 구성으로 보고서 생성하기
           </button>

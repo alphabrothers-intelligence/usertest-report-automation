@@ -12,7 +12,7 @@ export function EditableNpsChart({ block }: { block: ReportNpsBlock }) {
   return <section className="mb-5">
     <div className="mb-2 flex flex-wrap items-center gap-2" data-copy-ignore><a href="/images/nps-scale.png" download="NPS_지수_척도.png" className="rounded border border-[#315c9c] px-2 py-1 text-xs font-semibold text-[#315c9c] hover:bg-[#edf3fc]">PNG 다운로드</a></div>
     <div data-report-export="chart" data-report-export-name="NPS_지수" className="border border-[#bac7dd] bg-white">
-      <div data-export-exclude className="border-y-2 border-[#6388e6] bg-[#dfe7f6] px-3 py-2 text-[17px] font-bold text-[#6c82aa]">{block.title}</div>
+      <div data-export-exclude className="border-y-2 border-[#6388e6] bg-[#dfe7f6] px-3 py-2 text-[13px] font-bold text-[#6c82aa]">{block.title}</div>
       <img src="/images/nps-scale.png" alt="NPS 지수 산식과 고객군 구분" className="mx-auto block w-full max-w-[720px] p-3" />
     </div>
   </section>;

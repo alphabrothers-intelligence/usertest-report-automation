@@ -8,6 +8,7 @@ import { buildReportPlan } from "@/lib/pipeline/reportPlan";
 import { NUMERALS, type SectionPlan } from "@/lib/agent/sectionPlan";
 import { parseFourValueItemTexts } from "@/lib/pipeline/sectionAnalysis";
 import { decodeImprovementLabel } from "@/lib/pipeline/stage2";
+import { prepareQuote } from "@/lib/report/quoteEmphasis";
 import { categoryPolarityNeedsReview } from "@/lib/pipeline/confidence";
 import { buildConclusionSection } from "@/lib/report/workspaceConclusion";
 import { buildOverviewSection } from "@/lib/report/workspaceOverview";
@@ -21,7 +22,7 @@ import { buildCrossAnalysisSection } from "@/lib/report/workspaceCrossAnalysis";
 import { buildJourneySection } from "@/lib/report/workspaceJourney";
 import { buildNpsSection } from "@/lib/report/workspaceNps";
 import { donutSvg, satisfactionHistogramSvg } from "@/lib/report/chartSvg";
-import { dataTableCss } from "@/lib/report/sectionStyle";
+import { DATA_TABLE, dataTableCss } from "@/lib/report/sectionStyle";
 import {
   headingBlock,
   isFullQuestionText,
@@ -79,7 +80,8 @@ const BLANK_LINE_HTML = `<p style="margin:0">&nbsp;</p>`;
 // displayText(quotesDisplay의 해당 항목, 근거 구간에 **__..__** 마킹)가 있으면 화면 표시에
 // 쓰고, data-quote-text는 항상 마킹 없는 원문 quote를 쓴다 — quote-source/quote-ending/
 // quote-completion API가 raw data 원문과 정확히 대조하는 기준이라 여기 마킹이 섞이면 안 된다.
-function quoteHtml(quote: string, questionKey: string, displayText?: string): string {
+function quoteHtml(rawQuote: string, questionKey: string, rawDisplay: string | undefined, context: string): string {
+  const { quote, display: displayText } = prepareQuote(rawQuote, rawDisplay, context);
   return `<div data-report-quote data-quote-source="${escapeHtml(questionKey)}" data-quote-text="${escapeHtml(encodeURIComponent(quote))}" style="margin:0 0 4pt"><p style="display:inline;margin:0">"${richTextToInlineHtml(displayText ?? quote)}"</p></div>`;
 }
 
@@ -95,6 +97,8 @@ function analysisEvidenceHtml(title: string, content: string): string {
   return `<div data-analysis-evidence data-analysis-label="${escapeHtml(encodeURIComponent(title))}">${content}</div>`;
 }
 
+/** 개선 아이디어를 **대분류마다 한 덩어리**로 만든다. 호출부가 덩어리마다 블록을 만들어야
+ * 쪽 묶기가 손댈 수 있다 — 한 덩어리로 합치면 케어클 실측 2,944px(A4 세 쪽)짜리 블록이 된다. */
 function improvementCategoryHtml(categories: CategoryRow[], questionKey: string): string[] {
   const byMajor = new Map<string, CategoryRow[]>();
   for (const cat of categories) {
@@ -102,18 +106,19 @@ function improvementCategoryHtml(categories: CategoryRow[], questionKey: string)
     const key = major || "기타";
     (byMajor.get(key) ?? byMajor.set(key, []).get(key)!).push(cat);
   }
-  const out: string[] = [];
+  const groups: string[] = [];
   for (const [major, subs] of byMajor) {
-    out.push(`${quoteGroupStart(questionKey, major)}<p style="font-weight:700;margin:10pt 0 3pt"><strong>[${richTextToInlineHtml(major)}]</strong></p>`);
+    const out: string[] = [`${quoteGroupStart(questionKey, major)}<p style="font-weight:700;margin:10pt 0 3pt"><strong>[${richTextToInlineHtml(major)}]</strong></p>`];
     for (const sub of subs) {
       const { sub: subLabel } = decodeImprovementLabel(sub.label);
       if (subLabel) out.push(`<p style="font-weight:700;margin:5pt 0 2pt">&lt;${richTextToInlineHtml(subLabel)}&gt;</p>`);
-      sub.quotes.forEach((quote, i) => out.push(quoteHtml(quote, questionKey, sub.quotes_display?.[i])));
+      sub.quotes.forEach((quote, i) => out.push(quoteHtml(quote, questionKey, sub.quotes_display?.[i], `${major} ${subLabel}`)));
       out.push(BLANK_LINE_HTML);
     }
     out.push(`</div>`);
+    groups.push(out.join(""));
   }
-  return out;
+  return groups;
 }
 
 /**
@@ -125,13 +130,41 @@ function improvementCategoryHtml(categories: CategoryRow[], questionKey: string)
  */
 const VALUE_COLUMN = { quote: "9pt", label: "9.5pt", header: "11pt" };
 
+/**
+ * 인사이트 한 줄 아래에 붙는 **분야별 액션 플랜**(2026-09-16 담당자 확정 양식).
+ *
+ * 분야명은 본문과 같은 검정 볼드, 문장은 그 아래 줄에 한 단 들여쓴다 — 담당자가 네 가지 배치를
+ * 실제로 렌더해 보고 고른 형태다. 삼각형은 분야명 쪽에 붙인다(항목의 시작점을 잡아준다).
+ *
+ * **간격이 가시성의 전부다**: 인사이트 바로 아래 6pt를 띄워 인사이트와 액션이 붙어 보이지 않게
+ * 하고, 분야끼리는 5pt를 둔다(문장-분야 1pt보다 넓어야 묶음이 갈린다).
+ *
+ * `▸`(U+25B8)는 웹뷰·한글에서는 정상이지만 **PDF 서브셋 폰트에서는 깨진다**(CLAUDE.md의
+ * 같은 사례 3건 참고). PDF 경로로 내보내게 되면 `TriangleBullet`처럼 SVG 도형으로 바꿀 것.
+ */
+function fieldActionsHtml(actions: CategoryRow["field_actions"]): string {
+  if (!actions || actions.length === 0) return "";
+  // **분야명 한 줄 / 문장 한 줄**(2026-09-17 담당자 선택 H1 배치). 글자 크기는 본문 상속이고,
+  // 박스·특수기호 없이 `•`와 볼드만 쓴다(DOCX·HWP로 나가도 그대로 남는다).
+  // 간격이 위계를 만든다: 인사이트 아래 8pt(인용문 묶음과 갈라놓기), 분야 사이 6pt(액션끼리는
+  // 한 묶음), 분야명과 그 문장 사이 1pt(둘이 한 줄짜리 항목으로 붙어 보이게).
+  return actions.map((a, i) =>
+    `<p style="font-weight:700;margin:${i === 0 ? 8 : 6}pt 0 0 14pt;text-indent:-11pt;padding-left:11pt">` +
+      `• <strong>${escapeHtml(a.field)}</strong></p>` +
+    `<p style="line-height:1.5;margin:1pt 0 0 25pt">${richTextToInlineHtml(a.action)}</p>`,
+  ).join("");
+}
+
 function categoryHtml(cat: CategoryRow, questionKey: string, options: { compact?: boolean } = {}): string[] {
   // 한글 붙여넣기에서 CSS font-weight만으로는 굵게가 유지되지 않는 사례가 있어,
   // 인라인 스타일과 실제 의미 태그를 반드시 함께 낸다.
   const labelSize = options.compact ? `font-size:${VALUE_COLUMN.label};` : "";
   const out = [`<p style="${labelSize}font-weight:700;margin:10pt 0 3pt"><strong>[${richTextToInlineHtml(cat.label)}]</strong></p>`];
-  cat.quotes.slice(0, 3).forEach((quote, i) => out.push(quoteHtml(quote, questionKey, cat.quotes_display?.[i])));
-  out.push(`<p style="font-weight:700;font-style:italic;margin:3pt 0 8pt"><strong><em>→ ${richTextToInlineHtml(cat.insight_final ?? cat.insight_draft)}</em></strong></p>`);
+  const context = `${cat.label} ${cat.insight_final ?? cat.insight_draft}`;
+  cat.quotes.slice(0, 3).forEach((quote, i) => out.push(quoteHtml(quote, questionKey, cat.quotes_display?.[i], context)));
+  const hasActions = (cat.field_actions?.length ?? 0) > 0;
+  out.push(`<p style="font-weight:700;font-style:italic;margin:5pt 0 ${hasActions ? 0 : 8}pt"><strong><em>→ ${richTextToInlineHtml(cat.insight_final ?? cat.insight_draft)}</em></strong></p>`);
+  out.push(fieldActionsHtml(cat.field_actions));
   out.push(BLANK_LINE_HTML);
   // 카테고리 하나를 감싸는 컨테이너. **문서에 보이는 것은 아무것도 더하지 않는다**(테두리도
   // 배경도 없는 순수 래퍼) — 왼쪽 `분석 근거` 패널이 "지금 읽고 있는 묶음"을 정확히 집어내고,
@@ -296,26 +329,144 @@ function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions
       summaryKind: "polarity",
     }));
 
-    // (4) 1.긍정 / 2.부정 / 3.중립 상세 카테고리(편집 가능한 styled 블록).
-    const restParts: string[] = [];
-    const total = counts.positive + counts.negative + counts.neutral;
-    let bannerIndex = 0;
-    for (const pol of POLARITY_ORDER) {
-      const cats = q.categories.filter((c) => c.polarity === pol);
-      if (cats.length === 0) continue;
-      bannerIndex += 1;
-      const pct = total ? ((counts[pol] / total) * 100).toFixed(1) : "0.0";
-      restParts.push(polarityBannerHtml(pol, bannerIndex, pct));
-      restParts.push(quoteGroupStart(q.question_key, `${POLARITY_LABEL[pol]} 의견`));
-      for (const cat of cats) restParts.push(...categoryHtml(cat, q.question_key));
-      restParts.push(`</div>`);
-    }
-    blocks.push(textBlock({ id: `${idPrefix}-q${qi}-detail`, label: q.label, html: restParts.join(""), styled: true }));
+    // (4) 1.긍정 / 2.부정 / 3.중립 상세 카테고리 — **극성마다 한 블록**(polarityDetailBlocks 주석).
+    blocks.push(...polarityDetailBlocks(idPrefix, qi, q, counts));
+    blocks.push(...fieldActionTableBlock(idPrefix, qi, q, { name: feature.name, kind: "feature" }));
   }
   // 기능 문항 자체가 없는 raw data 에서만 걸린다(정성 유무와 무관).
   return blocks.length
     ? blocks
     : [textBlock({ id: idPrefix, label: "기능별 고객 경험 분석", html: `<p>${PENDING_QUALITATIVE_NOTICE}</p>`, pending: true })];
+}
+
+
+/** 분야 순서 고정 — 데이터에 나온 순서대로 두면 문항마다 열 순서가 달라진다. */
+const FIELD_ORDER = ["제품 기획", "마케팅", "SW 개발", "제품 개발"];
+
+/**
+ * 문항 끝 **인사이트 종합 및 분야별 액션 플랜** 표(2026-09-16 담당자 요청).
+ *
+ * 본문은 "인사이트를 읽는 그 자리에서 담당 분야를 본다"이고, 이 표는 그 반대다 — **내 분야
+ * 것만 모아 본다**. 그래서 극성 안에서 같은 분야를 한 칸으로 합친다(한 인사이트가 두 분야에
+ * 걸리면 그 문장이 분야마다 반복되는데, 분야 기준으로 보는 것이 목적이라 그대로 둔다).
+ *
+ * 액션이 없는 카테고리도 **인사이트는 본래 색 그대로** 싣고 액션 칸에 `-` 하나만 둔다
+ * (연하게 칠하면 "데이터가 없다"로 읽힌다 — 2026-09-16 담당자 지적).
+ */
+function fieldActionTableBlock(
+  idPrefix: string,
+  qi: number,
+  q: QuestionWithApprovedCategories,
+  title: { name: string; kind?: "feature" },
+): ReportBlock[] {
+  const withActions = q.categories.filter((c) => (c.field_actions?.length ?? 0) > 0);
+  if (withActions.length === 0) return [];
+
+  const EDGE = "border-top:1.6pt solid #6182d6";
+  const bullet = (text: string, note = "") =>
+    `<span style="display:block;text-indent:-8pt;padding-left:8pt">• ${text}${note}</span>`;
+
+  const rows: string[] = [];
+  for (const pol of POLARITY_ORDER) {
+    const group = q.categories.filter((c) => c.polarity === pol);
+    if (group.length === 0) continue;
+    // 극성 안에서 분야로 묶는다. 액션이 없는 카테고리는 "" 키로 모아 맨 뒤에 둔다.
+    const byField = new Map<string, { insight: string; n: number; action: string }[]>();
+    for (const cat of group) {
+      const insight = cat.insight_final ?? cat.insight_draft;
+      const pairs = cat.field_actions?.length
+        ? cat.field_actions.map((a) => [a.field, a.action] as const)
+        : [["", ""] as const];
+      for (const [field, action] of pairs) {
+        byField.set(field, [...(byField.get(field) ?? []), { insight, n: cat.clause_count, action }]);
+      }
+    }
+    const fields = [...FIELD_ORDER, ""].filter((f) => byField.has(f));
+    const span = fields.reduce((sum, f) => sum + byField.get(f)!.length, 0);
+    let firstOfGroup = true;
+    for (const field of fields) {
+      const items = byField.get(field)!;
+      items.forEach((item, i) => {
+        const edge = firstOfGroup ? EDGE : "";
+        const polCell = firstOfGroup
+          ? `<td rowspan="${span}" style="${CSS.cellWith(POLARITY_BANNER[pol].bg)};font-weight:700;${EDGE}">${POLARITY_LABEL[pol]}<br>의견</td>`
+          : "";
+        firstOfGroup = false;
+        const insightCell = `<td style="${CSS.cellLeft};${i === 0 ? edge : ""}">` +
+          bullet(richTextToInlineHtml(item.insight)) + `</td>`;
+        if (field === "") {
+          // 액션이 없는 묶음은 **분야·액션 칸을 각각 하나로 합치고 `-`를 둔다**(2026-09-16
+          // 담당자 지적) — 행마다 빈 칸이 반복되면 없는 것이 여러 번 있는 것처럼 보인다.
+          const dash = (style: string) => i === 0
+            ? `<td rowspan="${items.length}" style="${style};${edge}">-</td>` : "";
+          rows.push(`<tr>${polCell}${dash(CSS.header)}${insightCell}${dash(CSS.cell)}</tr>`);
+          return;
+        }
+        const fieldCell = i === 0
+          ? `<td rowspan="${items.length}" style="${CSS.header};${edge}">${escapeHtml(field)}</td>` : "";
+        rows.push(`<tr>${polCell}${fieldCell}${insightCell}` +
+          `<td style="${CSS.cellLeft};${i === 0 ? edge : ""}">${bullet(richTextToInlineHtml(item.action))}</td></tr>`);
+      });
+    }
+  }
+
+  const noun = title.kind === "feature" ? "기능 인사이트" : "인사이트";
+  // **제목은 표 바깥의 문단**이고 열 머리글만 `<thead>`에 둔다(2026-09-17 담당자 지시: "다음
+  // 장으로 넘어간 부분에 표 제목이 또 나올 필요는 없다"). `splitBlock`은 thead만 조각마다
+  // 되풀이하므로 이어지는 쪽에는 열 이름만 다시 붙는다. 제목을 표의 첫 행(tbody)에 두면
+  // thead보다 **아래**에 그려져 열 이름이 제목 위로 올라간다(실측으로 확인).
+  const titleHtml = `<p style="border:${DATA_TABLE.borderWidth}pt solid ${CSS.palette.border};border-bottom:none;` +
+    `background-color:${CSS.palette.title};padding:3pt 6pt;margin:10pt 0 0;font-size:${DATA_TABLE.fontSize}pt;` +
+    `text-align:center;font-weight:700"><strong>[${escapeHtml(title.name)}] ${noun} 종합 및 분야별 액션 플랜</strong></p>`;
+  const head = `<tr><td style="${CSS.header};width:11%">구분</td><td style="${CSS.header};width:13%">분야</td>` +
+    `<td style="${CSS.header};width:38%">핵심 인사이트</td><td style="${CSS.header};width:38%">액션 플랜</td></tr>`;
+  // **제목·머리글은 `<thead>`에 둔다.** 표가 한 쪽을 넘겨 쪼개질 때 `splitBlock`이 조각마다
+  // 이 머리를 다시 붙인다 — 예전처럼 tbody에 두면 이어지는 조각에 제목도 열 이름도 없어
+  // "표가 중간에서 잘린" 화면이 된다(2026-09-16 담당자 지적). 지금 데이터(케어클 최대 724px,
+  // 한 쪽 940px)는 전부 한 쪽에 들어가지만, 문항이 많은 raw data를 위한 안전망이다.
+  return [richStaticBlock({
+    id: `${idPrefix}-q${qi}-fieldactions`,
+    html: `${titleHtml}<table style="${CSS.table}"><thead>${head}</thead><tbody>${rows.join("")}</tbody></table>`,
+  })];
+}
+
+/**
+ * 극성 상세(1.긍정 / 2.부정 / 3.중립)를 **극성마다 한 블록씩** 만든다.
+ *
+ * 예전에는 세 극성을 한 블록에 묶어서 냈는데, 그 블록 하나가 A4 두세 쪽 분량(케어클 실측
+ * 1,400~2,900px, 한 쪽 본문은 956px)이라 쪽 묶기(`lib/report/paginate.ts`)가 손댈 수 없었다 —
+ * 쪽 카드가 통째로 늘어나 화면에서는 "페이지가 안 넘어가고", PDF에서는 브라우저가 그 카드를
+ * 임의로 쪼개 여백·푸터가 어긋났다(2026-09-11 담당자 지적 3·5번).
+ *
+ * 쪼갤 수 있는 가장 자연스러운 자리가 극성 경계다 — 원본 보고서도 긍정/부정/중립을 각각 배너로
+ * 시작한다. 블록 id는 `...-detail-1`처럼 `-detail` 접두를 유지해서, 이 문항 블록을 통째로
+ * 바꿔치기하는 극성 확인 경로(`useReportEvidence`)와 HWPX 미리보기가 접두 하나로 찾게 한다.
+ */
+function polarityDetailBlocks(idPrefix: string, qi: number, q: QuestionWithApprovedCategories, counts: Record<string, number>, leadHtml = ""): ReportBlock[] {
+  const total = counts.positive + counts.negative + counts.neutral;
+  const blocks: ReportBlock[] = [];
+  let bannerIndex = 0;
+  for (const pol of POLARITY_ORDER) {
+    const cats = q.categories.filter((c) => c.polarity === pol);
+    if (cats.length === 0) continue;
+    bannerIndex += 1;
+    const pct = total ? ((counts[pol] / total) * 100).toFixed(1) : "0.0";
+    const html = polarityBannerHtml(pol, bannerIndex, pct)
+      + quoteGroupStart(q.question_key, `${POLARITY_LABEL[pol]} 의견`)
+      + q.categories.filter((c) => c.polarity === pol).flatMap((cat) => categoryHtml(cat, q.question_key)).join("")
+      + `</div>`;
+    blocks.push(textBlock({
+      id: `${idPrefix}-q${qi}-detail-${bannerIndex}`,
+      label: q.label,
+      html: (bannerIndex === 1 ? leadHtml : "") + html,
+      styled: true,
+    }));
+  }
+  // 극성 묶음이 하나도 없어도 응답 요약(leadHtml)은 실려야 한다.
+  if (blocks.length === 0 && leadHtml) {
+    blocks.push(textBlock({ id: `${idPrefix}-q${qi}-detail-1`, label: q.label, html: leadHtml, styled: true }));
+  }
+  return blocks;
 }
 
 /** 문항 목록을 원본 발행 형식 블록 목록으로 만든다. 극성이 있는 문항은 (1) 질문 라벨+"감정분석"
@@ -345,9 +496,15 @@ function qualitativeBlocks(idPrefix: string, questions: QuestionWithApprovedCate
     if (!hasPolarity) {
       // 개선 아이디어(2단): label이 "대분류소분류"로 인코딩돼 있으면 원본 45~49쪽처럼
       // [대분류] → <소분류> → 원문 인용(인사이트 없음) 계층으로 렌더링한다.
-      const parts = [`<p style="font-weight:700;font-size:10.5pt;margin:16pt 0 6pt">${escapeHtml(q.label)}</p>`];
-      parts.push(...improvementCategoryHtml(q.categories, q.question_key));
-      blocks.push(textBlock({ id: `${idPrefix}-q${qi}`, label: q.label, html: parts.join(""), styled: true }));
+      const groups = improvementCategoryHtml(q.categories, q.question_key);
+      const title = `<p style="font-weight:700;font-size:10.5pt;margin:16pt 0 6pt">${escapeHtml(q.label)}</p>`;
+      // 대분류마다 한 블록. id 접두(`...-q1`)는 그대로라 이 문항을 접두로 찾는 곳은 안 바뀐다.
+      blocks.push(...(groups.length > 0 ? groups : [""]).map((html, index) => textBlock({
+        id: index === 0 ? `${idPrefix}-q${qi}` : `${idPrefix}-q${qi}-${index + 1}`,
+        label: q.label,
+        html: (index === 0 ? title : "") + html,
+        styled: true,
+      })));
       continue;
     }
     const counts: Record<string, number> = { positive: 0, negative: 0, neutral: 0 };
@@ -360,6 +517,8 @@ function qualitativeBlocks(idPrefix: string, questions: QuestionWithApprovedCate
         label: q.label,
         html: `<p style="font-weight:700;font-size:10.5pt;margin:16pt 0 6pt">${escapeHtml(q.label)}</p><p style="font-weight:700;margin:10pt 0 4pt;color:#315c9c">주관식 응답 감정 분석</p>`,
         styled: true,
+        // 문항 제목이라 쪽 끝에 혼자 남으면 안 된다(2026-09-30 리바랩스 9쪽 실측).
+        keepWithNext: true,
       }),
     );
 
@@ -373,20 +532,8 @@ function qualitativeBlocks(idPrefix: string, questions: QuestionWithApprovedCate
     );
 
     // (3) 응답 요약 + 극성별 상세(1.긍정 / 2.부정 / 3.중립) — 편집 가능한 프로즈.
-    const restParts: string[] = [responseSummaryHtml(q.polarity_summaries, q.question_key)];
-    const total = counts.positive + counts.negative + counts.neutral;
-    let bannerIndex = 0;
-    for (const pol of POLARITY_ORDER) {
-      const cats = q.categories.filter((c) => c.polarity === pol);
-      if (cats.length === 0) continue;
-      bannerIndex += 1;
-      const pct = total ? ((counts[pol] / total) * 100).toFixed(1) : "0.0";
-      restParts.push(polarityBannerHtml(pol, bannerIndex, pct));
-      restParts.push(quoteGroupStart(q.question_key, `${POLARITY_LABEL[pol]} 의견`));
-      for (const cat of cats) restParts.push(...categoryHtml(cat, q.question_key));
-      restParts.push(`</div>`);
-    }
-    blocks.push(textBlock({ id: `${idPrefix}-q${qi}-detail`, label: q.label, html: restParts.join(""), styled: true }));
+    blocks.push(...polarityDetailBlocks(idPrefix, qi, q, counts, responseSummaryHtml(q.polarity_summaries, q.question_key)));
+    blocks.push(...fieldActionTableBlock(idPrefix, qi, q, { name: q.label }));
   }
   return blocks;
 }
@@ -408,14 +555,51 @@ function qualitativeBlock(id: string, label: string, questions: QuestionWithAppr
  * 문구로 남긴다. 표 구조 자체는 rich-static으로 두어 병합·테두리·배경색을 보존하고 웹에서
  * 각 셀을 직접 편집할 수 있다.
  */
-function valueOpinionColumnHtml(title: string, background: string, categories: CategoryRow[], questionKey: string): string {
+/**
+ * 긍정·부정 두 칸짜리 의견 상자를 **묶음 하나에 한 블록씩** 쪼갠다.
+ *
+ * 예전에는 한 문항의 긍정·부정 전부가 **한 표의 한 행**이었다. 행 하나가 1,200px(A4 1.2쪽)라
+ * 쪽 묶기도, 브라우저의 쪽 나눔도 손댈 수 없어서 인쇄하면 **빈 쪽이 하나 생기고** 그 뒤 장은
+ * 종이 끝까지 글이 붙었다(2026-09-11 실측). 칸 제목은 첫 블록에만 넣는다 — 원본 보고서도 두 칸
+ * 구성이 다음 쪽으로 이어질 때 제목을 다시 적지 않는다.
+ */
+function valueOpinionBoxHtml(positive: CategoryRow[], negative: CategoryRow[], questionKey: string): string[] {
+  // **묶음 한 쌍이 한 행**이고, 행 사이 가로선은 지운다(2026-09-17).
+  //
+  // 한 행 두 칸(칸 하나에 그 극성 전부)으로 두면 가로선은 없어지지만, 쪽을 넘길 때 그 거대한
+  // 칸을 세로로 잘라야 한다 — 실측에서 조각마다 **한쪽 칸만 차서** 긍정만 있는 쪽, 부정만 있는
+  // 쪽이 줄줄이 나왔다(담당자: "제일 심각합니다"). 쌍 단위 행이면 쪽을 넘겨도 **양쪽이 같이**
+  // 이어지고, 가로선만 지우면 화면은 한 칸으로 이어진 것처럼 보인다(원본 34쪽과 같은 인상).
+  const rows = Math.max(positive.length, negative.length, 1);
+  const body = Array.from({ length: rows }, (_, index) => {
+    const last = index === rows - 1;
+    const left = valueOpinionColumnHtml("긍정", positive.slice(index, index + 1), questionKey, index === 0, last);
+    const right = valueOpinionColumnHtml("부정", negative.slice(index, index + 1), questionKey, index === 0, last);
+    return `<tr>${left}${right}</tr>`;
+  }).join("");
+  const head = `<tr>${valueOpinionHeaderHtml("긍정 의견", "#dce7fa")}${valueOpinionHeaderHtml("부정 의견", "#fde4d0")}</tr>`;
+  return [`${quoteGroupStart(questionKey, "긍정·부정 의견")}<table style="${CSS.table};margin:0">` +
+    `<thead>${head}</thead><tbody>${body}</tbody></table></div>`];
+}
+
+/** 의견 표의 머리 칸(긍정/부정). 표가 쪽을 넘겨 쪼개져도 조각마다 따라붙는다. */
+function valueOpinionHeaderHtml(title: string, background: string): string {
+  return `<th style="width:50%;border:${CSS.border};padding:6pt;background-color:${background};` +
+    `font-size:${VALUE_COLUMN.header};font-weight:700;text-align:center">${title}</th>`;
+}
+
+function valueOpinionColumnHtml(title: string, categories: CategoryRow[], questionKey: string, first: boolean, last: boolean): string {
   const body = categories.length
     ? categories.map((category) => categoryHtml(category, questionKey, { compact: true }).join("")).join("")
-    : `<p style="margin:0;color:#6b7280">분석된 ${title} 의견이 없습니다.</p>`;
+    // 제목 없는 이어지는 칸이 비었다는 것은 "그 쪽 의견이 먼저 끝났다"는 뜻이라 안내를 적지 않는다.
+    : "";
   // 글자 크기를 명시하지 않으면 이 칸만 문서 기본값(16px)으로 렌더된다. 원본 실측값(9pt,
   // VALUE_COLUMN 주석 참고)에 맞춘다 — 두 칸으로 나뉜 자리라 Ⅲ장 한 칸(10pt)보다 작다.
-  return `<td data-quote-section="${escapeHtml(title)} 의견" style="width:50%;vertical-align:top;border:${CSS.border};padding:10pt;background-color:#ffffff;font-size:${VALUE_COLUMN.quote};line-height:1.65">
-    <p style="margin:0 0 8pt;padding:5pt 8pt;background-color:${background};font-size:${VALUE_COLUMN.header};font-weight:700;text-align:center">${title} 의견</p>
+  // 가로선을 지워 칸이 세로로 이어져 보이게 한다 — 위/아래 선은 표의 바깥 경계에만 남긴다.
+  // 쪽을 넘긴 조각의 첫 행은 위 선이 없지만, 표 머리(`<thead>`)가 그 자리를 대신한다.
+  const edges = `border-left:${CSS.border};border-right:${CSS.border}` +
+    `;border-top:${first ? CSS.border : "none"};border-bottom:${last ? CSS.border : "none"}`;
+  return `<td data-quote-section="${escapeHtml(title)} 의견" style="width:50%;vertical-align:top;${edges};padding:${first ? 10 : 0}pt 10pt ${last ? 10 : 0}pt;background-color:#ffffff;font-size:${VALUE_COLUMN.quote};line-height:1.65">
     ${body}
   </td>`;
 }
@@ -437,11 +621,14 @@ function findSurveyQuestion(stats: QuantStats, stage: string, occurrenceIndex: n
 }
 
 /** 원본 32~35쪽 "평균|표준편차" 2열 미니 표. */
-function valueMeanSdTableHtml(mean: number, sd: number): string {
+function valueMeanSdTableHtml(name: string, mean: number, sd: number): string {
+  // **가치 이름은 표의 제목 행**이다(원본 34쪽). 예전엔 표 위에 굵은 문단으로 한 번 더 적어
+  // 문항 제목과 같은 말이 두 번 나왔다(2026-09-17 담당자 지적).
   return (
     `<table style="${CSS.table};margin:6pt 0 10pt">` +
-    `<thead><tr><th style="${CSS.header}">평균</th><th style="${CSS.header}">표준편차</th></tr></thead>` +
-    `<tbody><tr><td style="${CSS.cell}">전체 ${mean.toFixed(2)}</td><td style="${CSS.cell}">${sd.toFixed(2)}</td></tr></tbody>` +
+    `<tbody><tr><td colspan="2" style="${CSS.title}">${escapeHtml(name)}</td></tr>` +
+    `<tr><th style="${CSS.header}">평균</th><th style="${CSS.header}">표준편차</th></tr>` +
+    `<tr><td style="${CSS.cell}">전체 ${mean.toFixed(2)}</td><td style="${CSS.cell}">${sd.toFixed(2)}</td></tr></tbody>` +
     `</table>`
   );
 }
@@ -495,19 +682,22 @@ function fourValueQualitativeBlocks(stats: QuantStats, idPrefix: string, questio
   valueRows.forEach((value, index) => {
     const question = findValueQuestion(questions, value.name);
     const survey = findSurveyQuestion(stats, "4대 가치 만족도 평가", index);
-    const heading = survey ? `Q${survey.qno}. ${survey.question}` : `${value.name} 만족도`;
-    blocks.push(headingBlock({ id: `${idPrefix}-q${index + 1}`, variant: "question", text: heading }));
+    // 설문 문항 원문이 있을 때만 `Q14. …` 제목을 단다 — 없으면 가치 이름이 바로 아래 표의
+    // 제목 행에 이미 있어서 같은 말이 두 번 나온다(2026-09-17 담당자 지적).
+    if (survey) {
+      blocks.push(headingBlock({ id: `${idPrefix}-q${index + 1}`, variant: "question", text: `Q${survey.qno}. ${survey.question}` }));
+    }
     blocks.push(richStaticBlock({
       id: `${idPrefix}-meansd-${index + 1}`,
-      html: `<p style="font-weight:700;margin:0 0 4pt">${escapeHtml(value.name)} 만족도</p>${valueMeanSdTableHtml(value.mean, value.sd)}`,
+      html: valueMeanSdTableHtml(`${value.name} 만족도`, value.mean, value.sd),
     }));
     if (question && question.categories.length > 0) {
       const positive = question.categories.filter((category) => category.polarity === "positive");
       const negative = question.categories.filter((category) => category.polarity === "negative");
-      blocks.push(richStaticBlock({
-        id: `${idPrefix}-opinion-box-${index + 1}`,
-        html: `${quoteGroupStart(question.question_key, "긍정·부정 의견")}<table style="${CSS.table};margin:0 0 10pt"><tbody><tr>${valueOpinionColumnHtml("긍정", "#dce7fa", positive, question.question_key)}${valueOpinionColumnHtml("부정", "#fde4d0", negative, question.question_key)}</tr></tbody></table></div>`,
-      }));
+      blocks.push(...valueOpinionBoxHtml(positive, negative, question.question_key).map((html, part) => richStaticBlock({
+        id: part === 0 ? `${idPrefix}-opinion-box-${index + 1}` : `${idPrefix}-opinion-box-${index + 1}-${part + 1}`,
+        html,
+      })));
       blocks.push(richStaticBlock({
         id: `${idPrefix}-summary-${index + 1}`,
         html: valueSummaryBoxHtml(value.name, question.polarity_summaries, question.question_key, itemTexts[value.name]),
@@ -727,7 +917,9 @@ export function buildReportWorkspaceSeed(input: {
   // 붙으므로 키로 쓰면 안 된다 — 이젠오토는 교차 분석이 여섯 번째 장이지만 식별자는 VIII이다.
   const blocksById: Record<string, ReportBlock[]> = {
     I: buildOverviewSection(stats, productInfo, fileName),
-    II: buildDemographicsSection(stats),
+    // 유사 서비스 경험의 주관식(만족 이유)은 분석·저장까지 되는데 어느 장에도 배치되지 않았다
+    // (2026-09-30 케어클·리바랩스 실측). 원본처럼 "유사 서비스 경험" 표 바로 아래에 싣는다.
+    II: [...buildDemographicsSection(stats), ...qualitativeBlocks("demo-prior-service-qual", questionsByKeys(qual, ["priorService"]))],
     IV: buildJourneySection(stats),
     III: buildFeatureSection(stats, qual, sa.featureExperience, {
       featureQualitativeBlocks,

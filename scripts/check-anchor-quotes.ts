@@ -26,7 +26,7 @@ function check(label: string, actual: unknown, expected: unknown) {
 
 const run = (quotes: { r: number; from: string; to: string; reason_from?: string; reason_to?: string }[]) =>
   resolveAnchorQuotes(
-    { groups: [{ polarity: "negative", categories: [{ label: "L", respondents: [1, 2, 3], quotes, insight: "i" }] }] } as AnchorCombinedOutput,
+    { groups: [{ polarity: "negative", categories: [{ label: "L", respondents: [1, 2, 3], quotes, insight: "i", field_actions: [] }] }] } as AnchorCombinedOutput,
     INPUTS,
   );
 
@@ -84,8 +84,8 @@ const counted = resolveAnchorQuotes(
       polarity: "negative",
       categories: [
         // 중복(2가 두 번)과 입력에 없는 번호(99)를 섞어 둔다.
-        { label: "A", respondents: [1, 2, 2, 99], quotes: [], insight: "i" },
-        { label: "B", respondents: [3], quotes: [], insight: "i" },
+        { label: "A", respondents: [1, 2, 2, 99], quotes: [], insight: "i", field_actions: [] },
+        { label: "B", respondents: [3], quotes: [], insight: "i", field_actions: [] },
       ],
     }],
   } as AnchorCombinedOutput,
@@ -126,7 +126,7 @@ check("완결된 앞 문장은 데려오지 않음",
 // ── 마지막 하나 남은 인용문은 버리지 않는다(2026-09-07) ─────────────────────────
 const LONE = "산책을 하다 보면 여러 가지가 아쉬운데 우선 걸음 수가 제대로 안 올라가고 지도도 자꾸 튀어서 내가 어디를 걸었는지 알기 어렵고 보상 상자도 잘 안 보여서 결국 흥미가 떨어져 그만두게 되는 경우가 많았습니다그리고 전반적으로 앱이 무거워서 실행할 때마다 한참 기다려야 하는 점도 계속 신경이 쓰였습니다.";
 const dropped = resolveAnchorQuotes(
-  { groups: [{ polarity: "negative", categories: [{ label: "L", respondents: [4], quotes: [{ r: 4, from: "산책을 하다", to: "신경이 쓰였습니다", reason_from: "없는조각", reason_to: "없는조각" }], insight: "i" }] }] } as AnchorCombinedOutput,
+  { groups: [{ polarity: "negative", categories: [{ label: "L", respondents: [4], quotes: [{ r: 4, from: "산책을 하다", to: "신경이 쓰였습니다", reason_from: "없는조각", reason_to: "없는조각" }], insight: "i", field_actions: [] }] }] } as AnchorCombinedOutput,
   [...INPUTS, { respondent_id: 4, reason: LONE }],
 );
 check("긴 인용문 하나뿐이면 남김", dropped.groups[0].categories[0].quotes.length, 1);

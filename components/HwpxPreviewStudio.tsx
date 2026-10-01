@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { findHtml, PREVIEW_NAVIGATION, type HwpxPreviewReportOption, type PatchPreview } from "./hwpx-preview/model";
+import { findHtml, findHtmlByPrefix, PREVIEW_NAVIGATION, type HwpxPreviewReportOption, type PatchPreview } from "./hwpx-preview/model";
 import {
   A4Page,
   RivalabsConclusionReferencePage,
@@ -158,7 +158,7 @@ export function HwpxPreviewStudio({
 
           <A4Page id="preview-page-1" className="min-h-[1122px] p-14 sm:p-20">
             <p className="text-3xl font-bold text-[#1d5eaa]">목차</p>
-            <div className="mt-12 space-y-6 text-[17px] leading-8 text-[#27364b]">
+            <div className="mt-12 space-y-6 text-[13px] leading-8 text-[#27364b]">
               {["Part 1. 조사 기획", "Part 2. 사용성 테스트", "Ⅲ. 기능별 고객 경험 평가", "Ⅳ. 핵심구매요소", "Ⅴ. 4대 가치 만족도", "Ⅷ. 종합 만족도 및 NPS 지수", "Ⅸ. 종합 결과 및 제언"].map((item, index) => <p key={item} className={index === 2 ? "font-bold text-[#1d63bd]" : ""}>{item}<span className="ml-3 text-[#9aa6b5]">····················</span></p>)}
             </div>
           </A4Page>
@@ -175,7 +175,7 @@ export function HwpxPreviewStudio({
               question={question}
               scoreboxHtml={findHtml(workspace, `feature-qualitative-q${qIndex}-scorebox`)}
               emotionboxHtml={findHtml(workspace, `feature-qualitative-q${qIndex}-emotionbox`)}
-              detailHtml={findHtml(workspace, `feature-qualitative-q${qIndex}-detail`)}
+              detailHtml={findHtmlByPrefix(workspace, `feature-qualitative-q${qIndex}-detail`)}
               pageId={`preview-feature-${index}`}
               detailPageId={`preview-feature-detail-${index}`}
               showChapterHeading={index === 0}

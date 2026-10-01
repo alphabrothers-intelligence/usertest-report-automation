@@ -43,7 +43,7 @@ const parsed = parseWallaWorkbook(buffer.buffer.slice(buffer.byteOffset, buffer.
 const quantStats = computeQuantStats(normalizeWallaRows(parsed.headerRow, parsed.dataRows), parsed.headerRow);
 const category = (id: string, polarity: "negative" | "positive", label: string, quotes: string[]) => ({
   id, question_id: "q1", polarity, label, clause_count: quotes.length, quotes,
-  quotes_display: null, insight_draft: "요약", insight_final: null, insight_approved: true, polarity_reviewed: false, respondents: null,
+  quotes_display: null, insight_draft: "요약", insight_final: null, insight_approved: true, polarity_reviewed: false, respondents: null, field_actions: null,
 });
 const seed = buildReportWorkspaceSeed({
   quantStats,

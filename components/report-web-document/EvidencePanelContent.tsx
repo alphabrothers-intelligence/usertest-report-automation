@@ -1,5 +1,14 @@
 "use client";
 
+/**
+ * 왼쪽 `분석 근거` 패널의 내용물. **문서 본문이 아니라 작업 화면이라, 원본 보고서 양식이
+ * 아닌 애플 디자인 시스템을 쓴다**(2026-09-11 담당자 결정). 규칙 셋:
+ *  - 색은 역할로 나눈다. 파랑 `#0066cc`는 "누를 것"(링크·주 버튼)에만, 극성색은 "데이터의 뜻"
+ *    에만 쓴다. 극성색은 문서가 쓰는 값과 **같은 값**이어야 한다(lib/report/workspace.ts의
+ *    POLARITY_BANNER) — 패널에서 고른 색이 문서에 그대로 나타나야 하기 때문.
+ *  - 상자를 겹치지 않는다. 구분은 괘선(#f0f0f0 / #e0e0e0)과 여백으로만.
+ *  - 본문 17px/1.47/-0.374px. 예전 11~13px는 "가독성이 제일 우선순위"라는 요구와 맞지 않았다.
+ */
 import type { ReactNode } from "react";
 import type { AnalysisReference } from "@/components/report-web-document/analysisEvidence";
 import { reportQuoteReviewToken } from "@/lib/report/quoteEnding";
@@ -15,6 +24,37 @@ export type QuoteSourceResult = {
     matches: Array<{ quote: string; matchStart: number; matchEnd: number; needsReview: boolean }>;
   }>;
 };
+
+/**
+ * 패널 안의 동작 버튼. **글씨만 파랗게 두지 말 것**(2026-09-11 담당자 지적: "버튼으로 생각되지
+ * 않습니다, 너무 글씨만 있어요"). 애플 시스템을 쓰더라도 누를 것은 알약 배경을 입어야 한다 —
+ * `variant="plain"`은 본문 안 링크(접기/펼치기)에만 쓴다.
+ */
+export function PanelButton({
+  children,
+  onClick,
+  variant = "secondary",
+  disabled,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  variant?: "primary" | "secondary";
+  disabled?: boolean;
+}) {
+  const skin = variant === "primary"
+    ? "bg-[#0066cc] text-white hover:bg-[#0071e3]"
+    : "bg-[#f0f0f2] text-[#1d1d1f] hover:bg-[#e6e6eb]";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center rounded-full px-4 py-2 text-[13px] font-semibold leading-none tracking-[-0.224px] disabled:cursor-not-allowed disabled:opacity-50 ${skin}`}
+    >
+      {children}
+    </button>
+  );
+}
 
 /** 사람이 직접 눈으로 확인해야 하는 항목 — 나머지(계산 방식 등)는 참고용 사실이다. */
 const ACTION_BULLET_LABELS = new Set(["확인할 내용", "검증할 부분"]);
@@ -32,31 +72,24 @@ export type PolarityReviewTarget = {
 
 const POLARITY_LABEL: Record<string, string> = { positive: "긍정", negative: "부정", neutral: "중립" };
 
-/** 판정을 흔들리게 만든 표현에 형광펜을 친다 — "무엇을 보고 이 판정이 나왔는지"가 카드에서 바로 보이도록. */
-function QuoteWithSignals({ quote, signals }: { quote: string; signals: string[] }) {
-  const pattern = signals.filter(Boolean).map((signal) => signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-  if (!pattern) return <>{quote}</>;
-  return (
-    <>
-      {quote.split(new RegExp(`(${pattern})`)).map((part, index) =>
-        signals.includes(part)
-          ? <mark key={`${part}-${index}`} className="rounded bg-[#ffe9b8] px-0.5 text-inherit">{part}</mark>
-          : <span key={`${part}-${index}`}>{part}</span>,
-      )}
-    </>
-  );
-}
+/** 문서(lib/report/workspace.ts POLARITY_BANNER)와 **같은 값**. 여기서 색을 새로 만들지 말 것. */
+const POLARITY_COLOR: Record<string, { bg: string; fg: string }> = {
+  positive: { bg: "#c0cdef", fg: "#1e293b" },
+  negative: { bg: "#fde4d0", fg: "#c2410c" },
+  neutral: { bg: "#e8e8e8", fg: "#52525b" },
+};
+
+/** 판정을 고를 때 담당자가 실제로 던지는 질문. 극성 이름이 아니라 이 말이 제목이 된다. */
+const POLARITY_ANSWER: Record<string, string> = { negative: "불평이다", neutral: "감상이다", positive: "칭찬이다" };
 
 /**
- * 극성 판정 확인 카드(2026-09-02). **경고가 아니라 결정 화면이다.**
+ * 극성 판정 확인 카드. **봐야 하는 건 응답 문장뿐이다.**
  *
- * 첫 판(같은 날 오전)은 사유·판단 기준·형광펜 설명·되돌리기 안내를 다 문장으로 적어 18줄이
- * 넘었고, "읽을 게 너무 많아 빨리 판단할 수 없다"는 지적을 받았다. 지금은 **판단에 실제로
- * 필요한 것만** 남긴다:
- *  - 무엇을 판단하나 → 묶음 이름 + 한 줄 사유
- *  - 무엇을 보고 판단하나 → 응답 원문(판정 근거가 된 표현에 형광펜)
- *  - 어떻게 결정하나 → 두 버튼. **판단 기준은 별도 문단이 아니라 버튼 밑 한 마디로** 붙인다
- *    (기준을 읽는 곳과 고르는 곳이 같아야 한 번에 끝난다).
+ * 2026-09-11 담당자 지적("갈색이 별로고 뭘 봐야 할지 모르겠다")으로 다시 짰다. 사유 문장·
+ * 판단 기준 캡션·감정어 형광펜을 전부 뺐다 — 감정어에 색을 칠하면 "이 색만 보면 된다"로
+ * 읽혀 판단이 오히려 좁아진다. 대신 응답을 본문 크기로 키워 카드의 주인공으로 두고,
+ * 제목이 곧 질문이 되게 했다. 두 버튼은 문서의 극성 배너색을 그대로 입는다 — **누를 색이
+ * 곧 보고서에 찍힐 색**이라 글을 읽지 않아도 무엇을 고르는지 보인다.
  */
 export function PolarityReviewCard({
   target,
@@ -67,42 +100,54 @@ export function PolarityReviewCard({
   status: "idle" | "loading" | "error";
   onDecide: (polarity: PolarityReviewTarget["polarity"] | null) => void;
 }) {
-  const current = POLARITY_LABEL[target.polarity] ?? "미분류";
   const alternative = target.polarity === "neutral" ? "negative" : "neutral";
   const busy = status === "loading";
-  const hint: Record<string, string> = { positive: "만족·칭찬", negative: "구체적 불편 있음", neutral: "취향·단순 감상" };
+  const options = [
+    { key: target.polarity, answer: POLARITY_ANSWER[target.polarity] ?? "그대로 둔다", caption: `${POLARITY_LABEL[target.polarity] ?? "현재"} 그대로 · 현재`, decide: null },
+    { key: alternative, answer: POLARITY_ANSWER[alternative], caption: `${POLARITY_LABEL[alternative]}으로 옮김`, decide: alternative },
+  ] as const;
+  const current = POLARITY_COLOR[target.polarity] ?? POLARITY_COLOR.neutral;
+
   return (
-    <section className="mb-3 overflow-hidden rounded-xl border border-[#ecd6ae] bg-[#fffaf1]">
-      <div className="px-3.5 pb-2.5 pt-3">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-[#b08a3c]">극성 확인</p>
-        <p className="mt-1 text-[15px] font-bold leading-5 text-[#1f3554]">{target.label}</p>
-        <p className="mt-1 text-[11px] leading-4 text-[#8a7c60]">감정 표현만 있고 구체적인 불편이 없습니다</p>
-      </div>
-      <ul className="space-y-1.5 border-t border-[#f0e3c8] bg-white px-3.5 py-2.5">
+    <section className="studio-ui mb-7 border-b border-[#e0e0e0] pb-7">
+      <p className="text-[14px] leading-[1.43] tracking-[-0.224px] text-[#7a7a7a]">판정 확인</p>
+      <p className="mt-5 text-[14px] font-semibold leading-[1.35] tracking-[-0.374px] text-[#1d1d1f]">
+        이 응답은 {POLARITY_ANSWER[target.polarity] === "불평이다" ? "불평" : "감상"}인가요,{" "}
+        {POLARITY_ANSWER[alternative] === "감상이다" ? "감상" : "불평"}인가요?
+      </p>
+      <p className="mt-3.5 text-[13px] font-semibold leading-[1.47] tracking-[-0.374px] text-[#1d1d1f]">{target.label}</p>
+      <p className="mt-3 inline-block rounded-full px-3 py-1 text-[14px] font-semibold leading-[1.29] tracking-[-0.224px]" style={{ background: current.bg, color: current.fg }}>
+        지금은 {POLARITY_LABEL[target.polarity] ?? "미분류"} 의견
+      </p>
+
+      <ul className="mt-6 border-b border-[#f0f0f0]">
         {target.quotes.map((quote) => (
-          <li key={quote} className="text-[12px] leading-5 text-[#354158]">“<QuoteWithSignals quote={quote} signals={target.signals} />”</li>
+          <li key={quote} className="border-t border-[#f0f0f0] py-[18px] text-[13px] leading-[1.47] tracking-[-0.374px] text-[#1d1d1f]">{quote}</li>
         ))}
       </ul>
-      <div className="grid grid-cols-2 gap-2 border-t border-[#f0e3c8] p-2.5">
-        {([target.polarity, alternative] as const).map((choice, index) => (
-          <button
-            key={choice}
-            type="button"
-            disabled={busy}
-            onClick={() => onDecide(index === 0 ? null : choice)}
-            className={`rounded-lg px-2 py-2 text-center disabled:opacity-60 ${index === 0 ? "border border-[#d9c49b] bg-white hover:bg-[#fffdf8]" : "bg-[#946313] hover:bg-[#7d5310]"}`}
-          >
-            <span className={`block text-xs font-bold ${index === 0 ? "text-[#946313]" : "text-white"}`}>
-              {index === 0 ? `${current} 유지` : `${POLARITY_LABEL[choice]}으로 변경`}
-            </span>
-            <span className={`mt-0.5 block text-[10px] leading-3 ${index === 0 ? "text-[#a8905f]" : "text-white/75"}`}>
-              {hint[choice]}
-            </span>
-          </button>
-        ))}
+
+      <div className="mt-6 flex gap-2.5">
+        {options.map((option) => {
+          const color = POLARITY_COLOR[option.key] ?? POLARITY_COLOR.neutral;
+          return (
+            <div key={option.key || "current"} className="flex-1">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onDecide(option.decide)}
+                className="w-full rounded-full px-4 py-3.5 text-center text-[13px] font-semibold leading-none tracking-[-0.374px] disabled:opacity-60"
+                style={{ background: color.bg, color: color.fg }}
+              >
+                {option.answer}
+              </button>
+              <p className="mt-2 text-center text-[14px] leading-[1.43] tracking-[-0.224px] text-[#7a7a7a]">{option.caption}</p>
+            </div>
+          );
+        })}
       </div>
+
       {(busy || status === "error") && (
-        <p className="border-t border-[#f0e3c8] px-3.5 py-2 text-[11px] text-[#8a7c60]">
+        <p className="mt-4 text-[14px] leading-[1.43] tracking-[-0.224px] text-[#7a7a7a]">
           {busy ? "보고서에 반영하는 중..." : "반영하지 못했습니다. 다시 눌러주세요."}
         </p>
       )}
@@ -113,13 +158,16 @@ export function PolarityReviewCard({
 export type QuoteCompletionTarget = { quote: string; originalResponse: string };
 export type QuoteCompletion = { completedQuote: string; changedFrom: string; changedTo: string };
 
-// needsReview(서버 판정)는 끝맺음 전용이라 "문장 끝맺음 자동 수정" 버튼에만 쓰고,
-// 하이라이트 구간은 띄어쓰기 검토까지 포함하도록 여기서 다시 판정한다.
+/**
+ * 끝맺음이 잘린 자리 표시. **본문(globals.css의 `[data-quote-ending-token]`)과 같은 붉은
+ * 배경을 쓴다** — 예전에는 패널만 붉은 점선 밑줄이라 같은 것이 두 모양으로 보였다
+ * (2026-09-11 담당자 지적). 이 표시는 화면 전용이고 저장·인쇄·복사본에는 들어가지 않는다.
+ */
 function QuoteWithEndingReview({ quote }: { quote: string; needsReview?: boolean }) {
   const token = reportQuoteReviewToken(quote);
-  if (!token) return <>“{quote}”</>;
+  if (!token) return <>{quote}</>;
   const start = quote.lastIndexOf(token);
-  return <>“{quote.slice(0, start)}<span className="decoration-dotted decoration-[1.5px] underline underline-offset-4 decoration-[#d36b62]">{token}</span>{quote.slice(start + token.length)}”</>;
+  return <>{quote.slice(0, start)}<mark className="rounded-[2px] bg-[#ffd8d3] text-inherit shadow-[0_0_0_1px_rgba(211,107,98,.08)]">{token}</mark>{quote.slice(start + token.length)}</>;
 }
 
 function HighlightedOriginal({ text, matches }: { text: string; matches: QuoteSourceResult["sources"][number]["matches"] }) {
@@ -132,7 +180,7 @@ function HighlightedOriginal({ text, matches }: { text: string; matches: QuoteSo
   ranges.forEach((range, index) => {
     if (range.matchStart < cursor) return;
     parts.push(text.slice(cursor, range.matchStart));
-    parts.push(<mark key={`${range.matchStart}-${index}`} className="rounded bg-[#fff0a8] px-0.5 text-inherit">{text.slice(range.matchStart, range.matchEnd)}</mark>);
+    parts.push(<mark key={`${range.matchStart}-${index}`} className="rounded-[2px] bg-[#fff0a8] text-[#1d1d1f]">{text.slice(range.matchStart, range.matchEnd)}</mark>);
     cursor = range.matchEnd;
   });
   parts.push(text.slice(cursor));
@@ -167,35 +215,31 @@ export function AnalysisReferenceContent({
     .filter((bullet) => ACTION_BULLET_LABELS.has(bullet.split(": ")[0]))
     .map((bullet) => bullet.split(": ").slice(1).join(": "));
   return (
-    <section key={reference.title} className="quote-context-updated rounded-xl border border-[#c9daf2] bg-[#f5f9ff] p-4">
-      <p className="flex items-center gap-1.5 text-[11px] font-bold text-[#1473e6]"><span className="h-1.5 w-1.5 rounded-full bg-[#1473e6]" />{reference.kind === "정량 계산" ? "현재 보고 있는 도표" : "현재 보고 있는 분석"}</p>
-      <p className="mt-1.5 text-[17px] font-bold leading-6 tracking-[-0.035em] text-[#1f3554]">{reference.title}</p>
-      <p className="mt-1.5 inline-flex rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[#315c9c]">{reference.kind}</p>
-
-      <div className="mt-3 rounded-lg border border-[#ecd6ae] bg-[#fffaf1] p-3">
-        <p className="text-[11px] font-bold text-[#946313]">직접 확인할 것</p>
-        <p className="mt-1 text-[13px] leading-6 text-[#4d4432]">{actionLine(reference, actions)}</p>
-      </div>
+    <section key={reference.title} className="quote-context-updated studio-ui">
+      <p className="text-[14px] font-semibold leading-[1.43] tracking-[-0.224px] text-[#0066cc]">
+        {reference.kind === "정량 계산" ? "지금 보고 있는 도표" : "지금 보고 있는 분석"}
+      </p>
+      <p className="mt-3.5 text-[14px] font-semibold leading-[1.35] tracking-[-0.374px] text-[#1d1d1f]">{reference.title}</p>
+      <p className="mt-5 text-[13px] leading-[1.47] tracking-[-0.374px] text-[#1d1d1f]">{actionLine(reference, actions)}</p>
 
       {details.length > 0 && (
-        <details className="group mt-2 rounded-lg bg-white px-3 py-2">
-          <summary className="cursor-pointer list-none text-[11px] font-bold text-[#5c7ba6] [&::-webkit-details-marker]:hidden">
-            {reference.kind === "정량 계산" ? "이 그래프가 만들어진 방식" : "이 내용이 생성된 근거"} {details.length}가지
-            <span className="ml-1 font-medium text-[#8a99ad] group-open:hidden">펼치기</span>
-            <span className="ml-1 hidden font-medium text-[#8a99ad] group-open:inline">접기</span>
+        <details className="group mt-4">
+          <summary className="cursor-pointer list-none text-[13px] leading-[1.47] tracking-[-0.374px] text-[#0066cc] [&::-webkit-details-marker]:hidden">
+            <span className="group-open:hidden">{reference.kind === "정량 계산" ? "계산 방식 보기" : "생성 근거 보기"}</span>
+            <span className="hidden group-open:inline">접기</span>
           </summary>
-          <div className="mt-2 space-y-2 border-t border-[#eef2f7] pt-2">
+          <div className="mt-4 border-t border-[#f0f0f0]">
             {details.map((bullet) => {
               const [label, ...rest] = bullet.split(": ");
               const body = rest.join(": ");
               return (
-                <div key={bullet}>
-                  <p className="text-[11px] font-bold text-[#7a8799]">{body ? label : "근거"}</p>
-                  <p className="mt-0.5 text-[12px] leading-5 text-[#53627a]">{body || bullet}</p>
+                <div key={bullet} className="border-b border-[#f0f0f0] py-4">
+                  <p className="text-[14px] leading-[1.43] tracking-[-0.224px] text-[#7a7a7a]">{body ? label : "근거"}</p>
+                  <p className="mt-1.5 text-[13px] leading-[1.47] tracking-[-0.374px] text-[#333333]">{body || bullet}</p>
                 </div>
               );
             })}
-            <p className="pt-1 text-[11px] leading-4 text-[#96a1b1]">
+            <p className="pt-4 text-[14px] leading-[1.43] tracking-[-0.224px] text-[#7a7a7a]">
               {reference.kind === "정량 계산"
                 ? "값은 위 계산으로 자동 생성됩니다. 계산이 맞는지가 아니라 문항과 항목의 연결을 보세요."
                 : "직접 인용문이 아니라 위 근거를 종합해 생성된 문장입니다."}
@@ -206,11 +250,11 @@ export function AnalysisReferenceContent({
 
       {reference.kind === "제언" && sourceFileUrl && (
         <>
-          <button type="button" onClick={onRegenerate} disabled={recommendationStatus === "loading"} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#1473e6] px-3 py-2.5 text-xs font-bold text-white hover:bg-[#0f65cf] disabled:cursor-wait disabled:opacity-70">
+          <button type="button" onClick={onRegenerate} disabled={recommendationStatus === "loading"} className="mt-6 inline-flex items-center justify-center gap-2 rounded-full bg-[#0066cc] px-[22px] py-[11px] text-[13px] leading-none tracking-[-0.374px] text-white hover:bg-[#0071e3] disabled:cursor-wait disabled:opacity-70">
             {recommendationStatus === "loading" && <span className="inline-block size-3 animate-spin rounded-full border-2 border-white/45 border-t-white" />}
-            {recommendationStatus === "loading" ? "근거를 바탕으로 다시 생성 중" : "AI로 제언 다시 생성"}
+            {recommendationStatus === "loading" ? "다시 생성 중" : "AI로 제언 다시 생성"}
           </button>
-          {recommendationStatus === "error" && <div className="mt-2 rounded-md bg-[#fff3f1] p-2 text-[11px] leading-5 text-[#b54747]">{recommendationError}<button type="button" onClick={onRegenerate} className="ml-1 font-bold underline">다시 시도</button></div>}
+          {recommendationStatus === "error" && <p className="mt-3 text-[14px] leading-[1.43] tracking-[-0.224px] text-[#c2410c]">{recommendationError}<button type="button" onClick={onRegenerate} className="ml-1.5 text-[#0066cc]">다시 시도</button></p>}
         </>
       )}
     </section>
@@ -234,44 +278,74 @@ export function QuoteSourceContent({
   onResetCompletion: () => void;
   onApplyCompletion: () => void;
 }) {
+  const quoteCount = quoteSource.sources.reduce((count, source) => count + source.matches.length, 0);
   return (
-    <>
-      <section key={`${quoteSource.groupLabel}-${quoteSource.questionLabel}`} className="quote-context-updated rounded-xl border border-[#c9daf2] bg-[#f5f9ff] p-3.5">
-        <p className="flex items-center gap-1.5 text-[11px] font-bold text-[#1473e6]"><span className="h-1.5 w-1.5 rounded-full bg-[#1473e6]" />현재 보고 있는 분석</p>
-        <p className="mt-1.5 text-[18px] font-bold leading-6 tracking-[-0.035em] text-[#1f3554]">{quoteSource.groupLabel}</p>
-        <div className="mt-3 border-t border-[#d9e6f7] pt-2.5"><p className="text-[11px] font-bold text-[#66758b]">대상 문항</p><p className="mt-1 text-[15px] font-semibold leading-6 tracking-[-0.025em] text-[#315c9c]">{quoteSource.questionLabel}</p></div>
-      </section>
-      <p className="mt-4 text-[11px] leading-5 text-[#7a8799]">사용된 인용문 {quoteSource.sources.reduce((count, source) => count + source.matches.length, 0)}건 · 원문 응답 {quoteSource.sources.length}건입니다. 확인할 응답만 펼쳐보세요.</p>
-      <div className="mt-3 space-y-3">
+    <section className="quote-context-updated studio-ui" key={`${quoteSource.groupLabel}-${quoteSource.questionLabel}`}>
+      <p className="text-[14px] font-semibold leading-[1.43] tracking-[-0.224px] text-[#0066cc]">지금 보고 있는 분석</p>
+      <p className="mt-3.5 text-[14px] font-semibold leading-[1.35] tracking-[-0.374px] text-[#1d1d1f]">{quoteSource.groupLabel}</p>
+      <p className="mt-2.5 text-[14px] leading-[1.43] tracking-[-0.224px] text-[#7a7a7a]">{quoteSource.questionLabel} · 인용 {quoteCount}건</p>
+
+      <div className="mt-5 border-b border-[#f0f0f0]">
         {quoteSource.sources.map((source, sourceIndex) => (
           <div key={`${source.sectionLabel}-${source.respondentId}-${source.originalResponse}`}>
-            {source.sectionLabel && source.sectionLabel !== quoteSource.sources[sourceIndex - 1]?.sectionLabel && <div className={`mb-2 mt-4 rounded-md px-3 py-2 text-sm font-bold ${source.sectionLabel.includes("부정") ? "bg-[#fff0e5] text-[#a64d32]" : source.sectionLabel.includes("중립") ? "bg-[#eef0f3] text-[#596273]" : "bg-[#eaf3ff] text-[#315c9c]"}`}>{source.sectionLabel}</div>}
-            <details open className="group rounded-lg border border-[#e3e8ef] bg-[#f7f9fc]">
-              <summary className="cursor-pointer list-none p-3 [&::-webkit-details-marker]:hidden">
-                <p className="text-xs font-bold text-[#315c9c]">{source.questionLabel ? `${source.questionLabel} · ` : ""}응답자 {source.respondentId}번 <span className="ml-1 font-medium text-[#7a8799]">인용 {source.matches.length}건</span></p>
-                <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-[#53627a]"><QuoteWithEndingReview quote={source.matches[0]?.quote ?? ""} needsReview={source.matches[0]?.needsReview ?? false} /></p>
-                <p className="mt-2 text-[11px] font-semibold text-[#315c9c] group-open:hidden">원문 펼쳐 보기</p><p className="mt-2 hidden text-[11px] font-semibold text-[#315c9c] group-open:block">원문 접기</p>
+            {source.sectionLabel && source.sectionLabel !== quoteSource.sources[sourceIndex - 1]?.sectionLabel && (
+              <p className="border-t border-[#e0e0e0] pb-1 pt-5 text-[14px] font-semibold leading-[1.29] tracking-[-0.224px] text-[#7a7a7a]">{source.sectionLabel}</p>
+            )}
+            {/* **원문은 기본 펼침이다**(2026-09-11 담당자 요청 — "누르지 않아도 처음부터 보였으면").
+                한때 패널이 길어진다는 이유로 접어뒀는데, 인용문이 원문의 어디서 왔는지 대조하는
+                것이 이 패널의 본래 일이라 접으면 매번 한 번씩 더 눌러야 한다. 접는 쪽으로
+                되돌리지 말 것. */}
+            <details open className="group border-t border-[#f0f0f0]">
+              <summary className="cursor-pointer list-none py-[18px] [&::-webkit-details-marker]:hidden">
+                <span className="block text-[13px] leading-[1.47] tracking-[-0.374px] text-[#1d1d1f]">
+                  <QuoteWithEndingReview quote={source.matches[0]?.quote ?? ""} needsReview={source.matches[0]?.needsReview ?? false} />
+                </span>
+                <span className="mt-2.5 block text-[14px] leading-[1.43] tracking-[-0.224px] text-[#7a7a7a]">
+                  {source.questionLabel ? `${source.questionLabel} · ` : ""}{source.respondentId}번
+                  {source.matches.length > 1 ? ` · 인용 ${source.matches.length}건` : ""}
+                  {source.matches.some((match) => match.needsReview) ? <span className="font-semibold text-[#c2410c]"> · 끝맺음 없음</span> : null}
+                  <span className="text-[#0066cc]"> · <span className="group-open:hidden">원문</span><span className="hidden group-open:inline">접기</span></span>
+                </span>
               </summary>
-              <div className="border-t border-[#e3e8ef] p-3">
-                <div className="space-y-2">
-                  {source.matches.map((match) => (
-                    <div key={match.quote} className="rounded-md border border-[#dbe3ee] bg-white p-2.5">
-                      <p className="text-[10px] font-bold text-[#748196]">보고서 인용문</p>
-                      <p className="mt-1 text-xs leading-5 text-[#354158]"><QuoteWithEndingReview quote={match.quote} needsReview={match.needsReview} /></p>
-                      {match.needsReview && quoteCompletionTarget?.quote !== match.quote && <button type="button" onClick={() => onGenerateCompletion({ quote: match.quote, originalResponse: source.originalResponse })} className="mt-2 rounded-md border border-[#efc1bc] bg-[#fff7f6] px-2.5 py-1.5 text-xs font-bold text-[#b54747] hover:bg-[#fff0ee]">문장 끝맺음 자동 수정</button>}
-                      {quoteCompletionTarget?.quote === match.quote && quoteCompletionStatus === "loading" && <div className="mt-2 flex items-center gap-2 rounded-md border border-[#efc1bc] bg-[#fff7f6] px-2.5 py-2 text-xs font-semibold text-[#a64d32]"><span className="inline-block size-3 animate-spin rounded-full border-2 border-[#e7aaa4] border-t-[#b54747]" />문장 끝맺음을 확인하고 있습니다.</div>}
-                      {quoteCompletionTarget?.quote === match.quote && quoteCompletionStatus === "error" && <div className="mt-2 rounded bg-[#fff5f3] p-2 text-xs leading-5 text-[#b54747]">보완안을 만들지 못했습니다. 본문의 인용문은 그대로 유지되며 직접 수정할 수 있습니다.<button type="button" onClick={() => onGenerateCompletion({ quote: match.quote, originalResponse: source.originalResponse })} className="ml-1 font-bold underline">다시 시도</button></div>}
-                      {quoteCompletionTarget?.quote === match.quote && quoteCompletion && <div className="mt-2 rounded-md border border-[#cfe0f5] bg-[#f7faff] p-2"><p className="text-[10px] font-bold text-[#356df3]">보완안 · 끝어미만 변경</p><p className="mt-1 text-xs leading-5 text-[#354158]">{quoteCompletion.completedQuote.slice(0, quoteCompletion.completedQuote.length - quoteCompletion.changedTo.length)}<mark className="rounded bg-[#cfe8ff] text-[#174e91]">{quoteCompletion.changedTo}</mark></p><div className="mt-2 flex gap-2"><button type="button" onClick={onResetCompletion} className="flex-1 rounded border border-[#ccd5e0] px-2 py-1.5 text-[11px] font-semibold text-[#667085]">유지</button><button type="button" onClick={onApplyCompletion} className="flex-1 rounded bg-[#1473e6] px-2 py-1.5 text-[11px] font-semibold text-white">적용</button></div></div>}
-                    </div>
-                  ))}
-                </div>
-                <p className="mb-1 mt-3 text-[10px] font-bold text-[#748196]">응답 원문</p>
-                <p className="whitespace-pre-wrap text-sm leading-7 text-[#354158]"><HighlightedOriginal text={source.originalResponse} matches={source.matches} /></p>
+              <div className="pb-[18px]">
+                {source.matches.map((match, matchIndex) => (
+                  <div key={match.quote} className="mb-3">
+                    {/* 첫 인용문은 위 요약 줄에 이미 있다 — 원문을 기본 펼침으로 되돌린 뒤
+                        같은 문장이 연달아 두 번 찍혀서, 둘째 인용문부터만 여기 적는다. */}
+                    {matchIndex > 0 && (
+                      <p className="mb-1.5 text-[13px] leading-[1.47] tracking-[-0.374px] text-[#1d1d1f]"><QuoteWithEndingReview quote={match.quote} needsReview={match.needsReview} /></p>
+                    )}
+                    {match.needsReview && quoteCompletionTarget?.quote !== match.quote && (
+                      <PanelButton onClick={() => onGenerateCompletion({ quote: match.quote, originalResponse: source.originalResponse })}>끝맺음 고치기</PanelButton>
+                    )}
+                    {quoteCompletionTarget?.quote === match.quote && quoteCompletionStatus === "loading" && (
+                      <p className="text-[14px] leading-[1.43] tracking-[-0.224px] text-[#7a7a7a]">끝맺음을 확인하고 있습니다.</p>
+                    )}
+                    {quoteCompletionTarget?.quote === match.quote && quoteCompletionStatus === "error" && (
+                      <><p className="text-[14px] leading-[1.43] tracking-[-0.224px] text-[#c2410c]">보완안을 만들지 못했습니다. 인용문은 그대로 있고 직접 고칠 수 있습니다.</p><div className="mt-2"><PanelButton onClick={() => onGenerateCompletion({ quote: match.quote, originalResponse: source.originalResponse })}>다시 시도</PanelButton></div></>
+                    )}
+                    {quoteCompletionTarget?.quote === match.quote && quoteCompletion && (
+                      <div>
+                        <p className="text-[13px] leading-[1.47] tracking-[-0.374px] text-[#1d1d1f]">
+                          {quoteCompletion.completedQuote.slice(0, quoteCompletion.completedQuote.length - quoteCompletion.changedTo.length)}
+                          <mark className="rounded-[2px] bg-[#dce7fa] text-[#1d1d1f]">{quoteCompletion.changedTo}</mark>
+                        </p>
+                        <div className="mt-2.5 flex gap-2">
+                          <PanelButton variant="primary" onClick={onApplyCompletion}>적용</PanelButton>
+                          <PanelButton onClick={onResetCompletion}>그대로 두기</PanelButton>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <p className="mt-1 rounded-[11px] bg-[#f5f5f7] px-5 py-4 text-[13px] leading-[1.47] tracking-[-0.374px] text-[#333333] whitespace-pre-wrap">
+                  <HighlightedOriginal text={source.originalResponse} matches={source.matches} />
+                </p>
               </div>
             </details>
           </div>
         ))}
       </div>
-    </>
+    </section>
   );
 }

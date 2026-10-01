@@ -1,6 +1,7 @@
 import type { CategoryCount } from "@/lib/quant/basic";
+import type { QuantStats } from "@/lib/quant/compute";
 import { computeBarWithAverageRange } from "@/lib/report/chartAxis";
-import { chartBlock } from "@/lib/report/sections";
+import { chartBlock, rankCompositionBlock, tableBlock, type ReportBlock } from "@/lib/report/sections";
 
 export function workspaceSlug(label: string): string {
   return label.replace(/\s+/g, "-").replace(/[^\w가-힣-]/g, "");
@@ -57,4 +58,40 @@ export function meanChart(
     axisMax,
     items: items.map((item, index) => ({ id: itemIds[index], label: item.name, value: item.mean })),
   });
+}
+
+/**
+ * 중요도 순위 도표 한 벌(순위 구성 누적막대 + 순위 종합 표).
+ *
+ * **같은 raw data 안에서도 이 순위가 "기능"인지 "핵심구매요소"인지가 다르다**(케어클은
+ * 구매요소, 리바랩스는 기능 — `lib/quant/featureRanking.ts` 주석). 그래서 어느 장이 이 도표를
+ * 가져갈지는 호출부가 정하고, 그리는 방법은 여기 한 곳에 둔다 — 두 벌로 두면 한쪽만 고쳐진다.
+ */
+export function importanceRankBlocks(stats: QuantStats, params: {
+  idPrefix: string;
+  compositionTitle: string;
+  tableTitle: string;
+  itemHeader: string;
+}): ReportBlock[] {
+  const rankedImportance = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
+  const segmentNames = [...new Set(stats.rankPositionComposition.flatMap((row) => row.segments.map((segment) => segment.name)))];
+  if (rankedImportance.length === 0 || stats.rankPositionComposition.length === 0) return [];
+  const palette = ["#ff7b7b", "#58b1cf", "#9bcdb8", "#5fc5c1", "#c890d5", "#ffe39a", "#aeb8c8", "#f5ad80"];
+  return [
+    rankCompositionBlock({
+      id: `${params.idPrefix}-rank-composition`,
+      title: params.compositionTitle,
+      candidates: segmentNames.map((name, index) => ({ name, color: palette[index % palette.length] })),
+      rows: stats.rankPositionComposition.map((row) => ({
+        rank: row.rank,
+        segments: segmentNames.map((name) => ({ name, percentage: row.segments.find((segment) => segment.name === name)?.percentage ?? 0 })),
+      })),
+    }),
+    tableBlock({
+      id: `${params.idPrefix}-importance-table`,
+      title: params.tableTitle,
+      headers: ["순위", params.itemHeader, "상대 중요도"],
+      rows: rankedImportance.map((item, index) => [`${index + 1}위`, item.name, item.score]),
+    }),
+  ];
 }

@@ -92,14 +92,11 @@ export function RivalabsFeatureReferencePage({
               <strong data-hwpx-edit-key={`${editPrefix}:mean`} contentEditable suppressContentEditableWarning>만족도 점수 평균 : {feature?.mean.toFixed(2) ?? "-"} / 10</strong>
               <span><strong data-hwpx-edit-key={`${editPrefix}:sd`} contentEditable suppressContentEditableWarning>표준편차 : {feature?.sd.toFixed(2) ?? "-"}</strong><small>*평균에서의 흩어진 정도</small></span>
             </div>
-            <div className="rivalabs-two-column mt-4">
+            {/* "주요 키워드 도출" 워드클라우드 칸은 뺐다(2026-09-15 실무자 요청) — 뷰어 본문과 같다. */}
+            <div className="rivalabs-chart-frame mt-4">
               <div className="rivalabs-cell">
                 <p className="rivalabs-cell-title">만족도 분포도</p>
                 <div className="rivalabs-chart-slot report-rich-static" dangerouslySetInnerHTML={{ __html: distributionHtml }} />
-              </div>
-              <div className="rivalabs-cell">
-                <p className="rivalabs-cell-title">주요 키워드 도출</p>
-                <ReportImageUploadSlots key={editPrefix} storageKey={`hwpx-preview:feature-keyword:${editPrefix}`} emptyLabel="워드클라우드 이미지 첨부" maxImages={1} variant="wordcloud" />
               </div>
             </div>
             <div className="rivalabs-emotion-frame report-rich-static mt-5" dangerouslySetInnerHTML={{ __html: emotionboxHtml }} />

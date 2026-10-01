@@ -21,6 +21,19 @@ function normalized(value: string) {
   return value.normalize("NFKC").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[\u200B\s]+/g, "");
 }
 
+/**
+ * 문항 키를 찾는다. **띄어쓰기 차이는 무시한다.**
+ *
+ * 저장된 보고서의 키와 지금 raw data에서 만든 키가 공백 하나로 어긋나는 일이 있다(2026-09-15
+ * 케어클 실측: 보고서에는 `feature: LED 컬러 변경`, 지금 스펙은 `feature:LED 컬러 변경` — 기능명
+ * 앞 공백을 예전엔 안 다듬었다). 그러면 원문 대조가 통째로 실패하면서 패널에 "원본 응답에서
+ * 인용문을 찾지 못했습니다"만 뜬다. 다시 분석을 돌리지 않고도 옛 보고서가 열리도록 여기서 맞춘다.
+ */
+function findSpec<T extends { id: string }>(specs: T[], questionKey: string): T | undefined {
+  return specs.find((spec) => spec.id === questionKey)
+    ?? specs.find((spec) => normalized(spec.id) === normalized(questionKey));
+}
+
 function findNormalizedRange(source: string, quote: string) {
   const directStart = source.indexOf(quote);
   if (directStart >= 0) return { matchStart: directStart, matchEnd: directStart + quote.length };
@@ -57,7 +70,7 @@ export async function GET(request: Request) {
   // 스키마로 읽으면 리바랩스가 아닌 raw data에서 원문 대조가 통째로 안 된다(2026-09-09 실측).
   const source = await loadQuestionSpecs(parsed.data.source, null);
   if (!source.ok) return NextResponse.json({ ok: false, error: source.error }, { status: 404 });
-  const spec = source.specs.find((question) => question.id === parsed.data.questionKey);
+  const spec = findSpec(source.specs, parsed.data.questionKey);
   if (!spec) return NextResponse.json({ ok: false, error: "인용문이 사용된 문항을 찾지 못했습니다." }, { status: 404 });
 
   const quoteKey = normalized(parsed.data.quote);
@@ -85,7 +98,7 @@ export async function POST(request: Request) {
   // 스키마로 읽으면 리바랩스가 아닌 raw data에서 원문 대조가 통째로 안 된다(2026-09-09 실측).
   const source = await loadQuestionSpecs(parsed.data.source, null);
   if (!source.ok) return NextResponse.json({ ok: false, error: source.error }, { status: 404 });
-  const spec = source.specs.find((question) => question.id === parsed.data.questionKey);
+  const spec = findSpec(source.specs, parsed.data.questionKey);
   if (!spec) return NextResponse.json({ ok: false, error: "인용문이 사용된 문항을 찾지 못했습니다." }, { status: 404 });
 
   const grouped = new Map<number, {

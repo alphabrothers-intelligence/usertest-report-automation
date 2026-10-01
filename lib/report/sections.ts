@@ -206,6 +206,8 @@ export type ReportTextBlock = {
   /** true면 서식(극성 배너 색상 등)이 있는 정성 콘텐츠 — 단순 편집기(RichReportEditor)가
    * 인라인 스타일을 제거하므로, 서식을 보존하는 렌더링 경로로 표시한다(2026-07-26). */
   styled?: boolean;
+  /** true면 제목 구실을 하는 블록 — 쪽 끝에 혼자 남지 않고 다음 블록과 함께 다음 쪽으로 간다. */
+  keepWithNext?: boolean;
 };
 
 /**
@@ -247,6 +249,25 @@ export type ReportSectionContent = {
   title: string;
   /** 목차의 장 시작 쪽수 수동 보정값. 비어 있으면 자동 계산한다. */
   tocPageOverride?: string;
+  /**
+   * 담당자가 손으로 지정한 쪽 배치. **블록 종류 16개에 각각 필드를 얹지 않고 장에 모아 둔다** —
+   * 어느 블록에 걸렸는지 한눈에 보이고, 블록 종류를 새로 만들어도 따라 고칠 곳이 없다.
+   * 쪼개진 조각(`X--p2`)은 원래 id로 조회한다(`originalBlockId`).
+   */
+  /** 이 블록 앞에서 쪽을 넘긴다. */
+  pageBreakBefore?: string[];
+  /** 이 블록은 쪼개지 않는다(한 쪽에 통째로 둔다). */
+  keepTogether?: string[];
+  /** 담당자가 "앞 블록과 붙여두기"를 지정한 블록 id — 쪽이 갈릴 때 앞 블록을 함께 데려간다. */
+  keepWithPrevious?: string[];
+  /** Word의 "다음 문단과 함께" — 쪽이 갈릴 때 이 블록이 다음 블록과 떨어지지 않는다. */
+  keepWithNext?: string[];
+  /**
+   * Word 표 속성의 "페이지 끝에서 행을 자동으로 나누기". **기본은 끔**(2026-09-30 담당자 결정) —
+   * 쪽 끝 남은 자리를 채우려고 행 하나를 가운데서 자르지 않고 그 행부터 다음 쪽으로 넘긴다.
+   * 한 행이 한 쪽보다 크면 켜짐 여부와 무관하게 나눈다(안 나누면 쪽이 넘친다).
+   */
+  rowBreak?: string[];
   /** 웹 A4 레이아웃 측정으로 계산된 장 시작 쪽수. */
   tocPageNumber?: number;
   blocks: ReportBlock[];
@@ -556,8 +577,8 @@ export function headingBlock(params: { id: string; variant: ReportHeadingBlock["
   };
 }
 
-export function textBlock(params: { id: string; label: string; html: string; pending?: boolean; styled?: boolean }): ReportTextBlock {
-  return { id: params.id, kind: "text", label: params.label, html: params.html, pending: params.pending, styled: params.styled };
+export function textBlock(params: { id: string; label: string; html: string; pending?: boolean; styled?: boolean; keepWithNext?: boolean }): ReportTextBlock {
+  return { id: params.id, kind: "text", label: params.label, html: params.html, pending: params.pending, styled: params.styled, keepWithNext: params.keepWithNext };
 }
 
 export function richStaticBlock(params: { id: string; html: string; summaryQuestionKey?: string; summaryKind?: "polarity" | "value" | "section" }): ReportRichStaticBlock {

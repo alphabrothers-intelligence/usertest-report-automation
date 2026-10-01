@@ -103,7 +103,7 @@ export function BriefReport({ dataset, source }: { dataset?: string; source?: st
           ].map((row) => (
             <div key={row.label} className="rounded-lg bg-[#f8fafc] px-3 py-3">
               <dt className="text-[12px] text-[#71717a]">{row.label}</dt>
-              <dd className="mt-0.5 text-[17px] font-bold text-[#18181b]">
+              <dd className="mt-0.5 text-[13px] font-bold text-[#18181b]">
                 {row.now.toLocaleString()}
                 {row.before !== null && (
                   <span className="ml-1 text-[12px] font-medium text-[#a1a1aa]">/ {row.before.toLocaleString()}</span>

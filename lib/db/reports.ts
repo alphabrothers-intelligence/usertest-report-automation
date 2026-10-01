@@ -192,7 +192,12 @@ export async function saveWorkspaceDraft(
   return { savedAt: row?.workspace_draft_saved_at ?? null };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getReportById(reportId: string): Promise<ReportRow | null> {
+  // id는 uuid 컬럼이라 형식이 틀리면 postgres가 에러를 던진다(주소창에서 온 값은 뭐든 올 수 있다).
+  // "없는 보고서"와 같게 취급해 호출부가 500이 아니라 빈 화면으로 떨어지게 한다.
+  if (!UUID_RE.test(reportId)) return null;
   const [row] = await sql<ReportRow[]>`select * from reports where id = ${reportId}`;
   return row ?? null;
 }
@@ -307,6 +312,7 @@ export async function saveQualitativeResults(
           quotes: c.quotes,
           quotes_display: c.quotesDisplay,
           insight_draft: c.insight,
+          field_actions: sql.json(c.fieldActions ?? []),
         }));
       });
       if (categoryRows.length > 0) {
@@ -374,6 +380,7 @@ export async function saveQualitativeQuestionResult(
         quotes: c.quotes,
         quotes_display: c.quotesDisplay,
         insight_draft: c.insight,
+        field_actions: sql.json(c.fieldActions ?? []),
       }));
     });
     if (categoryRows.length > 0) await tx`insert into categories ${tx(categoryRows)}`;
@@ -433,6 +440,8 @@ export interface CategoryRow {
   polarity_reviewed: boolean;
   /** 이 카테고리에 속한 응답자 번호(앵커 경로). clause_count는 이 목록의 길이다. */
   respondents: number[] | null;
+  /** 인사이트를 실무로 옮길 분야별 액션 플랜(2026-09-16). 옛 보고서는 null이다. */
+  field_actions: { field: string; action: string }[] | null;
 }
 
 /** 체크포인트 B(7.2절) 대상: 아직 인사이트가 승인되지 않은 카테고리. */

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
-import { ReportWebDocument } from "@/components/ReportWebDocument";
+import { ReportWebDocument, type ToolbarActions } from "@/components/ReportWebDocument";
 import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import type { ReportSectionContent } from "@/lib/report/sections";
 import type { ProductInfo } from "@/lib/productInfo/types";
@@ -18,7 +18,7 @@ type ReportWebWorkspaceProps = {
   workspaceError?: string | null;
   onRetry: () => void;
   sourceFileUrl?: string | null;
-  onToolbarActionsChange?: (actions: { copy: () => void; openCorrections: () => void; toggleToc: () => void; tocOpen: boolean }) => void;
+  onToolbarActionsChange?: (actions: ToolbarActions) => void;
   productInfo: ProductInfo;
   onProductInfoChange: (next: ProductInfo) => void;
   reviewFlags?: ReviewFlag[];

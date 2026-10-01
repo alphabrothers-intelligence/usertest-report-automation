@@ -2,12 +2,14 @@
 
 /**
  * 문서 전체 인용문의 끝맺음·오탈자·띄어쓰기를 한 번에 검토하는 모달 패널.
+ * 화면 서식은 왼쪽 근거 패널과 같은 애플 시스템을 쓴다(`.studio-ui`, 2026-09-11) —
+ * 종류 칩·위험도 배지·항상 떠 있던 입력칸을 빼고, 한 항목을 **원래 문장(회색) →
+ * 고친 문장(연파랑 형광펜)** 두 줄로만 보여준다. 취소선은 읽기를 방해해서 뺐다(2026-09-11). 직접 고칠 때만 입력칸을 펼친다.
  * `/api/report-workspace/text-corrections`(세션 E)를 문항별로 호출해 결과를 모으고,
  * 체크된 항목만 부모(`ReportWebDocument`)의 `onApply`로 넘긴다 — 실제 본문 DOM 수정은
  * 부모가 기존 `applyQuoteCompletion`과 같은 패턴으로 처리한다.
  */
 import { useState } from "react";
-import { splitHighlightParts } from "@/lib/report/quoteEnding";
 import type { ReportSectionContent } from "@/lib/report/sections";
 
 export type BatchCorrectionItem = {
@@ -17,6 +19,8 @@ export type BatchCorrectionItem = {
   risk: "low" | "review";
   questionKey: string;
   questionLabel?: string;
+  /** 같은 문장이 여러 문항에 있을 때 몇 개였는지. 목록에는 한 줄로만 나온다(아래 runScan 주석). */
+  questionCount?: number;
 };
 
 type ApiItem = { quote: string; suggestion: string; changedFrom: string; changedTo: string; kind: "ending" | "typo" | "tone"; risk: "low" | "review" };
@@ -57,6 +61,8 @@ export function QuoteCorrectionPanel({
   const [items, setItems] = useState<BatchCorrectionItem[]>([]);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [edited, setEdited] = useState<Map<string, string>>(new Map());
+  /** 입력칸은 "직접 고치기"를 누른 항목에만 펼친다 — 전부 띄워두면 목록이 읽히지 않는다. */
+  const [editing, setEditing] = useState<Set<string>>(new Set());
 
   async function runScan() {
     if (!sourceFileUrl) return;
@@ -74,7 +80,19 @@ export function QuoteCorrectionPanel({
         const questionLabel = result.questionLabel as string | undefined;
         return (result.items as ApiItem[]).map((item) => ({ quote: item.quote, suggestion: item.suggestion, kind: item.kind, risk: item.risk, questionKey, questionLabel }));
       }));
-      const flat = results.flat();
+      // **같은 문장은 한 줄로 합친다.** 교정 결과는 문장 텍스트에만 달려 있고, 실제 반영
+      // (useReportEvidence의 applyBatchCorrections)도 문서 전체에서 같은 텍스트를 한꺼번에
+      // 바꾼다. 그런데 목록은 문항별로 나열해서, 여러 문항에 같은 문장이 있으면
+      // (실측: 케어클 "없음"이 'GLOW'·'SHOT' 두 문항에) React key가 충돌하고
+      // (`Encountered two children with the same key`) 체크 상태도 서로 엉켰다 —
+      // checked/edited가 인용문 텍스트를 키로 쓰기 때문. 합치면 셋 다 한 번에 맞는다.
+      const merged = new Map<string, BatchCorrectionItem>();
+      for (const item of results.flat()) {
+        const found = merged.get(item.quote);
+        if (found) found.questionCount = (found.questionCount ?? 1) + 1;
+        else merged.set(item.quote, { ...item, questionCount: 1 });
+      }
+      const flat = [...merged.values()];
       setItems(flat);
       // 결정론적("low")으로 나온 항목만 기본 체크 — LLM이 손댄 항목은 항상 사람이 한 번은
       // 보게 하는 이 프로젝트의 표준 원칙(5자 diff 가드레일과 같은 취지)을 기본값에도 적용.
@@ -94,10 +112,6 @@ export function QuoteCorrectionPanel({
     });
   }
 
-  function toggleAll() {
-    setChecked((previous) => (previous.size === items.length ? new Set() : new Set(items.map((item) => item.quote))));
-  }
-
   function apply() {
     const applied = items
       .filter((item) => checked.has(item.quote))
@@ -111,71 +125,87 @@ export function QuoteCorrectionPanel({
 
   if (!open) return null;
 
+  const riskyCount = items.filter((item) => item.risk !== "low").length;
+  const KIND_LABEL: Record<BatchCorrectionItem["kind"], string> = { ending: "끝맺음", typo: "오탈자·띄어쓰기", tone: "말투" };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[#e3e8ef] px-5 py-4">
+    <div className="studio-ui fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
+      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-[18px] bg-white">
+        <div className="flex items-start justify-between gap-5 px-12 pb-7 pt-10">
           <div>
-            <p className="text-base font-bold text-[#263449]">인용문 일괄 검토</p>
-            <p className="mt-1 text-xs leading-5 text-[#7a8799]">문서 전체 인용문의 끝맺음·오탈자·띄어쓰기·말투를 검토합니다. AI가 손댄 항목(&ldquo;확인 필요&rdquo;)은 적용 전 꼭 확인해주세요.</p>
+            <p className="text-[32px] font-semibold leading-[1.1] tracking-[-0.374px] text-[#1d1d1f]">인용문 검토</p>
+            <p className="mt-3.5 text-[13px] leading-[1.47] tracking-[-0.374px] text-[#333333]">
+              {status === "done" && items.length > 0
+                ? <>문서 전체에서 {items.length}건을 찾았습니다.{riskyCount > 0 && <span className="text-[#c2410c]"> {riskyCount}건은 뜻이 바뀔 수 있어 빼두었습니다.</span>}</>
+                : "문서 전체 인용문의 끝맺음·오탈자·띄어쓰기·말투를 한 번에 훑습니다."}
+            </p>
           </div>
-          <button type="button" onClick={onClose} className="rounded px-2 py-1 text-lg text-[#8a94a3] hover:bg-[#f2f5f9]" aria-label="닫기">×</button>
+          <button type="button" onClick={onClose} className="text-[22px] leading-none text-[#7a7a7a] hover:text-[#1d1d1f]" aria-label="닫기">×</button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          {status === "idle" && <p className="text-sm leading-6 text-[#748196]">문서 전체 인용문을 검토합니다. AI 호출이 필요해 다소 시간이 걸릴 수 있습니다.</p>}
-          {status === "loading" && <div className="flex items-center gap-2 text-sm text-[#748196]"><span className="inline-block size-3 animate-spin rounded-full border-2 border-[#c9daf2] border-t-[#315c9c]" />전체 인용문을 검토하고 있습니다...</div>}
-          {status === "error" && <p className="text-sm leading-6 text-[#b54747]">검토에 실패했습니다. 다시 시도해주세요.</p>}
-          {status === "done" && items.length === 0 && <p className="text-sm leading-6 text-[#748196]">교정이 필요한 인용문을 찾지 못했습니다.</p>}
-          {items.length > 0 && (
-            <>
-              <label className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#315c9c]">
-                <input type="checkbox" checked={checked.size === items.length} onChange={toggleAll} />
-                전체 선택 ({checked.size}/{items.length})
-              </label>
-              <div className="space-y-3">
-                {items.map((item) => {
-                  const value = edited.get(item.quote) ?? item.suggestion;
-                  const parts = splitHighlightParts(item.quote, value);
-                  return (
-                    <div key={item.quote} className="rounded-lg border border-[#dbe3ee] p-3">
-                      <div className="flex items-start gap-2">
-                        <input type="checkbox" className="mt-1 shrink-0" checked={checked.has(item.quote)} onChange={() => toggle(item.quote)} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
-                            <span className="rounded bg-[#eef0f3] px-1.5 py-0.5 text-[#596273]">{item.kind === "ending" ? "끝맺음" : item.kind === "tone" ? "말투" : "오탈자·띄어쓰기"}</span>
-                            <span className={`rounded px-1.5 py-0.5 ${item.risk === "low" ? "bg-[#e7f6ec] text-[#2f7a4d]" : "bg-[#fff3f1] text-[#a64d32]"}`}>{item.risk === "low" ? "안전" : "확인 필요"}</span>
-                            {item.questionLabel && <span className="font-medium text-[#9aa5b5]">{item.questionLabel}</span>}
-                          </div>
-                          <p className="mt-1.5 text-xs leading-5 text-[#8a94a3] line-through decoration-[#c9433c]/50">{item.quote}</p>
-                          {value === item.quote
-                            ? <p className="mt-1 text-xs leading-5 text-[#a64d32]">강조어·비속어는 지우면 응답자 의도가 바뀌므로 자동 수정하지 않습니다. 아래에서 직접 다듬거나 다른 인용문으로 교체해주세요.</p>
-                            : <p className="mt-1 text-xs leading-5 text-[#354158]">{parts.prefix}<mark className="rounded bg-[#cfe8ff] text-[#174e91]">{parts.middle}</mark>{parts.suffix}</p>}
-                          <input
-                            type="text"
-                            value={value}
-                            onChange={(event) => setEdited((previous) => new Map(previous).set(item.quote, event.target.value))}
-                            className="mt-2 w-full rounded border border-[#ccd5e0] px-2 py-1 text-xs text-[#354158]"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-[#e0e0e0]">
+          {status === "idle" && <p className="px-12 py-8 text-[13px] leading-[1.47] tracking-[-0.374px] text-[#7a7a7a]">AI 호출이 필요해 30초쯤 걸립니다.</p>}
+          {status === "loading" && <p className="px-12 py-8 text-[13px] leading-[1.47] tracking-[-0.374px] text-[#7a7a7a]">인용문을 훑고 있습니다...</p>}
+          {status === "error" && <p className="px-12 py-8 text-[13px] leading-[1.47] tracking-[-0.374px] text-[#c2410c]">검토에 실패했습니다. 다시 시도해주세요.</p>}
+          {status === "done" && items.length === 0 && <p className="px-12 py-8 text-[13px] leading-[1.47] tracking-[-0.374px] text-[#7a7a7a]">고칠 인용문을 찾지 못했습니다.</p>}
+
+          {items.map((item) => {
+            const value = edited.get(item.quote) ?? item.suggestion;
+            const unchanged = value === item.quote;
+            const open = editing.has(item.quote);
+            return (
+              <div key={item.quote} className={`flex gap-5 border-b border-[#f0f0f0] px-12 py-6 ${open ? "bg-[#fafafc]" : ""}`}>
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked.has(item.quote)}
+                  aria-label={`${item.quote} 적용`}
+                  onClick={() => toggle(item.quote)}
+                  className={`mt-1 size-5 shrink-0 rounded-full ${checked.has(item.quote) ? "bg-[#0066cc]" : "border border-[#d2d2d7] bg-white"}`}
+                >
+                  {checked.has(item.quote) && <svg viewBox="0 0 24 24" className="size-5 p-1 text-white" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>}
+                </button>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] leading-[1.47] tracking-[-0.374px] text-[#7a7a7a]">{item.quote}</p>
+                  {unchanged
+                    ? <p className="mt-1.5 text-[13px] leading-[1.47] tracking-[-0.374px] text-[#c2410c]">강조어·비속어는 지우면 응답자 의도가 바뀌므로 자동으로 고치지 않습니다. 아래에서 직접 다듬어주세요.</p>
+                    : <p className="mt-1.5 text-[13px] leading-[1.47] tracking-[-0.374px] text-[#1d1d1f]"><mark className="rounded-[2px] bg-[#dce7fa] text-[#1d1d1f]">{value}</mark></p>}
+                  {open && (
+                    <input
+                      type="text"
+                      value={value}
+                      onChange={(event) => setEdited((previous) => new Map(previous).set(item.quote, event.target.value))}
+                      className="mt-2.5 w-full rounded-[11px] border border-[#e0e0e0] px-4 py-3 text-[13px] leading-[1.47] tracking-[-0.374px] text-[#1d1d1f] outline-none focus:border-[#0071e3]"
+                    />
+                  )}
+                  <p className="mt-2.5 text-[14px] leading-[1.43] tracking-[-0.224px] text-[#7a7a7a]">
+                    {KIND_LABEL[item.kind]}
+                    {item.risk !== "low" && <span className="font-semibold text-[#c2410c]"> · 뜻이 바뀔 수 있어 빼두었습니다</span>}
+                    {item.questionLabel && ` · ${item.questionLabel}`}
+                    {(item.questionCount ?? 1) > 1 && ` 외 ${(item.questionCount ?? 1) - 1}문항`}
+                    {" · "}
+                    <button type="button" onClick={() => setEditing((previous) => { const next = new Set(previous); if (next.has(item.quote)) next.delete(item.quote); else next.add(item.quote); return next; })} className="text-[#0066cc]">
+                      {open ? "접기" : "직접 고치기"}
+                    </button>
+                  </p>
+                </div>
               </div>
-            </>
-          )}
+            );
+          })}
         </div>
-        <div className="flex gap-2 border-t border-[#e3e8ef] px-5 py-4">
+
+        <div className="flex items-center gap-5 border-t border-[#e0e0e0] px-12 py-7">
           {status !== "done" ? (
-            <button type="button" onClick={() => void runScan()} disabled={!sourceFileUrl || status === "loading"} className="flex-1 rounded-lg bg-[#1473e6] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[#0f65cf] disabled:cursor-not-allowed disabled:opacity-60">
-              {status === "loading" ? "검토 중..." : status === "error" ? "다시 시도" : "전체 인용문 검토 시작"}
+            <button type="button" onClick={() => void runScan()} disabled={!sourceFileUrl || status === "loading"} className="rounded-full bg-[#0066cc] px-[22px] py-[11px] text-[13px] leading-none tracking-[-0.374px] text-white hover:bg-[#0071e3] disabled:cursor-not-allowed disabled:opacity-60">
+              {status === "loading" ? "검토 중..." : status === "error" ? "다시 시도" : "검토 시작"}
             </button>
           ) : (
-            <>
-              <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-[#ccd5e0] px-3 py-2.5 text-sm font-semibold text-[#667085]">닫기</button>
-              <button type="button" onClick={apply} disabled={checked.size === 0} className="flex-1 rounded-lg bg-[#1473e6] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[#0f65cf] disabled:cursor-not-allowed disabled:opacity-60">선택 항목 적용 ({checked.size})</button>
-            </>
+            <button type="button" onClick={apply} disabled={checked.size === 0} className="rounded-full bg-[#0066cc] px-[22px] py-[11px] text-[13px] leading-none tracking-[-0.374px] text-white hover:bg-[#0071e3] disabled:cursor-not-allowed disabled:opacity-40">
+              {checked.size}건 수정하기
+            </button>
           )}
+          <button type="button" onClick={onClose} className="rounded-full bg-[#f0f0f2] px-[22px] py-[11px] text-[13px] leading-none tracking-[-0.374px] text-[#1d1d1f] hover:bg-[#e6e6eb]">닫기</button>
+          {status === "done" && <span className="ml-auto text-[14px] leading-[1.43] tracking-[-0.224px] text-[#7a7a7a]">체크한 항목만 본문에 반영됩니다</span>}
         </div>
       </div>
     </div>

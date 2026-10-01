@@ -73,6 +73,15 @@ export function findHtml(workspace: ReportWorkspaceSeed, blockId: string): strin
   return block && (block.kind === "text" || block.kind === "rich-static") ? block.html : "";
 }
 
+/** `...-detail-1`, `-detail-2`처럼 접두를 공유하는 블록들의 html을 순서대로 잇는다. */
+export function findHtmlByPrefix(workspace: ReportWorkspaceSeed, prefix: string): string {
+  return workspace.sections
+    .flatMap((section) => section.blocks)
+    .filter((block) => (block.id === prefix || block.id.startsWith(`${prefix}-`)) && (block.kind === "text" || block.kind === "rich-static"))
+    .map((block) => (block as { html: string }).html)
+    .join("");
+}
+
 /** 저장된 작업공간의 블록을 ID로 찾는다. HWPX 미리보기는 데이터를 복제하지 않고,
  * 기존 보고서 화면과 같은 ReportBlock을 차트 컴포넌트에 그대로 전달한다. */
 export function findBlock(workspace: ReportWorkspaceSeed, blockId: string): ReportBlock | undefined {

@@ -85,7 +85,7 @@ export function RoleReviewCard({ source, onFixed }: { source: string; onFixed: (
 
   return (
     <section className="mb-5 rounded-xl border border-[#f0d9a8] bg-[#fffaf0] px-5 py-4">
-      <h2 className="text-[15px] font-bold text-[#8a5a12]">
+      <h2 className="text-[13px] font-bold text-[#8a5a12]">
         판정이 헷갈린 문항 {items.length}개
         {fixedCount > 0 && <span className="ml-2 text-[13px] font-semibold text-[#3f6b45]">· {fixedCount}개 고침</span>}
       </h2>

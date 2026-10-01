@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { BatchCorrectionItem } from "@/components/QuoteCorrectionPanel";
 import { ANALYSIS_EVIDENCE_BY_BLOCK, type AnalysisReference } from "@/components/report-web-document/analysisEvidence";
+import { originalBlockId } from "@/lib/report/splitBlock";
 import { quantEvidenceFor } from "@/components/report-web-document/quantEvidence";
 import { markQuoteEndingReviews } from "@/components/report-web-document/quoteEndingMarkup";
 import type { QuoteCompletionTarget, QuoteSourceResult } from "@/components/report-web-document/EvidencePanelContent";
@@ -208,7 +209,8 @@ export function useReportEvidence({
       );
 
       const blockAtPoint = blockId ? findBlock(sections, blockId) : null;
-      const reference = ANALYSIS_EVIDENCE_BY_BLOCK[blockId] ?? quantEvidenceFor(blockAtPoint, quantStats);
+      // 쪽에 맞춰 쪼갠 조각(`...--p2`)도 원래 블록의 근거를 보여준다(lib/report/splitBlock.ts).
+      const reference = ANALYSIS_EVIDENCE_BY_BLOCK[originalBlockId(blockId)] ?? quantEvidenceFor(blockAtPoint, quantStats);
       const quoteGroupAtReadingPoint = readingPoint?.closest<HTMLElement>("[data-quote-group]");
       const quoteScope = quoteGroupAtReadingPoint && !quoteGroupAtReadingPoint.closest("[data-analysis-evidence]") && !reference
         ? quoteGroupAtReadingPoint.closest<HTMLElement>("table") ?? quoteGroupAtReadingPoint
@@ -273,7 +275,7 @@ export function useReportEvidence({
    * 극성 확인 처리. "이대로 유지"(polarity=null)는 확인 표시만, 다른 극성을 고르면 실제로 옮긴다.
    * 바뀐 문항 블록은 **서버가 다시 만든 것으로 통째로 교체**한다 — 배너 번호·비율·도넛이 함께
    * 달라지는데 그 계산을 브라우저에서 또 구현하면 두 벌이 되기 때문이다. 교체 범위는 그 문항의
-   * 블록(`...-q3-intro`/`-chart`/`-detail`)뿐이라 다른 곳의 편집 내용은 그대로 남는다.
+   * 블록(`...-q3-intro`/`-chart`/`-detail-N`)뿐이라 다른 곳의 편집 내용은 그대로 남는다.
    */
   async function applyPolarityReview(target: PolarityReviewTarget, polarity: PolarityReviewTarget["polarity"] | null) {
     if (!sourceFileUrl || polarityReviewStatus === "loading") return;
@@ -286,13 +288,20 @@ export function useReportEvidence({
       });
       const result = await response.json() as { ok: boolean; sections?: ReportSectionContent[]; error?: string };
       if (!response.ok || !result.ok || !result.sections) throw new Error(result.error);
-      const prefix = target.blockId.replace(/-(intro|chart|detail)$/, "");
-      const rebuilt = new Map(result.sections.flatMap((section) => section.blocks).map((block) => [block.id, block]));
+      const prefix = target.blockId.replace(/-(intro|chart|detail(-\d+)?)$/, "");
+      const belongs = (id: string) => id === prefix || id.startsWith(`${prefix}-`);
+      // **한 칸씩 바꿔치기하면 안 된다** — 극성을 옮기면 그 극성 묶음이 통째로 사라지거나
+      // 새로 생겨서 블록 **개수**가 달라진다(`polarityDetailBlocks`). 이 문항이 차지한 구간을
+      // 서버가 다시 만든 구간으로 통째로 갈아끼운다.
+      const rebuiltRun = result.sections.flatMap((section) => section.blocks).filter((block) => belongs(block.id));
       checkpoint();
-      setSections((previous) => previous.map((section) => ({
-        ...section,
-        blocks: section.blocks.map((block) => (block.id.startsWith(prefix) ? rebuilt.get(block.id) ?? block : block)),
-      })));
+      setSections((previous) => previous.map((section) => {
+        const start = section.blocks.findIndex((block) => belongs(block.id));
+        if (start < 0 || rebuiltRun.length === 0) return section;
+        let end = start;
+        while (end < section.blocks.length && belongs(section.blocks[end].id)) end += 1;
+        return { ...section, blocks: [...section.blocks.slice(0, start), ...rebuiltRun, ...section.blocks.slice(end)] };
+      }));
       setPolarityReviews((previous) => previous.filter((item) => item.label !== target.label));
       setPolarityReviewStatus("idle");
     } catch {

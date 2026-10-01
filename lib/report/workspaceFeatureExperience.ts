@@ -1,12 +1,12 @@
 import type { QuestionWithApprovedCategories } from "@/lib/db/reports";
 import type { QuantStats } from "@/lib/quant/compute";
 import { quadrantItems } from "@/lib/report/quadrantItems";
-import { meanChart, workspaceSlug } from "@/lib/report/workspaceCharts";
+import { hasFeatureImportance } from "@/lib/quant/featureRanking";
+import { importanceRankBlocks, meanChart, workspaceSlug } from "@/lib/report/workspaceCharts";
 import {
   headingBlock,
   priorityReferenceBlock,
   quadrantBlock,
-  rankCompositionBlock,
   richStaticBlock,
   tableBlock,
   type ReportBlock,
@@ -133,9 +133,13 @@ export function buildFeatureSection(
   const ranked = [...stats.featureSatisfaction].sort((a, b) => b.mean - a.mean);
   const featureQualitative = services.questionsByKeyPrefix(qualitative, "feature:");
   const rankedImportance = [...stats.relativeImportance].sort((a, b) => b.score - a.score);
-  const segmentNames = [...new Set(stats.rankPositionComposition.flatMap((row) => row.segments.map((segment) => segment.name)))];
-  const rankPalette = ["#ff7b7b", "#58b1cf", "#9bcdb8", "#5fc5c1", "#c890d5", "#ffe39a", "#aeb8c8", "#f5ad80"];
-  const hasRanking = stats.rankPositionComposition.length > 0 && rankedImportance.length > 0;
+  const analysisText = buildFeatureAnalysisText(stats, rankedImportance, featureQualitative);
+  // **이 순위가 기능에 대한 것일 때만 이 장에 싣는다.** `relativeImportance`는 raw data마다
+  // 다른 것을 가리킨다 — 케어클은 핵심구매요소 순위(사용 편의성·피부 개선 효과)라 기능명
+  // (SHOT·GLOW)과 한 개도 안 겹치는데, 그대로 실어 "Q12 기능 중요도 순위"라는 제목 아래
+  // 구매요소를 나열하고 있었다. 그 데이터는 Ⅴ장(핵심구매요소)이 가져간다
+  // (`buildCorePurchaseFactorSection`) — 판정은 `hasFeatureImportance` 한 곳에서 한다.
+  const hasRanking = stats.rankPositionComposition.length > 0 && rankedImportance.length > 0 && hasFeatureImportance(stats);
   return [
     headingBlock({ id: "feature-result-heading", variant: "numbered", number: "1", text: "기능별 고객 경험 조사 결과" }),
     ...services.featureQualitativeBlocks(stats, "feature-qualitative", featureQualitative, qualitative.length > 0),
@@ -151,35 +155,35 @@ export function buildFeatureSection(
     // 예전엔 Q12 제목과 행 0개짜리 차트·표가 그대로 남았다(2026-09-07 5종 점검).
     ...(hasRanking ? [
       headingBlock({ id: "feature-q12", variant: "question", number: "Q12", text: services.questionText(stats, 12, "기능 중 중요하다고 생각되는 순위를 순서대로 작성해주세요") }),
-      rankCompositionBlock({
-        id: "feature-rank-composition",
-        title: "기능 중요도 순위 구성",
-        candidates: segmentNames.map((name, index) => ({ name, color: rankPalette[index % rankPalette.length] })),
-        rows: stats.rankPositionComposition.map((row) => ({
-          rank: row.rank,
-          segments: segmentNames.map((name) => ({ name, percentage: row.segments.find((segment) => segment.name === name)?.percentage ?? 0 })),
-        })),
-      }),
-      tableBlock({
-        id: "feature-importance-table",
-        title: "기능별 중요 순위 종합",
-        headers: ["순위", "기능", "상대 중요도"],
-        rows: rankedImportance.map((item, index) => [`${index + 1}위`, item.name, item.score]),
+      ...importanceRankBlocks(stats, {
+        idPrefix: "feature",
+        compositionTitle: "기능 중요도 순위 구성",
+        tableTitle: "기능별 중요 순위 종합",
+        itemHeader: "기능",
       }),
     ] : []),
     ...quadrantBlocks(stats),
-    headingBlock({ id: "feature-analysis-heading", variant: "numbered", number: "2", text: "기능별 고객 경험 분석" }),
-    richStaticBlock({
-      id: "feature-analysis-summary",
-      html: analysis
-        ? services.sectionAnalysisPanelHtml(analysis)
-        : services.analysisEvidenceHtml("기능별 중요 순위 및 만족도 종합 해석", services.originalAnalysisPanelHtml(
-          "기능별 중요 순위 및 만족도 종합 해석",
-          buildFeatureAnalysisText(stats, rankedImportance, featureQualitative),
-          services.sectionAiRegenerateButtonHtml(),
-        )),
-      summaryQuestionKey: "featureExperience",
-      summaryKind: "section",
-    }),
+    // **할 말이 없으면 절 제목도 만들지 않는다** — `buildCorePurchaseFactorSection`과 같은 규칙.
+    // 이 절의 주제가 "중요 순위 및 만족도 종합 해석"이라 순위 문항이 없는 raw data
+    // (이젠오토·정리습관)에서는 규칙 기반 본문이 통째로 비고, 제목과 빈 배너만 남은 쪽이
+    // 나갔다(2026-09-14 `check:page-fit` 실측: 글자 60자 미만인 쪽). 저장된 AI 해석이 있으면
+    // 순위가 없어도 그대로 싣는다.
+    ...(analysis || analysisText
+      ? [
+        headingBlock({ id: "feature-analysis-heading", variant: "numbered", number: "2", text: "기능별 고객 경험 분석" }),
+        richStaticBlock({
+          id: "feature-analysis-summary",
+          html: analysis
+            ? services.sectionAnalysisPanelHtml(analysis)
+            : services.analysisEvidenceHtml("기능별 중요 순위 및 만족도 종합 해석", services.originalAnalysisPanelHtml(
+              "기능별 중요 순위 및 만족도 종합 해석",
+              analysisText,
+              services.sectionAiRegenerateButtonHtml(),
+            )),
+          summaryQuestionKey: "featureExperience",
+          summaryKind: "section",
+        }),
+      ]
+      : []),
   ];
 }

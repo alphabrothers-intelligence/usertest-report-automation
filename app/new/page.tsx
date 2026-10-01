@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RecentReportsSidebar } from "@/components/RecentReportsSidebar";
+import { AppSidebar } from "@/components/AppSidebar";
 import { UploadStep } from "@/components/wizard/UploadStep";
 import { PreviewStep } from "@/components/wizard/PreviewStep";
 import { GeneratingStep } from "@/components/wizard/GeneratingStep";
@@ -101,7 +101,7 @@ export default function WizardPage() {
 
   return (
     <div className="flex min-h-screen bg-[#f4f7fb]">
-      <RecentReportsSidebar />
+      <AppSidebar />
       <main className="min-w-0 flex-1 px-6 py-8 lg:px-9">
         <div className="mx-auto max-w-[1180px]">
           <header className="mb-5">

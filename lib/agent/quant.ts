@@ -146,9 +146,26 @@ export function itemNameOf(profile: ColumnProfile, fromModel?: string): string {
  * 시간 표현은 **분류 단계가 이미 journey 판정의 근거로 쓰는 값**이라(`TIME_MARKER`), 그것을
  * 그대로 이름으로 쓴다 — 새 규칙을 만들지 않고 판정 근거와 표시 이름을 하나로 맞춘다.
  */
+/** 시점 이름 뒤에 붙여 읽어야 말이 되는 낱말. "처음 받아보셨을" + "때" */
+const TIME_TAIL = /^(때의|때|직후|이후|후|뒤)$/;
+
 function journeyName(profile: ColumnProfile, fallback: string): string {
-  const matched = TIME_MARKER.exec(profile.header.replace(/\s+/g, " "));
-  return matched ? matched[0].trim() : fallback;
+  const header = profile.header.replace(/\s+/g, " ");
+  const matched = TIME_MARKER.exec(header);
+  if (!matched) return fallback;
+  // **낱말 중간에서 자르지 않는다**(2026-09-11 담당자 지적: "가로축 글씨가 다 잘려 있다").
+  // TIME_MARKER는 시점 판정용이라 `처음 받아보셨`처럼 어간에서 끝난다 — 그대로 x축에 쓰면
+  // 문장이 잘린 것처럼 보인다. 걸린 어절 끝까지 늘리고("처음 받아보셨을"), 뒤따르는 낱말이
+  // 시점을 완성하는 말이면("때") 함께 데려온다.
+  let end = matched.index + matched[0].length;
+  while (end < header.length && header[end] !== " ") end += 1;
+  const rest = header.slice(end).trimStart();
+  const tail = rest.split(/[\s,.?!]/)[0]?.replace(/[의을를은는,.?!]*$/, "") ?? "";
+  const word = header.slice(matched.index, end);
+  // 뒤따르는 말이 없으면 어절 끝 조사를 뗀다("주기로"→"주기"). 데려온 경우에는 떼면 안 된다
+  // ("처음 받아보셨을 때"의 "을"은 조사가 아니라 어미다).
+  const name = TIME_TAIL.test(tail) ? `${word} ${tail}` : word.replace(/[은는이가을를의에로과와도]$/, "");
+  return name.trim() || fallback;
 }
 
 /**

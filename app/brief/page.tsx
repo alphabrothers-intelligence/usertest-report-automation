@@ -1,4 +1,5 @@
 import { BriefReport } from "@/components/BriefReport";
+import { getReportById } from "@/lib/db/reports";
 
 export const metadata = {
   title: "축소판 요약본 | 사용성테스트 결과보고서 자동생성",
@@ -13,10 +14,13 @@ export const metadata = {
 export default async function BriefPage({
   searchParams,
 }: {
-  searchParams: Promise<{ dataset?: string | string[]; source?: string | string[] }>;
+  searchParams: Promise<{ dataset?: string | string[]; report?: string | string[]; source?: string | string[] }>;
 }) {
   const params = await searchParams;
   const dataset = typeof params.dataset === "string" ? params.dataset : undefined;
-  const source = typeof params.source === "string" && /^https?:\/\//.test(params.source) ? params.source : undefined;
+  // ?report=<uuid> 는 /viewer 와 같은 짧은 주소다.
+  const source = typeof params.report === "string"
+    ? (await getReportById(params.report))?.file_url
+    : typeof params.source === "string" && /^https?:\/\//.test(params.source) ? params.source : undefined;
   return <BriefReport dataset={dataset} source={source} />;
 }

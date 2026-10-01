@@ -91,7 +91,10 @@ export type HistogramOptions = {
 /** 원본 보고서의 0~10점 만족도 분포도. */
 export function satisfactionHistogramSvg(distribution: number[], options: HistogramOptions = {}): string {
   const values = Array.from({ length: 11 }, (_, index) => Math.max(0, Number(distribution[index]) || 0));
-  const width = 560, height = 280;
+  // **가로로 넓은 비율(760x300)** — "주요 키워드 도출" 칸을 빼면서 이 그래프가 틀 전체 폭을
+  // 쓰게 됐다(2026-09-15). 예전 560x280은 2열 중 넓은 쪽에 맞춘 비율이라, 넓어진 칸에서는
+  // `preserveAspectRatio` 기본값(meet) 때문에 좌우에 빈 자리를 남기고 가운데만 그려졌다.
+  const width = 760, height = 300;
   const margin = { top: 18, right: 18, bottom: 46, left: 52 };
   const maxCount = Math.max(1, ...values);
   const automaticMax = Math.max(5, Math.ceil(maxCount / 5) * 5);

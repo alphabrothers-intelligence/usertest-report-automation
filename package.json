@@ -46,7 +46,14 @@
     "check:customer-recommendations": "tsx scripts/check-customer-recommendations.ts",
     "check:quant-recompute": "tsx --env-file=.env.local scripts/check-quant-recompute.ts",
     "check:pagination": "tsx scripts/check-pagination.ts",
-    "check:brief": "tsx scripts/check-brief.ts"
+    "check:brief": "tsx scripts/check-brief.ts",
+    "check:correction-merge": "tsx scripts/check-correction-merge.ts",
+    "check:data-coverage": "tsx scripts/check-data-coverage.ts",
+    "check:page-fit": "tsx scripts/check-page-fit.ts",
+    "check:edit-reflow": "tsx scripts/check-edit-reflow.ts",
+    "check:field-actions": "tsx scripts/check-field-actions.ts",
+    "check:quote-emphasis-guard": "tsx scripts/check-quote-emphasis-guard.ts",
+    "check:table-props": "tsx scripts/check-table-props.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.15",

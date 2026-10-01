@@ -58,6 +58,12 @@ const AnchorCategorySchema = z.object({
   respondents: z.array(z.number()).describe("이 카테고리에 해당하는 응답자 번호 전부. 인용으로 뽑지 않은 응답자도 빠짐없이 넣을 것"),
   quotes: z.array(AnchorQuoteSchema).describe("대표 인용 2~4개를 원문 위치로 지목"),
   insight: z.string().describe("관찰·시사점 톤의 인사이트 한 줄. 화살표 기호는 붙이지 않음"),
+  field_actions: z
+    .array(z.object({
+      field: z.enum(["제품 기획", "마케팅", "SW 개발", "제품 개발"]),
+      action: z.string().describe("그 분야가 할 일. 개조식 명사형 60자 이내"),
+    }))
+    .describe("이 insight에 대해 실제로 할 일이 있는 분야만 0~3개. 없으면 빈 배열"),
 });
 
 export const AnchorCombinedOutputSchema = z.object({
@@ -278,7 +284,15 @@ export function narrowQuoteToEvidence(quote: string, span: string | null): strin
   // 끝나면 그것까지 포함해야 뜻이 유지된다 — "겨울이라 잘 못 나가서 그런지 / 보상이 적게
   // 느껴졌어요"에서 뒤 조각만 남기면 응답자가 붙인 단서가 사라진다.
   let from = segments[first][0];
-  const to = segments[last][1];
+  let to = segments[last][1];
+  // **문장 가운데의 줄바꿈 뒤도 데려온다.** 줄바꿈도 경계라서, "…의미인지,⏎아니면 …헷갈렸습니다"
+  // 처럼 문장이 줄을 넘으면 앞 줄만 남아 쉼표로 끝난 반쪽 인용문이 됐다(2026-09-30 케어클 실측).
+  for (let next = last + 1; next < segments.length; next += 1) {
+    const current = quote.slice(from, to).trim();
+    if (!/[,，]$/.test(current) && !CONNECTIVE_ENDINGS.some((ending) => current.endsWith(ending))) break;
+    if (quote.slice(from, segments[next][1]).trim().length > MAX_QUOTE_CHARS) break;
+    to = segments[next][1];
+  }
   for (let back = first - 1; back >= 0; back -= 1) {
     const previous = quote.slice(segments[back][0], segments[back][1]).trim();
     if (!CONNECTIVE_ENDINGS.some((ending) => previous.endsWith(ending))) break;
@@ -406,7 +420,7 @@ export function resolveAnchorQuotes(
         stats.droppedRespondents += 1;
         return false;
       });
-      return { label: category.label, clause_count: respondents.length, respondents, quotes, quoteEvidence, insight: category.insight };
+      return { label: category.label, clause_count: respondents.length, respondents, quotes, quoteEvidence, insight: category.insight, fieldActions: category.field_actions };
     });
     return {
       polarity: group.polarity,

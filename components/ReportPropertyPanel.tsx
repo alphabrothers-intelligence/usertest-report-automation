@@ -8,6 +8,8 @@ import type { ChangeEvent, ReactNode } from "react";
 import type {
   ReportBlock,
   ReportGroupedBarBlock,
+  ReportJourneyLineBlock,
+  ReportWaterfallBlock,
   ReportRankCompositionBlock,
   ReportRichStaticBlock,
   ReportStackedBarBlock,
@@ -16,6 +18,93 @@ import type {
 import { donutSvg, satisfactionHistogramSvg, type PolarityKey } from "@/lib/report/chartSvg";
 
 type Props = { block: ReportBlock | null; onChange: (next: ReportBlock) => void };
+
+/** 블록 종류의 사람 이름. 패널 머리말과 순서 목록이 **같은 이름을 쓴다**. */
+const BLOCK_KIND_LABELS: Partial<Record<ReportBlock["kind"], string>> = {
+  chart: "막대 차트",
+  table: "표",
+  heading: "제목",
+  quadrant: "사분면 차트",
+  radar: "방사형 차트",
+  "journey-line": "시점별 추이 차트",
+  waterfall: "구간별 증감 차트",
+  nps: "NPS 차트",
+  polarity: "감정 분석 도넛",
+  "row-group": "항목·주요 의견 표",
+};
+
+/**
+ * 선택한 블록의 쪽 배치 속성(Word의 표 속성·단락 속성). 자동 규칙(`lib/report/paginate.ts`·
+ * `splitBlock.ts`)은 그대로 두고 **예외만 여기서 지정**한다. 고른 블록 종류에 맞는 것만 보인다
+ * — 체크박스를 한꺼번에 펼쳐두던 첫 판은 "최악"이라는 지적을 받았다(2026-09-30).
+ */
+export type BlockLayoutControls = {
+  /** 표(행 단위로 넘어가는 블록)인지 — 표 속성/단락 속성 중 무엇을 보여줄지 정한다. */
+  isTable: boolean;
+  pageBreakBefore: boolean;
+  keepTogether: boolean;
+  keepWithNext: boolean;
+  rowBreak: boolean;
+  /** 지정했지만 지금 배치에서 지켜지지 않은 이유(없으면 null). */
+  notice: string | null;
+  onTogglePageBreakBefore: (on: boolean) => void;
+  onToggleKeepTogether: (on: boolean) => void;
+  onToggleKeepWithNext: (on: boolean) => void;
+  onToggleRowBreak: (on: boolean) => void;
+};
+
+function Toggle({ label, hint, checked, onChange }: { label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2 rounded-md px-1 py-1.5 hover:bg-[#f7f9fc]">
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#0066cc]" />
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-zinc-900">{label}</span>
+        <span className="block text-xs leading-5 text-zinc-500">{hint}</span>
+      </span>
+    </label>
+  );
+}
+
+export function BlockLayoutFields({ layout }: { layout: BlockLayoutControls }) {
+  const [tab, setTab] = useState<"table" | "row">("table");
+  const notice = layout.notice ? <p className="mt-2 rounded-md bg-[#fff6e5] px-2 py-1.5 text-xs leading-5 text-[#8a5300]">{layout.notice}</p> : null;
+  if (!layout.isTable) {
+    return (
+      <div className="space-y-1">
+        <Toggle label="이 블록 앞에서 쪽 나누기" hint="자리가 남아도 이 블록부터 새 쪽에서 시작합니다. (본문에서 Ctrl+Enter)" checked={layout.pageBreakBefore} onChange={layout.onTogglePageBreakBefore} />
+        <Toggle label="다음 블록과 함께 두기" hint="쪽이 갈릴 때 바로 아래 블록과 떨어지지 않습니다." checked={layout.keepWithNext} onChange={layout.onToggleKeepWithNext} />
+        {notice}
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div role="tablist" className="mb-2 inline-flex rounded-lg bg-[#f0f0f2] p-0.5 text-sm">
+        {(["table", "row"] as const).map((id) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={`rounded-md px-4 py-1 ${tab === id ? "bg-[#0066cc] font-semibold text-white" : "text-zinc-700"}`}
+          >
+            {id === "table" ? "표" : "행"}
+          </button>
+        ))}
+      </div>
+      {tab === "table" ? (
+        <div className="space-y-1">
+          <Toggle label="다음 쪽으로 이어지게 허용" hint="끄면 표를 쪼개지 않고 통째로 한 쪽에 둡니다." checked={!layout.keepTogether} onChange={(on) => layout.onToggleKeepTogether(!on)} />
+          <Toggle label="이 표 앞에서 쪽 나누기" hint="자리가 남아도 이 표부터 새 쪽에서 시작합니다." checked={layout.pageBreakBefore} onChange={layout.onTogglePageBreakBefore} />
+        </div>
+      ) : (
+        <Toggle label="페이지 끝에서 행을 자동으로 나누기" hint="끄면 쪽 끝에 걸린 행을 반으로 자르지 않고 그 행부터 다음 쪽으로 넘깁니다." checked={layout.rowBreak} onChange={layout.onToggleRowBreak} />
+      )}
+      {notice}
+    </div>
+  );
+}
 
 function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return <label className="block text-xs font-medium text-zinc-700">{label}<input value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded border border-[#d7dce8] bg-white px-2 py-1.5 text-sm text-zinc-900 outline-none focus:border-[#315c9c]" /></label>;
@@ -31,6 +120,26 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
 
 function PanelTitle({ children }: { children: ReactNode }) {
   return <p className="border-b border-[#e7eaf0] pb-2 pt-1 text-xs font-bold text-[#315c9c]">{children}</p>;
+}
+
+/**
+ * 항목 한 줄을 지우는 버튼. **가로축 항목은 언제든 지울 수 있어야 한다**(2026-09-11 담당자
+ * 요청) — raw data에 잡힌 항목이 보고서에 그대로 나가면 안 되는 경우가 실제로 있다.
+ * 마지막 한 줄은 남긴다(항목 0개짜리 차트는 그릴 것이 없다).
+ */
+function RemoveButton({ onRemove, disabled }: { onRemove: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onRemove}
+      disabled={disabled}
+      aria-label="이 항목 삭제"
+      title={disabled ? "마지막 항목은 지울 수 없습니다" : "이 항목 삭제"}
+      className="mt-[18px] h-[30px] w-7 shrink-0 rounded border border-[#e2c7c7] text-sm font-bold text-[#b4534b] hover:bg-[#fdf1f0] disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      ×
+    </button>
+  );
 }
 
 function safeName(next: string, previous: string) {
@@ -227,20 +336,61 @@ function EmbeddedChartFields({ block, onChange }: { block: ReportRichStaticBlock
   </>;
 }
 
+/**
+ * 고객 여정 꺾은선(L13)·구간 증감(L13a) 편집칸. **예전에는 이 두 종류만 편집칸이 아예
+ * 없었다** — 그래서 x축 시점 이름이 raw data 헤더에서 잘린 채 나와도(케어클 "처음 받아보셨")
+ * 담당자가 손댈 방법이 없었다(2026-09-11 지적). 다른 차트와 같은 규칙으로 이름·값·삭제를 준다.
+ */
+function JourneyLineFields({ block, onChange }: { block: ReportJourneyLineBlock; onChange: (next: ReportJourneyLineBlock) => void }) {
+  return <>
+    <TextField label="차트 제목" value={block.title} onChange={(title) => onChange({ ...block, title })} />
+    <div className="grid grid-cols-2 gap-2">
+      <NumberField label="Y축 최솟값" value={block.axisMin} onChange={(axisMin) => onChange({ ...block, axisMin })} />
+      <NumberField label="Y축 최댓값" value={block.axisMax} onChange={(axisMax) => onChange({ ...block, axisMax })} />
+    </div>
+    <TextField label="단위" value={block.unit} onChange={(unit) => onChange({ ...block, unit })} />
+    <PanelTitle>시점 이름 및 값</PanelTitle>
+    {block.points.map((point, index) => <div key={index} className="flex items-start gap-2">
+      <div className="grid min-w-0 flex-1 grid-cols-[1fr_76px] gap-2">
+        <TextField label={`${index + 1}번 시점`} value={point.label} onChange={(label) => onChange({ ...block, points: block.points.map((v, i) => i === index ? { ...v, label } : v) })} />
+        <NumberField label="값" value={point.value} onChange={(value) => onChange({ ...block, points: block.points.map((v, i) => i === index ? { ...v, value } : v) })} />
+      </div>
+      <RemoveButton disabled={block.points.length <= 1} onRemove={() => onChange({ ...block, points: block.points.filter((_, i) => i !== index) })} />
+    </div>)}
+  </>;
+}
+
+function WaterfallFields({ block, onChange }: { block: ReportWaterfallBlock; onChange: (next: ReportWaterfallBlock) => void }) {
+  return <>
+    <TextField label="차트 제목" value={block.title} onChange={(title) => onChange({ ...block, title })} />
+    <TextField label="단위" value={block.unit} onChange={(unit) => onChange({ ...block, unit })} />
+    <PanelTitle>구간 이름 및 증감</PanelTitle>
+    {block.steps.map((step, index) => <div key={index} className="flex items-start gap-2">
+      <div className="grid min-w-0 flex-1 grid-cols-[1fr_76px] gap-2">
+        <TextField label={`${index + 1}번 구간`} value={step.label} onChange={(label) => onChange({ ...block, steps: block.steps.map((v, i) => i === index ? { ...v, label } : v) })} />
+        <NumberField label="증감" value={step.delta} onChange={(delta) => onChange({ ...block, steps: block.steps.map((v, i) => i === index ? { ...v, delta } : v) })} />
+      </div>
+      <RemoveButton disabled={block.steps.length <= 1} onRemove={() => onChange({ ...block, steps: block.steps.filter((_, i) => i !== index) })} />
+    </div>)}
+  </>;
+}
+
 export function ReportPropertyPanel({ block, onChange }: Props) {
   if (!block) return <div className="rounded-lg bg-[#f7f9fc] p-3 text-sm leading-6 text-zinc-500">본문의 차트, 표 또는 제목을 선택하면 기존 값이 채워진 편집칸이 여기에 표시됩니다.</div>;
   const isEmbeddedChart = block.kind === "rich-static" && /<svg[\s>]/i.test(block.html);
   return <div className="space-y-3">
-    <div><p className="text-xs text-zinc-500">선택한 요소</p><p className="mt-0.5 text-sm font-bold text-zinc-900">{block.kind === "chart" ? "막대 차트" : block.kind === "table" ? "표" : block.kind === "heading" ? "제목" : block.kind === "quadrant" ? "사분면 차트" : block.kind === "radar" ? "방사형 차트" : block.kind === "nps" ? "NPS 차트" : block.kind === "polarity" ? "감정 분석 도넛" : block.kind === "row-group" ? "항목·주요 의견 표" : isEmbeddedChart ? "내장 차트" : "보고서 블록"}</p></div>
+    <div><p className="text-xs text-zinc-500">선택한 요소</p><p className="mt-0.5 text-sm font-bold text-zinc-900">{BLOCK_KIND_LABELS[block.kind] ?? (isEmbeddedChart ? "내장 차트" : "보고서 블록")}</p></div>
     {block.kind === "heading" && <><TextField label="제목 문구" value={block.text} onChange={(text) => onChange({ ...block, text })} />{block.number !== undefined && <TextField label="번호" value={block.number} onChange={(number) => onChange({ ...block, number })} />}</>}
     {block.kind === "text" && <div className="rounded-lg bg-[#f7f9fc] p-3 text-sm leading-6 text-zinc-600">본문 문단을 클릭하면 그 자리에서 서식과 함께 수정할 수 있습니다.</div>}
     {block.kind === "table" && <TableFields block={block} onChange={onChange} />}
-    {block.kind === "chart" && <><TextField label="차트 제목" value={block.title} onChange={(title) => onChange({ ...block, title })} /><div className="grid grid-cols-2 gap-2"><NumberField label="Y축 최솟값" value={block.axisMin} onChange={(axisMin) => onChange({ ...block, axisMin })} /><NumberField label="Y축 최댓값" value={block.axisMax} onChange={(axisMax) => onChange({ ...block, axisMax })} /></div><TextField label="단위" value={block.unit} onChange={(unit) => onChange({ ...block, unit })} /><ColorField label="기본 강조 색상" value={block.color} onChange={(color) => onChange({ ...block, color })} /><p className="rounded-md bg-[#f3faf7] px-2.5 py-2 text-xs leading-5 text-[#507064]">선택한 색상을 기준으로 가장 높은 값은 진하게, 2·3번째 값은 비슷한 계열로, 나머지는 회색으로 자동 표시됩니다.</p><PanelTitle>항목명 및 값</PanelTitle>{block.items.map((item) => <div key={item.id} className="grid grid-cols-[1fr_76px] gap-2"><TextField label="항목명" value={item.label} onChange={(label) => onChange({ ...block, items: block.items.map((v) => v.id === item.id ? { ...v, label } : v) })} /><NumberField label="값" value={item.value} onChange={(value) => onChange({ ...block, items: block.items.map((v) => v.id === item.id ? { ...v, value } : v) })} /></div>)}</>}
+    {block.kind === "chart" && <><TextField label="차트 제목" value={block.title} onChange={(title) => onChange({ ...block, title })} /><div className="grid grid-cols-2 gap-2"><NumberField label="Y축 최솟값" value={block.axisMin} onChange={(axisMin) => onChange({ ...block, axisMin })} /><NumberField label="Y축 최댓값" value={block.axisMax} onChange={(axisMax) => onChange({ ...block, axisMax })} /></div><TextField label="단위" value={block.unit} onChange={(unit) => onChange({ ...block, unit })} /><ColorField label="기본 강조 색상" value={block.color} onChange={(color) => onChange({ ...block, color })} /><p className="rounded-md bg-[#f3faf7] px-2.5 py-2 text-xs leading-5 text-[#507064]">선택한 색상을 기준으로 가장 높은 값은 진하게, 2·3번째 값은 비슷한 계열로, 나머지는 회색으로 자동 표시됩니다.</p><PanelTitle>항목명 및 값</PanelTitle>{block.items.map((item) => <div key={item.id} className="flex items-start gap-2"><div className="grid min-w-0 flex-1 grid-cols-[1fr_76px] gap-2"><TextField label="항목명" value={item.label} onChange={(label) => onChange({ ...block, items: block.items.map((v) => v.id === item.id ? { ...v, label } : v) })} /><NumberField label="값" value={item.value} onChange={(value) => onChange({ ...block, items: block.items.map((v) => v.id === item.id ? { ...v, value } : v) })} /></div><RemoveButton disabled={block.items.length <= 1} onRemove={() => onChange({ ...block, items: block.items.filter((v) => v.id !== item.id) })} /></div>)}</>}
+    {block.kind === "journey-line" && <JourneyLineFields block={block} onChange={onChange} />}
+    {block.kind === "waterfall" && <WaterfallFields block={block} onChange={onChange} />}
     {block.kind === "rank-composition" && <RankCompositionFields block={block} onChange={onChange} />}
     {block.kind === "stacked-bar" && <StackedBarFields block={block} onChange={onChange} />}
     {block.kind === "grouped-bar" && <GroupedBarFields block={block} onChange={onChange} />}
     {block.kind === "radar" && <><TextField label="차트 제목" value={block.title} onChange={(title) => onChange({ ...block, title })} /><div className="grid grid-cols-2 gap-2"><NumberField label="축 최솟값" value={block.axisMin} onChange={(axisMin) => onChange({ ...block, axisMin })} /><NumberField label="축 최댓값" value={block.axisMax} onChange={(axisMax) => onChange({ ...block, axisMax })} /></div><PanelTitle>항목명</PanelTitle>{block.indicators.map((indicator, index) => <TextField key={index} label={`${index + 1}번 항목`} value={indicator} onChange={(name) => onChange({ ...block, indicators: block.indicators.map((v, i) => i === index ? name : v) })} />)}<PanelTitle>시리즈별 점수</PanelTitle>{block.series.map((series, si) => <div key={si} className="rounded border border-[#e7eaf0] p-2"><TextField label="시리즈명" value={series.name} onChange={(name) => onChange({ ...block, series: block.series.map((v, i) => i === si ? { ...v, name } : v) })} /><ColorField label="색상" value={series.color} onChange={(color) => onChange({ ...block, series: block.series.map((v, i) => i === si ? { ...v, color } : v) })} /><div className="mt-2 grid grid-cols-2 gap-2">{block.indicators.map((indicator, index) => <NumberField key={index} label={indicator} value={series.values[index] ?? 0} onChange={(value) => onChange({ ...block, series: block.series.map((v, i) => i === si ? { ...v, values: v.values.map((score, vi) => vi === index ? value : score) } : v) })} />)}</div></div>)}</>}
-    {block.kind === "quadrant" && <><TextField label="차트 제목" value={block.title} onChange={(title) => onChange({ ...block, title })} /><div className="grid grid-cols-2 gap-2"><NumberField label="X 최소" value={block.xMin} onChange={(xMin) => onChange({ ...block, xMin })} /><NumberField label="X 최대" value={block.xMax} onChange={(xMax) => onChange({ ...block, xMax })} /><NumberField label="Y 최소" value={block.yMin} onChange={(yMin) => onChange({ ...block, yMin })} /><NumberField label="Y 최대" value={block.yMax} onChange={(yMax) => onChange({ ...block, yMax })} /></div><TextField label="X축 제목" value={block.xLabel} onChange={(xLabel) => onChange({ ...block, xLabel })} /><TextField label="Y축 제목" value={block.yLabel} onChange={(yLabel) => onChange({ ...block, yLabel })} /><PanelTitle>기능명 및 좌표</PanelTitle>{block.items.map((item) => <div key={item.id} className="rounded border border-[#e7eaf0] p-2"><TextField label="항목명" value={item.name} onChange={(name) => onChange({ ...block, items: block.items.map((v) => v.id === item.id ? { ...v, name } : v) })} /><div className="mt-2 grid grid-cols-2 gap-2"><NumberField label="상대 중요도" value={item.importance} onChange={(importance) => onChange({ ...block, items: block.items.map((v) => v.id === item.id ? { ...v, importance } : v) })} /><NumberField label="만족도" value={item.satisfaction} onChange={(satisfaction) => onChange({ ...block, items: block.items.map((v) => v.id === item.id ? { ...v, satisfaction } : v) })} /></div></div>)}<PanelTitle>우선순위 영역 색상</PanelTitle><p className="text-xs leading-5 text-zinc-500">원본의 3×3 해석 기준입니다. 색상은 실제 격자에 바로 반영되며, 세부 문구는 격자 칸을 눌러 직접 입력할 수 있습니다.</p>{block.zones.map((zone) => <div key={zone.id} className="rounded border border-[#e7eaf0] p-2"><TextField label="영역명" value={zone.title} onChange={(title) => onChange({ ...block, zones: block.zones.map((v) => v.id === zone.id ? { ...v, title } : v) })} /><div className="mt-2 grid grid-cols-2 gap-2"><ColorField label="영역 색상" value={zone.color} onChange={(color) => onChange({ ...block, zones: block.zones.map((v) => v.id === zone.id ? { ...v, color } : v) })} /><TextField label="해석 메모" value={zone.description} onChange={(description) => onChange({ ...block, zones: block.zones.map((v) => v.id === zone.id ? { ...v, description } : v) })} /></div></div>)}<PanelTitle>격자 칸 문구</PanelTitle><p className="text-xs leading-5 text-zinc-500">그래프의 원하는 칸을 클릭하면 해당 칸의 문구를 직접 입력할 수 있습니다.</p></>}
+    {block.kind === "quadrant" && <><TextField label="차트 제목" value={block.title} onChange={(title) => onChange({ ...block, title })} /><div className="grid grid-cols-2 gap-2"><NumberField label="X 최소" value={block.xMin} onChange={(xMin) => onChange({ ...block, xMin })} /><NumberField label="X 최대" value={block.xMax} onChange={(xMax) => onChange({ ...block, xMax })} /><NumberField label="Y 최소" value={block.yMin} onChange={(yMin) => onChange({ ...block, yMin })} /><NumberField label="Y 최대" value={block.yMax} onChange={(yMax) => onChange({ ...block, yMax })} /></div><TextField label="X축 제목" value={block.xLabel} onChange={(xLabel) => onChange({ ...block, xLabel })} /><TextField label="Y축 제목" value={block.yLabel} onChange={(yLabel) => onChange({ ...block, yLabel })} /><PanelTitle>기능명 및 좌표</PanelTitle>{block.items.map((item) => <div key={item.id} className="rounded border border-[#e7eaf0] p-2"><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><TextField label="항목명" value={item.name} onChange={(name) => onChange({ ...block, items: block.items.map((v) => v.id === item.id ? { ...v, name } : v) })} /></div><RemoveButton disabled={block.items.length <= 1} onRemove={() => onChange({ ...block, items: block.items.filter((v) => v.id !== item.id) })} /></div><div className="mt-2 grid grid-cols-2 gap-2"><NumberField label="상대 중요도" value={item.importance} onChange={(importance) => onChange({ ...block, items: block.items.map((v) => v.id === item.id ? { ...v, importance } : v) })} /><NumberField label="만족도" value={item.satisfaction} onChange={(satisfaction) => onChange({ ...block, items: block.items.map((v) => v.id === item.id ? { ...v, satisfaction } : v) })} /></div></div>)}<PanelTitle>우선순위 영역 색상</PanelTitle><p className="text-xs leading-5 text-zinc-500">원본의 3×3 해석 기준입니다. 색상은 실제 격자에 바로 반영되며, 세부 문구는 격자 칸을 눌러 직접 입력할 수 있습니다.</p>{block.zones.map((zone) => <div key={zone.id} className="rounded border border-[#e7eaf0] p-2"><TextField label="영역명" value={zone.title} onChange={(title) => onChange({ ...block, zones: block.zones.map((v) => v.id === zone.id ? { ...v, title } : v) })} /><div className="mt-2 grid grid-cols-2 gap-2"><ColorField label="영역 색상" value={zone.color} onChange={(color) => onChange({ ...block, zones: block.zones.map((v) => v.id === zone.id ? { ...v, color } : v) })} /><TextField label="해석 메모" value={zone.description} onChange={(description) => onChange({ ...block, zones: block.zones.map((v) => v.id === zone.id ? { ...v, description } : v) })} /></div></div>)}<PanelTitle>격자 칸 문구</PanelTitle><p className="text-xs leading-5 text-zinc-500">그래프의 원하는 칸을 클릭하면 해당 칸의 문구를 직접 입력할 수 있습니다.</p></>}
     {block.kind === "nps" && <><TextField label="차트 제목" value={block.title} onChange={(title) => onChange({ ...block, title })} /><div className="grid grid-cols-2 gap-2"><NumberField label="평균 구매 의향" value={block.mean} onChange={(mean) => onChange({ ...block, mean })} /><NumberField label="NPS 지수" value={block.npsScore} onChange={(npsScore) => onChange({ ...block, npsScore })} /><NumberField label="추천 고객(%)" value={block.promoterPct} onChange={(promoterPct) => onChange({ ...block, promoterPct })} /><NumberField label="중립 고객(%)" value={block.passivePct} onChange={(passivePct) => onChange({ ...block, passivePct })} /><NumberField label="비추천 고객(%)" value={block.detractorPct} onChange={(detractorPct) => onChange({ ...block, detractorPct })} /></div></>}
     {block.kind === "rich-static" && <EmbeddedChartFields block={block} onChange={onChange} />}
     {block.kind === "polarity" && <>

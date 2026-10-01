@@ -183,7 +183,7 @@ function previewStorageKey(sourceFileUrl: string | null | undefined, blockId: st
 
 /** /viewer에서도 HWPX 미리보기와 같은 문항별 정량 프레임을 사용한다.
  * 저장된 scorebox HTML에서 실제 히스토그램 SVG만 재사용해 제목이 중복되지 않는다. */
-function FeatureScoreboxPreview({ block, sourceFileUrl }: { block: Extract<ReportBlock, { kind: "rich-static" }>; sourceFileUrl?: string | null }) {
+function FeatureScoreboxPreview({ block }: { block: Extract<ReportBlock, { kind: "rich-static" }> }) {
   const mean = block.html.match(/만족도 점수 평균\s*:\s*([^<]+)/i)?.[1]?.trim() ?? "-";
   const sd = block.html.match(/표준편차\s*:\s*([^<]+)/i)?.[1]?.trim() ?? "-";
   const histogram = block.html.match(/<svg[\s\S]*?<\/svg>/i)?.[0] ?? "";
@@ -192,14 +192,13 @@ function FeatureScoreboxPreview({ block, sourceFileUrl }: { block: Extract<Repor
       <strong>만족도 점수 평균 : {mean}</strong>
       <span><strong>표준편차 : {sd}</strong><small>*평균에서의 흩어진 정도</small></span>
     </div>
-    <div className="rivalabs-two-column mt-4">
+    {/* 원본에는 옆에 "주요 키워드 도출" 워드클라우드 칸이 있었지만 **어떤 보고서에서든 넣지
+        않는다**(2026-09-15 실무자 요청). PDF 경로는 2026-07-28에 이미 뺐고 이제 웹뷰·HWPX
+        미리보기까지 같아졌다 — 되살리지 말 것. */}
+    <div className="rivalabs-chart-frame mt-4">
       <div className="rivalabs-cell">
         <p className="rivalabs-cell-title">만족도 분포도</p>
         <div className="rivalabs-chart-slot report-rich-static" dangerouslySetInnerHTML={{ __html: histogram }} />
-      </div>
-      <div className="rivalabs-cell">
-        <p className="rivalabs-cell-title">주요 키워드 도출</p>
-        <ReportImageUploadSlots storageKey={previewStorageKey(sourceFileUrl, block.id)} emptyLabel="워드클라우드 이미지 첨부" maxImages={1} variant="wordcloud" />
       </div>
     </div>
   </section>;
@@ -266,8 +265,39 @@ function ViewerOverviewService({ block, sourceFileUrl, onChange }: { block: Extr
  * `execCommand`는 대상 contentEditable에 네이티브 "input" 이벤트를 발생시키므로, 그 블록의
  * RichReportEditor가 이미 붙여둔 onInput(emitChange)이 그대로 반응해 상태에 반영된다.
  */
-export function applyTextFormat(command: "bold" | "italic" | "underline") {
-  document.execCommand(command);
+export type TextFormatCommand =
+  | "bold" | "italic" | "underline"
+  | "bullet" | "number"
+  | "alignLeft" | "alignCenter" | "alignRight"
+  | "sizeUp" | "sizeDown";
+
+/** `execCommand("fontSize")`가 받는 1~7 사다리. 문서 기본(13px)이 3번 자리다. */
+const FONT_SIZE_STEPS = [1, 2, 3, 4, 5, 6, 7];
+
+/** 지금 선택에 걸린 글자 크기 단계(1~7). 모르면 기본 3. */
+function currentFontStep(): number {
+  const value = Number(document.queryCommandValue("fontSize"));
+  return FONT_SIZE_STEPS.includes(value) ? value : 3;
+}
+
+export function applyTextFormat(command: TextFormatCommand) {
+  // **styleWithCSS를 켠다** — 끄면 Chrome이 `<font size>` 같은 옛 태그를 남기는데, 그 태그는
+  // 우리 HTML 정리·한글 붙여넣기 경로에서 서식이 사라진다. 켜면 인라인 style로 나온다.
+  document.execCommand("styleWithCSS", false, "true");
+  switch (command) {
+    case "bullet": return void document.execCommand("insertUnorderedList");
+    case "number": return void document.execCommand("insertOrderedList");
+    case "alignLeft": return void document.execCommand("justifyLeft");
+    case "alignCenter": return void document.execCommand("justifyCenter");
+    case "alignRight": return void document.execCommand("justifyRight");
+    case "sizeUp":
+    case "sizeDown": {
+      const step = currentFontStep();
+      const next = Math.min(7, Math.max(1, step + (command === "sizeUp" ? 1 : -1)));
+      return void document.execCommand("fontSize", false, String(next));
+    }
+    default: return void document.execCommand(command);
+  }
 }
 
 export function insertArrowLine() {
@@ -329,7 +359,7 @@ export function FormatGlyph({ variant }: { variant: "bold" | "italic" | "underli
   const style = variant === "bold" ? "font-bold" : variant === "italic" ? "italic font-serif" : "";
   return (
     <span className="relative inline-flex flex-col items-center leading-none">
-      <span className={`text-[17px] ${style}`}>A</span>
+      <span className={`text-[13px] ${style}`}>A</span>
       {variant === "underline" && <span className="mt-[2px] h-[1.5px] w-[15px] rounded bg-current" />}
     </span>
   );
@@ -466,7 +496,7 @@ export function BlockView({
   // 거치지 않고 그대로 렌더링한다(2026-07-26).
   if (block.kind === "rich-static") {
     if (/^feature-qualitative-q\d+-scorebox$/.test(block.id)) {
-      return <FeatureScoreboxPreview block={block} sourceFileUrl={sourceFileUrl} />;
+      return <FeatureScoreboxPreview block={block} />;
     }
     if (/^feature-qualitative-q\d+-emotionbox$/.test(block.id)) {
       return <div className="rivalabs-emotion-frame viewer-emotion-frame"><EditableRichStaticBlock block={block} onChange={onChange} sourceFileUrl={sourceFileUrl} compact showEmbeddedChartControls={false} /></div>;

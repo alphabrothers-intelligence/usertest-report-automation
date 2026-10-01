@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { ReportPropertyPanel } from "@/components/ReportPropertyPanel";
+import { BlockLayoutFields, ReportPropertyPanel, type BlockLayoutControls } from "@/components/ReportPropertyPanel";
 import { SidebarIcon } from "@/components/report-web-document/ReportBlockView";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
 import { REPORT_TEXT, SECTION_BANNER, sectionRomanGlyph } from "@/lib/report/sectionStyle";
@@ -59,10 +59,10 @@ export function TableOfContents({
   }, [activeSection]);
 
   return (
-    <aside className="h-fit bg-transparent px-1 py-2 lg:sticky lg:top-28 lg:flex lg:max-h-[calc(100vh-8rem)] lg:flex-col lg:overflow-hidden">
+    <aside className="h-fit bg-transparent px-1 py-2 lg:sticky lg:top-[184px] lg:flex lg:max-h-[calc(100vh-200px)] lg:flex-col lg:overflow-hidden">
       <div className="flex items-start justify-between">
         <div>
-          <p className="px-2 text-xl font-bold tracking-[-0.03em] text-[#20242c]">목차</p>
+          <p className="px-2 text-[15px] font-bold tracking-[-0.02em] text-[#20242c]">목차</p>
           <p className="mb-2 mt-0.5 px-2 text-xs text-[#8a94a3]">보고서 작성 현황</p>
         </div>
         {/* 접기 버튼은 툴바의 목차 토글과 **같은 아이콘**이다 — ×로 두면 무엇이 닫히는지, 어디서
@@ -125,15 +125,17 @@ export function ActionPanel({
   selectedBlock,
   onBlockChange,
   onCollapse,
+  layout,
 }: {
   activeTitle: string;
   onDownload: () => void;
   selectedBlock: ReportBlock | null;
   onBlockChange: (next: ReportBlock) => void;
   onCollapse: () => void;
+  layout: BlockLayoutControls | null;
 }) {
   return (
-    <aside className="h-fit rounded-xl border border-[#c9daf2] bg-white shadow-[0_10px_30px_rgba(31,55,88,0.08)] lg:sticky lg:top-36 lg:flex lg:max-h-[calc(100vh-10rem)] lg:flex-col lg:overflow-hidden">
+    <aside className="h-fit rounded-xl border border-[#c9daf2] bg-white shadow-[0_10px_30px_rgba(31,55,88,0.08)] lg:sticky lg:top-[184px] lg:flex lg:max-h-[calc(100vh-200px)] lg:flex-col lg:overflow-hidden">
       <div className="flex items-start justify-between border-b border-[#e3e8ef] px-5 py-4">
         <div>
           <p className="text-xs font-semibold text-[#8a94a3]">보고서 작업</p>
@@ -151,6 +153,13 @@ export function ActionPanel({
           <p className="mb-3 text-sm font-bold text-[#315c9c]">선택 요소 편집</p>
           <ReportPropertyPanel block={selectedBlock} onChange={onBlockChange} />
         </div>
+        {/* 고른 블록 종류에 맞는 속성만 보인다 — 표면 표 속성(표/행 탭), 그 밖은 단락 속성 두 줄. */}
+        {layout ? (
+          <div className="border-t border-[#e3e8ef] p-5">
+            <p className="mb-3 text-sm font-bold text-[#315c9c]">{layout.isTable ? "표 속성" : "단락 속성"}</p>
+            <BlockLayoutFields layout={layout} />
+          </div>
+        ) : null}
       </div>
     </aside>
   );
