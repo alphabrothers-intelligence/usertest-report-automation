@@ -143,7 +143,9 @@ export function EditableBarChart({ block }: { block: ReportChartBlock }) {
       </div>
       {/* data-report-export: "이 섹션 전체 다운로드" ZIP 훑기 대상(lib/report/exportImage.ts).
           svg를 감싼 바깥 div에 붙여 표(EditableTable)와 같은 방식으로 다룬다. */}
-      <div data-report-export="chart" data-report-export-name={block.title || block.id}>
+      {/* 원본(리바랩스 27쪽)은 차트 전체를 옅은 회색 테두리로 감싼다 — 제목 띠 아래로 선이 없어
+          그래프가 본문에 떠 보였다(2026-10-01 담당자 지적). PNG 내보내기는 svg만 쓰므로 영향 없다. */}
+      <div data-report-export="chart" data-report-export-name={block.title || block.id} className="border border-[#c9ccd3]">
         <svg ref={svgRef} data-export-crop-top="27" viewBox={`0 0 ${width} ${height}`} className="block w-full bg-white" aria-label={block.title}>
           {/* PDF의 차트 제목 밴드(lib/pdf/charts.tsx VerticalBarChart)는 연보라 밴드 위에
               4px 시안색 강조선이 딱 붙어있다(borderTopWidth:4, borderTopColor:"#4fc8e8") —

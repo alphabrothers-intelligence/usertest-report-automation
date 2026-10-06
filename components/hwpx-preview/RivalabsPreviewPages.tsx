@@ -239,7 +239,7 @@ function RivalabsBlockList({ blocks }: { blocks: ReportBlock[] }) {
 
 /** Ⅲ장에서 문항별 분석 다음에 빠져 있던 정량 결과 페이지를 원본 순서로 렌더링한다. */
 export function RivalabsFeatureMetricsReferencePages({ section }: { section: ReportSectionContent }) {
-  const start = section.blocks.findIndex((block) => block.id === "feature-satisfaction-heading");
+  const start = section.blocks.findIndex((block) => block.id === "feature-satisfaction");
   const end = section.blocks.findIndex((block) => block.id === "feature-analysis-heading");
   if (start < 0) return null;
   const blocks = section.blocks.slice(start, end >= 0 ? end : undefined);

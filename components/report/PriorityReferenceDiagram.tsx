@@ -21,14 +21,17 @@ const levels = [
   ["최하", "필요성 적음", "#aebfe5"],
 ] as const;
 
-const notes = [
-  ["#f9c9a8", "중요도가 높으나 만족도가 낮으므로 긴급 개선 필요"],
-  ["#fde9dd", "중요도가 높으나 만족도가 보통이므로 중요 개선 필요"],
-  ["#ffffff", "중요도가 보통이나 만족도가 낮으므로 중요 개선 필요"],
-  ["#ffffff", "중요도가 높으나 만족도가 높으므로 개선 필요성 낮음"],
-  ["#dbe5f5", "중요도가 보통이고 만족도가 높으므로 추후 고도화"],
-  ["#aebfe5", "중요도가 낮으나 만족도가 높으므로 개선 필요성 낮음"],
-] as const;
+/**
+ * 판정 기준 범례 — **원본 28쪽 그대로**(2026-10-01 담당자 지적: 원본처럼 색깔별로 묶고 핵심 문구는 볼드).
+ * 색 하나에 여러 줄이 걸리므로 [색, [앞말, 볼드 문구][]] 형태다.
+ */
+const notes: readonly (readonly [string, readonly (readonly [string, string])[]])[] = [
+  ["#f9c9a8", [["중요도가 높으나 만족도가 낮으므로 ", "긴급 개선 필요"]]],
+  ["#fde9dd", [["중요도가 높으나 만족도가 보통이므로 ", "중요 개선 필요"], ["중요도가 보통이나 만족도가 낮으므로 ", "중요 개선 필요"]]],
+  ["#ffffff", [["중요도가 높으나 만족도가 높으므로 ", "개선 필요성 낮음"], ["중요도가 보통이나 만족도가 보통이므로 ", "개선 필요"], ["중요도가 낮으나 만족도가 낮으므로 ", "제외 or 개선 권장"]]],
+  ["#dbe5f5", [["중요도가 보통이고 만족도가 높으므로 ", "추후 고도화"], ["중요도가 낮으나 만족도가 보통이므로 ", "개선 권장"]]],
+  ["#aebfe5", [["중요도가 낮으나 만족도가 높으므로 ", "개선 필요성 낮음"]]],
+];
 
 export function PriorityReferenceDiagram({ block }: { block: ReportPriorityReferenceBlock }) {
   return (
@@ -48,7 +51,12 @@ export function PriorityReferenceDiagram({ block }: { block: ReportPriorityRefer
               {levels.map(([level, description, color]) => <div key={level} className="grid grid-cols-[88px_1fr] border-t border-[#a1a1aa]"><span className="flex items-center gap-2 border-r border-[#a1a1aa] px-2 py-1"><i className="h-3 w-3" style={{ backgroundColor: color }} />{level}</span><span className="px-2 py-1 text-center">{description}</span></div>)}
             </div>
             <div className="mt-3 space-y-1.5 text-xs leading-5 text-[#111827]">
-              {notes.map(([color, text]) => <p key={text} className="flex gap-2"><i className="mt-1 h-3 w-3 shrink-0 border border-[#a1a1aa]" style={{ backgroundColor: color }} /><span>{text}</span></p>)}
+              {notes.map(([color, lines]) => (
+                <div key={color + lines[0][1]} className="flex gap-2">
+                  <i className="mt-1 h-3 w-3 shrink-0 border border-[#a1a1aa]" style={{ backgroundColor: color }} />
+                  <span>{lines.map(([lead, key]) => <span key={lead} className="block">{lead}<strong>{key}</strong></span>)}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

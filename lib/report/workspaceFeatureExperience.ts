@@ -143,7 +143,7 @@ export function buildFeatureSection(
   return [
     headingBlock({ id: "feature-result-heading", variant: "numbered", number: "1", text: "기능별 고객 경험 조사 결과" }),
     ...services.featureQualitativeBlocks(stats, "feature-qualitative", featureQualitative, qualitative.length > 0),
-    headingBlock({ id: "feature-satisfaction-heading", variant: "subheading", text: "기능별 만족도" }),
+    // 차트 위 "기능별 만족도" 소제목은 원본에 없다 — 차트 제목 띠가 같은 말을 한다(2026-10-01 담당자 지적).
     meanChart("feature-satisfaction", "기능별 만족도 조사 결과", ranked),
     tableBlock({
       id: "feature-rank-table",
