@@ -19,6 +19,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetSt
 import { QuoteCorrectionPanel } from "@/components/QuoteCorrectionPanel";
 import { ActionPanel, PageFooter, SectionBanner, TableOfContents } from "@/components/report-web-document/ReportDocumentChrome";
 import { ReportBackCoverPage, ReportCoverPage, ReportTocPage } from "@/components/report-web-document/ReportFrontMatter";
+import { ChapterEditor } from "@/components/continuous-editor/ChapterEditor";
 import { AnalysisReferenceContent, PolarityReviewCard, QuoteSourceContent } from "@/components/report-web-document/EvidencePanelContent";
 import { BlockView } from "@/components/report-web-document/ReportBlockView";
 import { ReviewFlagNotice } from "@/components/report/ReviewFlagNotice";
@@ -130,6 +131,14 @@ const FILL_MIN_PX = 260 * DOC_ZOOM;
 
 export function ReportWebDocument({ sections, setSections, checkpoint, reportData, activeSection, onActiveSectionChange, workspaceStatus, workspaceError, onRetry, sourceFileUrl, onToolbarActionsChange, productInfo, onProductInfoChange, reviewFlags = [] }: Props) {
   const documentContainerRef = useRef<HTMLDivElement>(null);
+  // **본문은 이어진 편집기(Word식)로 그린다**(2026-10-01 담당자 승인). `?legacy=1`이면 예전 블록 쌓기 화면 —
+  // 새 편집기에 문제가 생겼을 때 작업을 이어갈 비상구다. 기능을 다 옮기면 지운다.
+  // 이 컴포넌트는 데이터를 받은 뒤 브라우저에서만 그려지므로 주소를 바로 읽어도 된다.
+  const [editorMode] = useState(() => typeof window === "undefined" || !new URLSearchParams(window.location.search).has("legacy"));
+  // 장별 쪽 수(편집기가 잰 값). 목차 쪽 번호와 이어지는 쪽 번호에 쓴다.
+  const [chapterPages, setChapterPages] = useState<Record<string, number>>({});
+  // 장별 제목 블록이 놓인 쪽(장 안에서 0부터). 목차 소제목 쪽 번호에 쓴다.
+  const [headingPages, setHeadingPages] = useState<Record<string, Record<string, number>>>({});
   const [pageGroups, setPageGroups] = useState<Record<string, string[][]>>({});
   const [selectedBlockRef, setSelectedBlockRef] = useState<{ numeral: string; id: string } | null>(null);
   const [correctionsPanelOpen, setCorrectionsPanelOpen] = useState(false);
@@ -244,7 +253,8 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
   // 묶는다. 긴 단일 블록은 브라우저가 문단/표 행 경계에서 자연 분할하도록 단독 페이지에 둔다.
   useLayoutEffect(() => {
     const root = documentContainerRef.current;
-    if (!root || sections.length === 0) return;
+    // 이어진 편집기는 스스로 쪽을 나눈다 — 블록을 쪼개고 묶는 옛 측정이 끼어들면 안 된다.
+    if (!root || sections.length === 0 || editorMode) return;
     const measure = () => {
     const pxPerMm = (96 / 25.4) * DOC_ZOOM;
     // 297mm에서 쪽 안쪽 여백을 뺀 값 — 아래는 푸터(L15) 자리라 위(18mm)보다 넓다.
@@ -393,7 +403,7 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     // setSections는 useState의 setter라 바뀌지 않는다 — 넣으면 매 렌더 재측정이 도는 것처럼
     // 보이게 할 뿐이라 뺀다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sections]);
+  }, [sections, editorMode]);
 
   if (!reportData || sections.length === 0) {
     const isLoading = workspaceStatus === "loading";
@@ -439,6 +449,17 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
     }
     return null;
   })();
+  // 편집기 모드에서 목차가 쓰는 쪽 묶음: 장마다 잰 쪽 수만큼, 제목 블록은 편집기가 잰 그 쪽에 넣는다
+  // (ReportTocPage가 소제목 쪽 번호를 "몇 번째 묶음에 있나"로 계산한다).
+  const tocPageGroups = editorMode
+    ? Object.fromEntries(sections.map((section) => {
+      const groups: string[][] = Array.from({ length: chapterPages[section.numeral] ?? 1 }, () => []);
+      for (const [id, page] of Object.entries(headingPages[section.numeral] ?? {})) groups[Math.min(page, groups.length - 1)]?.push(id);
+      return [section.numeral, groups];
+    }))
+    : pageGroups;
+  const chapterFirstPage: Record<string, number> = {};
+  sections.reduce((next, section) => { chapterFirstPage[section.numeral] = next; return next + (chapterPages[section.numeral] ?? 1); }, 3);
   const bodyPages = sections.flatMap((section) => {
     const groups = pageGroups[section.numeral] ?? [section.blocks.map((block) => block.id)];
     return groups.map((blockIds, pageIndex) => ({ section, blockIds, pageIndex }));
@@ -550,8 +571,27 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
       )}
       <article ref={documentContainerRef} style={{ zoom: DOC_ZOOM }} className="flex min-w-[210mm] flex-col items-start gap-10">
         <ReportCoverPage productInfo={productInfo} onChange={(next) => { checkpoint(); onProductInfoChange(next); }} />
-        <ReportTocPage sections={sections} pageGroups={pageGroups} onSectionsChange={(next) => { checkpoint(); setSections(next); }} />
-        {bodyPages.map(({ section, blockIds, pageIndex }, bodyIndex) => (
+        <ReportTocPage sections={sections} pageGroups={tocPageGroups} onSectionsChange={(next) => { checkpoint(); setSections(next); }} />
+        {editorMode && sections.map((section) => (
+          <ChapterEditor
+            key={section.numeral}
+            section={section}
+            sourceFileUrl={sourceFileUrl}
+            firstPage={chapterFirstPage[section.numeral]}
+            footerBrand={footerBrand}
+            footerYear={footerYear}
+            onPageCount={(count) => setChapterPages((previous) => (previous[section.numeral] === count ? previous : { ...previous, [section.numeral]: count }))}
+            onHeadingPages={(pages) => setHeadingPages((previous) => ({ ...previous, [section.numeral]: pages }))}
+            onBlockChange={(next) => updateBlock(section.numeral, next.id, next)}
+            onHtmlChange={(editorHtml) => setSections((previous) => previous.map((item) => (item.numeral === section.numeral ? { ...item, editorHtml } : item)))}
+            onSelectBlock={(id) => setSelectedBlockRef({ numeral: section.numeral, id })}
+            sectionRef={(element) => {
+              if (element) sectionElementsRef.current.set(section.numeral, element);
+              else sectionElementsRef.current.delete(section.numeral);
+            }}
+          />
+        ))}
+        {!editorMode && bodyPages.map(({ section, blockIds, pageIndex }, bodyIndex) => (
           <section
             key={`${section.numeral}-${pageIndex}`}
             id={pageIndex === 0 ? `section-${section.numeral}` : undefined}

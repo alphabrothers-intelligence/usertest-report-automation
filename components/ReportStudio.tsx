@@ -16,6 +16,7 @@ import type { ReportWorkspaceSeed } from "@/lib/report/workspace";
 import { withDefaultQuadrantZones, type ReportBlock, type ReportSectionContent } from "@/lib/report/sections";
 import { ReportWebWorkspace } from "@/components/ReportWebWorkspace";
 import type { ToolbarActions } from "@/components/ReportWebDocument";
+import { runEditorCommand } from "@/lib/editor/activeEditor";
 import { applyTextFormat, insertArrowLine, FormatButton, FormatGlyph, SidebarIcon, UndoIcon } from "@/components/report-web-document/ReportBlockView";
 import type { ProductInfo } from "@/lib/productInfo/types";
 import type { ReviewFlag } from "@/lib/quant/reviewFlags";
@@ -177,6 +178,8 @@ export function ReportStudio({
   // `발행 PDF` 탭으로 전환한다. 이전처럼 PDF를 기본값으로 두면, 사용자는 편집 가능한 보고서가
   // 없는 것처럼 느끼고 별도 전환을 해야 했다.
   const [workspaceMode, setWorkspaceMode] = useState<"web" | "pdf">("web");
+  // 이어진 편집기가 떠 있으면 되돌리기/다시 실행은 편집기 기록을 쓰므로 버튼을 늘 켜 둔다(legacy 화면에선 블록 스택만).
+  const [editorReady] = useState(() => typeof window === "undefined" || !new URLSearchParams(window.location.search).has("legacy"));
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<DraftSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<DraftSnapshot[]>([]);
@@ -331,6 +334,8 @@ export function ReportStudio({
   }
 
   function undo() {
+    // 이어진 편집기에서 쓰던 중이면 그 편집기의 되돌리기(글자 단위). 차트·표 수정 같은 블록 편집은 아래 스택이 맡는다.
+    if (runEditorCommand("undo")) return;
     const previous = undoStack.at(-1);
     if (!previous) return;
     const current = snapshot();
@@ -340,6 +345,7 @@ export function ReportStudio({
   }
 
   function redo() {
+    if (runEditorCommand("redo")) return;
     const next = redoStack.at(-1);
     if (!next) return;
     const current = snapshot();
@@ -490,8 +496,8 @@ export function ReportStudio({
                 <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
               </>
             )}
-            <button type="button" title="되돌리기" aria-label="되돌리기" onClick={undo} disabled={undoStack.length === 0} className="flex size-9 items-center justify-center rounded-md text-[#526174] hover:bg-white disabled:opacity-30"><UndoIcon /></button>
-            <button type="button" title="다시 실행" aria-label="다시 실행" onClick={redo} disabled={redoStack.length === 0} className="flex size-9 items-center justify-center rounded-md text-[#526174] hover:bg-white disabled:opacity-30"><UndoIcon flip /></button>
+            <button type="button" title="되돌리기" aria-label="되돌리기" onClick={undo} disabled={undoStack.length === 0 && !editorReady} className="flex size-9 items-center justify-center rounded-md text-[#526174] hover:bg-white disabled:opacity-30"><UndoIcon /></button>
+            <button type="button" title="다시 실행" aria-label="다시 실행" onClick={redo} disabled={redoStack.length === 0 && !editorReady} className="flex size-9 items-center justify-center rounded-md text-[#526174] hover:bg-white disabled:opacity-30"><UndoIcon flip /></button>
             <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
             {workspaceMode === "web" && toolbarActions && (
               <>

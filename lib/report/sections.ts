@@ -268,6 +268,11 @@ export type ReportSectionContent = {
    * 한 행이 한 쪽보다 크면 켜짐 여부와 무관하게 나눈다(안 나누면 쪽이 넘친다).
    */
   rowBreak?: string[];
+  /**
+   * 이어진 편집기(Word식)의 **이 장 본문 전체**(TipTap HTML). 담당자가 편집하면 생기고 초안과 함께 저장된다.
+   * 있으면 편집기는 블록 대신 이것으로 연다 — 블록(`blocks`)은 차트·표 그림과 다른 출력(PDF 이전 경로·HWPX)이 계속 쓴다.
+   */
+  editorHtml?: string;
   /** 웹 A4 레이아웃 측정으로 계산된 장 시작 쪽수. */
   tocPageNumber?: number;
   blocks: ReportBlock[];

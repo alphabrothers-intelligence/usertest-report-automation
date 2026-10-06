@@ -1,5 +1,6 @@
 "use client";
 
+import { runEditorCommand } from "@/lib/editor/activeEditor";
 import { useEffect, useRef, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react";
 import { RichReportEditor } from "@/components/RichReportEditor";
 import { EditableBarChart } from "@/components/report/EditableBarChart";
@@ -281,6 +282,8 @@ function currentFontStep(): number {
 }
 
 export function applyTextFormat(command: TextFormatCommand) {
+  // 이어진 편집기(Word식)가 떠 있으면 그 편집기 명령으로 — 브라우저 기본 명령은 편집기 문서와 어긋난다.
+  if (runEditorCommand(command)) return;
   // **styleWithCSS를 켠다** — 끄면 Chrome이 `<font size>` 같은 옛 태그를 남기는데, 그 태그는
   // 우리 HTML 정리·한글 붙여넣기 경로에서 서식이 사라진다. 켜면 인라인 style로 나온다.
   document.execCommand("styleWithCSS", false, "true");
@@ -301,6 +304,7 @@ export function applyTextFormat(command: TextFormatCommand) {
 }
 
 export function insertArrowLine() {
+  if (runEditorCommand("arrow")) return;
   const active = document.activeElement as HTMLElement | null;
   if (!active || active.getAttribute("contenteditable") !== "true") return;
   const line = document.createElement("p");

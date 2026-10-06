@@ -53,7 +53,12 @@
     "check:edit-reflow": "tsx scripts/check-edit-reflow.ts",
     "check:field-actions": "tsx scripts/check-field-actions.ts",
     "check:quote-emphasis-guard": "tsx scripts/check-quote-emphasis-guard.ts",
-    "check:table-props": "tsx scripts/check-table-props.ts"
+    "check:table-props": "tsx scripts/check-table-props.ts",
+    "check:continuous-editor": "tsx scripts/check-continuous-editor.ts",
+    "check:survey-xlsx": "tsx scripts/check-survey-xlsx.ts",
+    "check:editor-save": "tsx scripts/check-editor-save.ts",
+    "check:editor-toolbar": "tsx scripts/check-editor-toolbar.ts",
+    "check:editor-links": "tsx scripts/check-editor-links.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.15",
@@ -61,6 +66,13 @@
     "@ai-sdk/react": "^4.0.30",
     "@napi-rs/canvas": "^1.0.2",
     "@react-pdf/renderer": "^4.5.1",
+    "@tiptap/core": "^3.31.4",
+    "@tiptap/extension-table": "^3.31.4",
+    "@tiptap/extension-text-align": "^3.31.4",
+    "@tiptap/extension-text-style": "^3.31.4",
+    "@tiptap/pm": "^3.31.4",
+    "@tiptap/react": "^3.31.4",
+    "@tiptap/starter-kit": "^3.31.4",
     "@vercel/blob": "^2.6.1",
     "ai": "^7.0.28",
     "docx": "^9.7.1",

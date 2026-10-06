@@ -1,5 +1,7 @@
 "use client";
 
+import { replaceBlockInEditors, replaceQuotesInEditors } from "@/lib/editor/activeEditor";
+import { blockHtml } from "@/lib/editor/toEditorHtml";
 import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { BatchCorrectionItem } from "@/components/QuoteCorrectionPanel";
 import { ANALYSIS_EVIDENCE_BY_BLOCK, type AnalysisReference } from "@/components/report-web-document/analysisEvidence";
@@ -136,18 +138,19 @@ export function useReportEvidence({
     let frame = 0;
 
     const quoteSourcesFor = (root: HTMLElement): { label: string; sources: QuoteGroupReference["sources"] } | null => {
-      const marker = root.querySelector<HTMLElement>("[data-quote-group-source]");
+      // 이어진 편집기에서는 마커 속성이 묶음 div 자체에 붙어 있다(lib/editor/toEditorHtml.ts liftQuoteGroupMarkers).
+      const marker = root.matches("[data-group-source]") ? root : root.querySelector<HTMLElement>("[data-quote-group-source], [data-group-source]");
       if (!marker) return null;
-      const label = root.matches("table") ? "긍정·부정 의견" : decodeURIComponent(marker.dataset.quoteGroupLabel ?? "인용 의견");
+      const label = root.matches("table") ? "긍정·부정 의견" : decodeURIComponent(marker.dataset.quoteGroupLabel ?? marker.dataset.groupLabel ?? "인용 의견");
       const grouped = new Map<string, { questionKey: string; quotes: string[]; sectionLabel?: string }>();
       const quoteGroups = root.matches("[data-quote-group]") ? [root] : Array.from(root.querySelectorAll<HTMLElement>("[data-quote-group]"));
       for (const quoteGroup of quoteGroups) {
-        const groupMarker = quoteGroup.querySelector<HTMLElement>("[data-quote-group-source]") ?? marker;
-        const questionKey = groupMarker.dataset.quoteGroupSource ?? "";
+        const groupMarker = (quoteGroup.matches("[data-group-source]") ? quoteGroup : quoteGroup.querySelector<HTMLElement>("[data-quote-group-source]")) ?? marker;
+        const questionKey = groupMarker.dataset.quoteGroupSource ?? groupMarker.dataset.groupSource ?? "";
         const sectionsInGroup = Array.from(quoteGroup.querySelectorAll<HTMLElement>("[data-quote-section]"));
         const partitions = sectionsInGroup.length > 0 ? sectionsInGroup : [quoteGroup];
         for (const partition of partitions) {
-          const sectionLabel = partition.dataset.quoteSection ?? decodeURIComponent(groupMarker.dataset.quoteGroupLabel ?? label);
+          const sectionLabel = partition.dataset.quoteSection ?? decodeURIComponent(groupMarker.dataset.quoteGroupLabel ?? groupMarker.dataset.groupLabel ?? label);
           const quotes = Array.from(partition.querySelectorAll<HTMLElement>("[data-quote-text]"))
             .map((node) => decodeURIComponent(node.dataset.quoteText ?? "")).filter(Boolean);
           if (questionKey && quotes.length > 0) grouped.set(`${questionKey}:${sectionLabel}`, { questionKey, quotes: [...new Set(quotes)], sectionLabel });
@@ -295,6 +298,10 @@ export function useReportEvidence({
       // 서버가 다시 만든 구간으로 통째로 갈아끼운다.
       const rebuiltRun = result.sections.flatMap((section) => section.blocks).filter((block) => belongs(block.id));
       checkpoint();
+      // 이어진 편집기에도 다시 만든 블록을 끼운다(그 문항 밖 편집 내용은 남는다).
+      for (const block of rebuiltRun) {
+        if (block.kind === "text" || block.kind === "rich-static") replaceBlockInEditors(block.id, blockHtml(block));
+      }
       setSections((previous) => previous.map((section) => {
         const start = section.blocks.findIndex((block) => belongs(block.id));
         if (start < 0 || rebuiltRun.length === 0) return section;
@@ -366,6 +373,8 @@ export function useReportEvidence({
   function applyQuoteCompletion() {
     if (!quoteCompletion || !quoteCompletionTarget) return;
     checkpoint();
+    // 이어진 편집기 문서에도 같은 교정을 적용한다(블록 HTML만 고치면 화면에 안 보인다).
+    replaceQuotesInEditors(new Map([[encodeURIComponent(quoteCompletionTarget.quote), quoteCompletion.completedQuote]]));
     const encodedQuote = encodeURIComponent(quoteCompletionTarget.quote);
     setSections((previous) => previous.map((section) => ({
       ...section,
@@ -398,6 +407,7 @@ export function useReportEvidence({
   function applyBatchCorrections(items: BatchCorrectionItem[]) {
     if (items.length === 0) return;
     checkpoint();
+    replaceQuotesInEditors(new Map(items.map((item) => [encodeURIComponent(item.quote), item.suggestion])));
     const byEncodedQuote = new Map(items.map((item) => [encodeURIComponent(item.quote), item]));
     setSections((previous) => previous.map((section) => ({
       ...section,
