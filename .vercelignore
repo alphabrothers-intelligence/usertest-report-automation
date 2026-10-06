@@ -1,0 +1,15 @@
+# `vercel` CLI는 GitHub가 아니라 이 폴더를 그대로 올린다 — 커밋되지 않은 파일도 올라간다.
+# 응답자 개인정보(data/)와 키(.env*)는 절대 올리지 않는다.
+data/
+.env*
+!.env.local.example
+node_modules/
+.next/
+output/
+tmp/
+poc/
+graphify-out/
+docs/
+scripts/
+미리보기_*.pdf
+HANDOFF_*.md
