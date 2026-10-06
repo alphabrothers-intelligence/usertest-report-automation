@@ -47,6 +47,10 @@ export async function extractTextFromDocument(fileUrl: string): Promise<string> 
 
   if (ext === "pdf") {
     const { PDFParse } = await import("pdf-parse");
+    // Vercel 서버리스에서는 번들러가 pdf.worker.mjs 파일을 함수에 싣지 않아 "Setting up fake worker failed"로
+    // 실패했다(2026-10-06 실측, 로컬은 정상). 라이브러리에 내장된 data URL worker를 지정하면 파일이 필요 없다.
+    const { getData } = await import("pdf-parse/worker");
+    PDFParse.setWorker(getData());
     const parser = new PDFParse({ data: buffer });
     try {
       const { text } = await parser.getText();
