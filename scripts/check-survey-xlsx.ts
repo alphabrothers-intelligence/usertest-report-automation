@@ -6,7 +6,7 @@ import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
-import { numberQuestions, toCsv, toSheetRows, toWallaTxt, type SurveyQuestion } from "../lib/survey/types";
+import { numberQuestions, toCsv, toSheetRows, toWallaTxt, wallaChecklist, wallaLayout, wallaTodos, type SurveyQuestion } from "../lib/survey/types";
 import { buildSurveyXlsx } from "../lib/survey/xlsx";
 
 const q = (id: string, patch: Partial<SurveyQuestion> = {}): SurveyQuestion => ({
@@ -35,14 +35,39 @@ assert.ok(csv.includes('"제품 이름, ""따옴표"""'));
 
 const txt = toWallaTxt([...questions, q("idea2", { stage: "개선 아이디어" })]).split("\r\n");
 assert.strictEqual(txt[0], "[[AdvancedFormat]]");
-assert.strictEqual(txt.filter((l) => l.startsWith("[[Block:")).length, 2, "단계마다 블록 하나");
-assert.strictEqual(txt.filter((l) => l === "[[PageBreak]]").length, 1, "단계 사이에만 쪽 나눔");
+// 인적(age, used) | 네·인적(분기 문항 name) | 인적(score, idea) | 개선(idea2) — 분기 묶음은 따로 한 쪽
+assert.deepStrictEqual(txt.filter((l) => l.startsWith("[[Block:")), [
+  "[[Block:인적 사항 및 특성·경험 조사]]", "[[Block:네, 있어요 · 인적 사항 및 특성·경험 조사]]",
+  "[[Block:인적 사항 및 특성·경험 조사]]", "[[Block:개선 아이디어]]",
+]);
+assert.strictEqual(txt.filter((l) => l === "[[PageBreak]]").length, 3, "블록 사이에만 쪽 나눔");
 const at = (text: string) => txt.indexOf(text);
 assert.deepStrictEqual(txt.slice(at("used") - 1, at("used") + 4), ["[[Question:MC:SingleAnswer:Vertical]]", "used", "[[Choices]]", "네, 있어요", "아니요, 없어요"]);
-assert.strictEqual(txt[at("score") - 1], "[[Question:NPS]]", "척도는 NPS(0~10)");
-assert.notStrictEqual(txt[at("score") + 1], "[[Choices]]", "척도에는 보기를 붙이지 않는다");
+assert.deepStrictEqual(
+  txt.slice(at("score") - 1, at("score") + 15),
+  ["[[Question:Matrix:SingleAnswer]]", "score", "[[Choices]]", "점수", "[[Answers]]", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+  "척도는 한 줄 객관식 표(열 0~10), 남은 보기는 무시",
+);
 assert.strictEqual(txt[at("나이를 입력해 주세요.") - 1], "[[Question:TE:SingleLine]]", "인적 사항 주관식은 한 줄");
 assert.strictEqual(txt[at("idea2") - 1], "[[Question:TE:Essay]]", "그 밖의 주관식은 장문");
+
+// 분기 문항은 기준 문항 바로 뒤에 보기별로 모인다(엑셀 순서와 달라도 된다).
+const tracked = [
+  q("track", { type: "객관식-단일", options: ["A앱", "B앱"] }),
+  q("a1", { stage: "기능별 고객 경험 평가 - 자사 제품 평가", branchOn: "track", branchValue: "A앱" }),
+  q("b1", { stage: "기능별 고객 경험 평가 - 자사 제품 평가", branchOn: "track", branchValue: "B앱" }),
+  q("a2", { stage: "핵심구매요인 파악", branchOn: "track", branchValue: "A앱" }),
+  q("common", { stage: "종합 만족도", required: false }),
+];
+const layout = wallaLayout(tracked);
+assert.deepStrictEqual(layout.map((s) => s.q.id), ["track", "a1", "a2", "b1", "common"]);
+assert.deepStrictEqual(layout.map((s) => s.label), ["1-1", "2-1", "3-1", "4-1", "5-1"]);
+assert.deepStrictEqual(wallaTodos(tracked[1], layout), ["분기: 1-1 문항에서 'A앱'를 고른 사람에게만 보임 — 로직은 1-1에 설정", "필수입력 켜기"]);
+const list = wallaChecklist(tracked);
+assert.ok(list.includes("'A앱' → 2-1 a1"), list);
+assert.ok(list.includes("'B앱' → 4-1 b1"));
+assert.ok(list.includes("3-1(‘A앱’ 묶음 끝)의 기본 이동 → 5-1 common"));
+assert.ok(list.includes("· 5-1 common"), "필수 아닌 문항만 나열");
 
 async function main() {
 const template = readFileSync("public/templates/survey-question-template.xlsx");

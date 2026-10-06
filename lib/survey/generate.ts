@@ -95,7 +95,9 @@ const SYSTEM_PROMPT = `당신은 알파브라더스의 사용성 테스트 설�
 # 제품(대상자)이 둘 이상일 때
 사전요청서에 기능 목록이나 핵심구매요인이 제품·대상자별로 따로 있으면(예: 일반인용 앱 / 기관용 서비스)
 한 설문 안에서 응답자를 나눕니다.
-- 인적 사항 맨 앞에 객관식-단일 "어떤 서비스를 체험하셨나요?" (보기 = 제품명 그대로, id = "track")
+- 모두에게 묻는 인적 사항(나이·성별 등)을 먼저 묻고, **그 바로 뒤에** 객관식-단일 "어떤 서비스를 체험하셨나요?"
+  (보기 = 제품명 그대로, id = "track"). 응답자에게 자연스러운 순서이고, 설문 도구의 분기 로직도 이 문항에 건다.
+- 한쪽 대상자에게만 맞는 인적 사항은 서비스 선택 문항 **뒤에** 둡니다(앞에 두면 분기를 걸 수 없다).
 - 인적 사항 중 한쪽 대상자에게만 맞는 문항, 각 제품의 기능 평가·핵심구매요인·고객에게 확인하고 싶은 질문은
   branchOn="track", branchValue=해당 제품명. 그 하위 이유 문항도 같은 branchOn/branchValue를 가집니다.
 - 가치 만족도·추천·종합 만족도·개선 아이디어는 공통 문항으로 한 번만(문구의 제품명은 "{회사 서비스명}" 등 두 제품을 아우르는 이름으로).
@@ -142,7 +144,8 @@ export async function generateSurvey(documentText: string): Promise<SurveyDraft>
         instructions: { role: "system", content: SYSTEM_PROMPT },
         prompt: `다음 사전 요청서로 설문 문항을 설계하세요.\n\n${documentText.slice(0, MAX_INPUT_CHARS)}`,
         output: Output.object({ schema: SurveySchema }),
-        maxOutputTokens: 16000,
+        // 16000이면 기능이 많고 서비스가 둘인 요청서(피매치, 순위 문항 포함)에서 출력이 잘렸다(실측 2026-10-06).
+        maxOutputTokens: 32000,
         // 규칙과 순서가 이미 명시된 작업이고, reasoning이 켜져 있으면 출력 예산을 먼저 쓴다(stage1.ts 참고).
         reasoning: "none",
         hardTimeoutMs: 240_000,

@@ -14,6 +14,9 @@ import {
   surveyFileName,
   toCsv,
   toWallaTxt,
+  wallaChecklist,
+  wallaLayout,
+  wallaTodos,
   type SurveyDraft,
   type SurveyQuestion,
   type SurveyType,
@@ -372,6 +375,8 @@ function SurveyEditor({ draft, onChange }: { draft: SurveyDraft; onChange: (d: S
   }
 
   const selected = selectedIndex >= 0 ? questions[selectedIndex] : null;
+  const layout = useMemo(() => wallaLayout(questions), [questions]);
+  const wallaInfo = (q: SurveyQuestion) => ({ label: layout.find((s) => s.q.id === q.id)?.label ?? "", todos: wallaTodos(q, layout) });
   const cell = "border-b border-[#e9edf3] px-3 py-2 align-middle";
 
   return (
@@ -402,6 +407,14 @@ function SurveyEditor({ draft, onChange }: { draft: SurveyDraft; onChange: (d: S
           className="rounded-lg bg-[#f0f3f8] px-4 py-2 text-sm font-semibold text-[#1d2433] hover:bg-[#e4e9f1]"
         >
           WALLA용 txt
+        </button>
+        <button
+          type="button"
+          title="txt를 WALLA로 가져온 뒤 손으로 설정할 것(로직·필수·선형배율·기타 보기)을 WALLA 필드 번호 순서로 정리한 목록입니다."
+          onClick={() => download(wallaChecklist(questions), surveyFileName(draft.companyName, "txt", "_WALLA설정목록"), "text/plain;charset=utf-8")}
+          className="rounded-lg bg-[#f0f3f8] px-4 py-2 text-sm font-semibold text-[#1d2433] hover:bg-[#e4e9f1]"
+        >
+          WALLA 설정 목록
         </button>
       </section>
 
@@ -510,6 +523,7 @@ function SurveyEditor({ draft, onChange }: { draft: SurveyDraft; onChange: (d: S
               key={selected.id}
               q={selected}
               number={numbers.get(selected.id) ?? ""}
+              walla={wallaInfo(selected)}
               stages={stages}
               earlier={questions.slice(0, selectedIndex).filter((p) => isChoice(p.type))}
               numbers={numbers}
@@ -596,8 +610,8 @@ function Disclosure({ label, count, children }: { label: string; count: number; 
   );
 }
 
-function QuestionPanel({ q, number, stages, earlier, numbers, canUp, canDown, onChange, onMove, onRemove, onInsert, onClose }: {
-  q: SurveyQuestion; number: string; stages: string[]; earlier: SurveyQuestion[]; numbers: Map<string, string>;
+function QuestionPanel({ q, number, walla, stages, earlier, numbers, canUp, canDown, onChange, onMove, onRemove, onInsert, onClose }: {
+  q: SurveyQuestion; number: string; walla: { label: string; todos: string[] }; stages: string[]; earlier: SurveyQuestion[]; numbers: Map<string, string>;
   canUp: boolean; canDown: boolean;
   onChange: (patch: Partial<SurveyQuestion>) => void; onMove: (delta: number) => void;
   onRemove: () => void; onInsert: () => void; onClose: () => void;
@@ -695,6 +709,20 @@ function QuestionPanel({ q, number, stages, earlier, numbers, canUp, canDown, on
           담당자 확인 메모 <span className="font-normal text-[#94a0b2]">(파일에는 안 들어감)</span>
           <textarea className={`${field} mt-1 min-h-[52px] resize-y`} value={q.caution ?? ""} onChange={(e) => onChange({ caution: e.target.value })} />
         </label>
+
+        {/* txt로 넘어가지 않는 설정 — 문항에서 바로 보이게(2026-10-06 담당자 요청). 문항 내용에서 계산하므로 고치면 바로 바뀐다. */}
+        {walla.todos.length > 0 && (
+          <div className="rounded-lg border border-[#e3e8ef] bg-[#f8fafc] px-3 py-2.5">
+            <p className="text-[12px] font-semibold text-[#6b778a]">
+              WALLA에서 직접 할 일 <span className="font-normal text-[#94a0b2]">· WALLA 필드 {walla.label}</span>
+            </p>
+            <ul className="mt-1.5 space-y-1 text-[13px] leading-[1.5] text-[#1d2433]">
+              {walla.todos.map((todo) => (
+                <li key={todo} className="flex gap-2"><span className="text-[#94a0b2]">☐</span><span>{todo}</span></li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );
