@@ -10,6 +10,7 @@ const ALLOWED_CONTENT_TYPES = [
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
   "application/pdf",
+  "application/hwp+zip", // hwpx — 브라우저가 type을 비워 보내므로 클라이언트가 명시한다(app/survey)
   "text/plain",
   "image/jpeg",
   "image/png",

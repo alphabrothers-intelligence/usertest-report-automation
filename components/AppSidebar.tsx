@@ -6,10 +6,11 @@ import { usePathname } from "next/navigation";
 const MENU = [
   { href: "/reports", label: "보고서 목록", icon: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" },
   { href: "/new", label: "보고서 생성", icon: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" },
+  { href: "/survey", label: "설문 문항 생성", icon: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 12h6M9 16h4" },
 ];
 
 /**
- * 왼쪽 메뉴 — 목록과 생성 두 화면만 오간다. 예전엔 여기에 저장된 보고서를 줄줄이 나열했는데
+ * 왼쪽 메뉴 — 보고서 목록·생성, 그 앞 단계인 설문 문항 생성. 예전엔 여기에 저장된 보고서를 줄줄이 나열했는데
  * 보기 힘들다는 지적(2026-09-30)으로 목록은 `/reports` 본문으로 옮겼다.
  */
 export function AppSidebar() {

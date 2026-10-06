@@ -258,3 +258,14 @@ begin
     add constraint qualitative_section_analysis_runs_section_key_check
     check (section_key in ('featureExperience', 'corePurchaseFactor', 'fourValues', 'fourValueItems', 'uxQuality', 'crossAnalysis'));
 end $$;
+
+-- 설문 문항 생성(2026-10-01): 사전요청서로 만든 문항 리스트. 화면에서 고친 내용을 그대로 저장한다.
+-- 문항·검토 메모를 통째로 jsonb 하나에 둔다(SurveyDraft, lib/survey/types.ts) — 문항 단위로 조회할 일이 없다.
+create table if not exists survey_drafts (
+  id uuid primary key default gen_random_uuid(),
+  source_file_name text,
+  draft jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists survey_drafts_updated_at_idx on survey_drafts(updated_at desc);
