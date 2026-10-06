@@ -19,7 +19,9 @@ jobs:
       - run: npm ci
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        # RouteContext 등 라우트 타입은 Next가 생성한다 — 빌드 전에 tsc만 돌리면 없는 타입으로 실패했다
+        # (2026-08-25~09-07 main CI 연속 실패 원인). typegen이 빌드 없이 그 타입만 만든다.
+        run: npx next typegen && npx tsc --noEmit
 
       - name: Lint
         run: npm run lint
