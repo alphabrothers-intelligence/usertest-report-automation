@@ -247,11 +247,25 @@ function findFeatureSurveyQuestion(stats: QuantStats, featureName: string): { qn
  * Q번호 문항 → 만족도 점수 평균/표준편차 배너 → [만족도 분포도 | 주요 키워드 도출] 2열 →
  * [주관식 응답 감정 분석 도넛+%표 | 응답 요약] 2열 → 1.긍정/2.부정/3.중립 상세 카테고리.
  * 도넛·히스토그램·키워드 클라우드는 SVG/표라 rich-static, 편집 대상 프로즈(카테고리)는 styled. */
+/** 원본 14쪽 [주관식 응답 감정 분석 도넛+%표 | 응답 요약] 2열 상자. 문항 종류와 무관하게 이 한 양식만 쓴다. */
+function emotionBoxBlock(id: string, q: QuestionWithApprovedCategories, counts: Record<string, number>): ReportBlock {
+  const panelHead = (title: string) => `<td style="width:50%;vertical-align:top;border:${CSS.border};padding:0"><p style="margin:0;background-color:${CSS.palette.header};color:#315c9c;font-weight:700;text-align:center;padding:5pt">${escapeHtml(title)}</p><div style="padding:6pt">`;
+  const donut = donutSvg(counts);
+  return richStaticBlock({
+    id,
+    html: `<table style="${CSS.table};margin:0 0 10pt"><tbody><tr>` +
+      `${panelHead("주관식 응답 감정 분석")}${donut ? `<div style="text-align:center">${donut}</div>` : ""}${polarityTableHtml(counts)}</div></td>` +
+      `${panelHead("응답 요약")}${responseSummaryHtml(q.polarity_summaries, q.question_key)}</div></td>` +
+      `</tr></tbody></table>`,
+    summaryQuestionKey: q.question_key,
+    summaryKind: "polarity",
+  });
+}
+
 function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions: QuestionWithApprovedCategories[], reportHasQualitative = false): ReportBlock[] {
   const blocks: ReportBlock[] = [];
   let qi = 0;
   const border = CSS.border;
-  const panelHead = (title: string) => `<td style="width:50%;vertical-align:top;border:${border};padding:0"><p style="margin:0;background-color:${CSS.palette.header};color:#315c9c;font-weight:700;text-align:center;padding:5pt">${escapeHtml(title)}</p><div style="padding:6pt">`;
 
   // **이 페이지의 주인은 정량(기능)이고 정성은 있으면 얹는다**(2026-08-25 원본 재대조로 수정).
   // 예전에는 정성 문항을 순회해서 `categories.length === 0`이면 문항을 통째로 건너뛰었는데,
@@ -318,16 +332,7 @@ function featureQualitativeBlocks(stats: QuantStats, idPrefix: string, questions
     }
 
     // (3) [감정 분석 도넛+%표 | 응답 요약] 2열.
-    const donut = donutSvg(counts);
-    blocks.push(richStaticBlock({
-      id: `${idPrefix}-q${qi}-emotionbox`,
-      html: `<table style="${CSS.table};margin:0 0 10pt"><tbody><tr>` +
-        `${panelHead("주관식 응답 감정 분석")}${donut ? `<div style="text-align:center">${donut}</div>` : ""}${polarityTableHtml(counts)}</div></td>` +
-        `${panelHead("응답 요약")}${responseSummaryHtml(q.polarity_summaries, q.question_key)}</div></td>` +
-        `</tr></tbody></table>`,
-      summaryQuestionKey: q.question_key,
-      summaryKind: "polarity",
-    }));
+    blocks.push(emotionBoxBlock(`${idPrefix}-q${qi}-emotionbox`, q, counts));
 
     // (4) 1.긍정 / 2.부정 / 3.중립 상세 카테고리 — **극성마다 한 블록**(polarityDetailBlocks 주석).
     blocks.push(...polarityDetailBlocks(idPrefix, qi, q, counts));
@@ -515,24 +520,19 @@ function qualitativeBlocks(idPrefix: string, questions: QuestionWithApprovedCate
       textBlock({
         id: `${idPrefix}-q${qi}-intro`,
         label: q.label,
-        html: `<p style="font-weight:700;font-size:10.5pt;margin:16pt 0 6pt">${escapeHtml(q.label)}</p><p style="font-weight:700;margin:10pt 0 4pt;color:#315c9c">주관식 응답 감정 분석</p>`,
+        html: `<p style="font-weight:700;font-size:10.5pt;margin:16pt 0 6pt">${escapeHtml(q.label)}</p>`,
         styled: true,
         // 문항 제목이라 쪽 끝에 혼자 남으면 안 된다(2026-09-30 리바랩스 9쪽 실측).
         keepWithNext: true,
       }),
     );
 
-    // (2) 도넛 + %표 — rich-static(sanitizer 우회)으로 그대로 렌더.
-    const donut = donutSvg(counts);
-    blocks.push(
-      richStaticBlock({
-        id: `${idPrefix}-q${qi}-chart`,
-        html: `${donut ? `<div style="text-align:center">${donut}</div>` : ""}${polarityTableHtml(counts)}`,
-      }),
-    );
+    // (2) [감정 분석 도넛+%표 | 응답 요약] 2열 — Ⅲ장 기능 문항과 같은 상자(2026-10-06: 이 경로만 도넛·표·
+    // 요약을 따로 쌓아 양식이 깨져 보였다). id는 `-chart` 그대로 — 문항 블록을 접두로 찾는 곳이 있다.
+    blocks.push(emotionBoxBlock(`${idPrefix}-q${qi}-chart`, q, counts));
 
-    // (3) 응답 요약 + 극성별 상세(1.긍정 / 2.부정 / 3.중립) — 편집 가능한 프로즈.
-    blocks.push(...polarityDetailBlocks(idPrefix, qi, q, counts, responseSummaryHtml(q.polarity_summaries, q.question_key)));
+    // (3) 극성별 상세(1.긍정 / 2.부정 / 3.중립) — 편집 가능한 프로즈.
+    blocks.push(...polarityDetailBlocks(idPrefix, qi, q, counts));
     blocks.push(...fieldActionTableBlock(idPrefix, qi, q, { name: q.label }));
   }
   return blocks;

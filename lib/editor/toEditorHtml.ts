@@ -27,11 +27,24 @@ export function isAtomBlock(block: ReportBlock): boolean {
 
 /** 화면 전용 장식과 블록 편집기용 표식을 걷어낸다. */
 function cleanHtml(html: string): string {
-  return html
+  return stripScreenOnly(html)
     // 인용문은 블록 편집기에서 `display:inline` 문단으로 감싸져 있다 — 이어진 문서에서는 한 줄짜리 문단이다.
     .replace(/display:\s*inline;?\s*margin:\s*0/g, "margin:0 0 4pt")
     .replace(/display:\s*inline;?/g, "")
     ;
+}
+
+/**
+ * **화면 전용 요소(`data-copy-ignore`: AI 요약 생성 버튼 등)는 편집 문서에 넣지 않는다.** 편집기는 버튼을
+ * 모르므로 글자만 남은 문단이 되어 본문에 "AI 요약 생성"이 찍히고 PDF에도 실렸다(2026-10-06 리바랩스 Ⅱ장).
+ */
+function stripScreenOnly(html: string): string {
+  if (!html.includes("data-copy-ignore")) return html;
+  const root = document.createElement("div");
+  root.innerHTML = html;
+  // 인용 묶음의 출처 마커도 data-copy-ignore를 달고 있다 — 그건 liftQuoteGroupMarkers가 옮긴다.
+  root.querySelectorAll("[data-copy-ignore]:not([data-quote-group-source])").forEach((element) => element.remove());
+  return root.innerHTML;
 }
 
 /**
@@ -134,9 +147,11 @@ export function sectionToEditorHtml(section: ReportSectionContent): string {
 /** 블록 하나를 편집 문서 조각으로. 장 본문과 "항목 | 주요 의견" 표의 칸 안이 같은 규칙을 쓴다. */
 export function blockHtml(block: ReportBlock): string {
   if (isAtomBlock(block)) return `<div data-report-atom="${block.id}"></div>`;
-  if (block.kind === "table") return tableHtml(block);
+  // 표도 블록 번호로 감싼다 — 없으면 오른쪽 패널이 이 표를 고를 수 없고, 표 속성(쪼개지 않기·앞에서
+  // 쪽 나누기)이 걸릴 자리가 없다(2026-10-06). ponytail: 이미 저장된 editorHtml의 표에는 번호가 없다.
+  if (block.kind === "table") return `<div data-report-block-id="${block.id}">${tableHtml(block)}</div>`;
   if (block.kind === "heading") return questionHeadingHtml(block);
-  if (block.kind === "row-group") return rowGroupHtml(block);
+  if (block.kind === "row-group") return `<div data-report-block-id="${block.id}">${rowGroupHtml(block)}</div>`;
   const html = (block as { html: string }).html;
   // 블록 번호로 감싼다 — 근거 패널이 "지금 읽는 블록"을 찾고 오른쪽 수정 탭이 그 블록을 연다.
   return `<div data-report-block-id="${block.id}">${liftQuoteGroupMarkers(cleanHtml(block.kind === "rich-static" ? flattenBoxes(html) : html))}</div>`;

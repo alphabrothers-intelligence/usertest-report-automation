@@ -8,7 +8,7 @@ import { FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { registerEditor, setActiveEditor, unregisterEditor } from "@/lib/editor/activeEditor";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
-import { Pagination } from "@/lib/editor/pagination";
+import { Pagination, layoutFlagsKey, type LayoutFlags } from "@/lib/editor/pagination";
 import { sectionToEditorHtml } from "@/lib/editor/toEditorHtml";
 import { PageFooter } from "@/components/report-web-document/ReportDocumentChrome";
 import { AtomContext, KeepStyle, PageBreak, ReportAtom, ReportDiv } from "./extensions";
@@ -127,6 +127,13 @@ export function ChapterEditor({ section, sourceFileUrl, firstPage, footerBrand, 
   // ponytail: 서버가 블록을 통째로 다시 만들어 주는 경우(극성 재판정 등)는 아직 편집기에 반영 안 된다.
   const [html] = useState(() => section.editorHtml || sectionToEditorHtml(section));
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 오른쪽 패널의 쪽 배치(표 속성·단락 속성). 값이 바뀔 때마다 쪽 넘김 확장에 트랜잭션으로 넘긴다.
+  const flagsKey = JSON.stringify({
+    pageBreakBefore: section.pageBreakBefore ?? [],
+    keepTogether: section.keepTogether ?? [],
+    keepWithNext: section.keepWithNext ?? [],
+    rowBreak: section.rowBreak ?? [],
+  } satisfies LayoutFlags);
   // "항목 | 주요 의견" 표 칸 안의 그림도 찾을 수 있게 안쪽 블록까지 펼친다.
   const blocks = useMemo(() => {
     const map = new Map<string, ReportBlock>();
@@ -174,6 +181,10 @@ export function ChapterEditor({ section, sourceFileUrl, firstPage, footerBrand, 
     onCreate: ({ editor: current }) => registerEditor(current),
     onDestroy: () => { if (editor) unregisterEditor(editor); },
   });
+
+  useEffect(() => {
+    if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(layoutFlagsKey, JSON.parse(flagsKey)).setMeta("addToHistory", false));
+  }, [editor, flagsKey]);
 
   const atomContext = useMemo(() => ({
     blocks,

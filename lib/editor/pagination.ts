@@ -30,7 +30,10 @@ type Gap = { pos: number; height: number; kind: "block" | "row" | "line"; column
 /** 줄 단위로 나눌 때 앞 쪽·다음 쪽에 최소로 남길 줄 수(Word의 "외톨이 줄 방지"). */
 const MIN_LINES = 2;
 
-export const paginationKey = new PluginKey<{ gaps: Gap[]; decorations: DecorationSet }>("pagination");
+type PaginationState = { gaps: Gap[]; decorations: DecorationSet; flags: LayoutFlags };
+export const paginationKey = new PluginKey<PaginationState>("pagination");
+/** 쪽 배치 값을 바꿀 때 트랜잭션에 싣는 키 — `tr.setMeta(layoutFlagsKey, flags)`. */
+export const layoutFlagsKey = "paginationLayoutFlags";
 
 /** 쪽을 넘기는 단위(문서 위치)와, 그 단위가 표의 행인지(첫 행이 아닌 행만 — 첫 행 앞은 표 앞과 같다). */
 type Unit = {
@@ -40,23 +43,59 @@ type Unit = {
   columns?: number;
   /** 표의 행이면 그 행(첫 행은 `node`가 표 자체라 따로 둔다) — 한 쪽보다 큰 행을 칸 안 내용으로 펼칠 때 쓴다. */
   row?: { pos: number; node: PMNode };
+  /** 이 단위가 속한 최상위 블록 id(오른쪽 패널의 쪽 배치 값이 걸리는 단위). */
+  blockId?: string;
+  /** 그 블록의 첫/마지막 단위인지. */
+  first?: boolean;
+  last?: boolean;
+  /** 쪼개지 않는 단위(표 속성 "다음 쪽으로 이어지게 허용" 끔) — 행이 아니라 통째로 잰다. */
+  whole?: boolean;
 };
-function units(doc: PMNode): Unit[] {
+
+/**
+ * 오른쪽 패널(표 속성·단락 속성)에서 담당자가 지정한 쪽 배치. 값은 장에 **최상위 블록 id**로 모여 있다
+ * (ReportWebDocument의 toggleLayoutFlag). 편집기가 이 값을 안 읽어서 패널이 아무 일도 안 했다(2026-10-06).
+ */
+export type LayoutFlags = { pageBreakBefore: string[]; keepTogether: string[]; keepWithNext: string[]; rowBreak: string[] };
+const NO_FLAGS: LayoutFlags = { pageBreakBefore: [], keepTogether: [], keepWithNext: [], rowBreak: [] };
+
+function units(doc: PMNode, flags: LayoutFlags): Unit[] {
   const out: Unit[] = [];
-  walkUnits(doc, 0, out);
+  walkUnits(doc, 0, out, undefined, flags);
+  out.forEach((unit, index) => {
+    if (!unit.blockId) return;
+    unit.first = out[index - 1]?.blockId !== unit.blockId;
+    unit.last = out[index + 1]?.blockId !== unit.blockId;
+  });
   return out;
 }
 
+const ownBlockId = (node: PMNode): string | undefined => {
+  if (node.type.name === "reportAtom") return node.attrs.blockId ?? undefined;
+  if (node.type.name === "reportDiv") return (node.attrs.attrs as Record<string, string>)["data-report-block-id"] || undefined;
+  return undefined;
+};
+
 /** 감싸기 요소(reportDiv: 인용 묶음·블록 번호)는 안으로 들어가 그 안 문단·표를 단위로 삼는다. */
-function walkUnits(parent: PMNode, base: number, out: Unit[]) {
+function walkUnits(parent: PMNode, base: number, out: Unit[], owner: string | undefined, flags: LayoutFlags) {
   parent.forEach((node, offset) => {
     const pos = base + offset;
+    // 가장 바깥 블록이 주인이다("항목 | 주요 의견" 표 칸 안의 블록은 그 표의 쪽 배치를 따른다).
+    const blockId = owner ?? ownBlockId(node);
     if (node.type.name === "reportDiv") {
-      walkUnits(node, pos + 1, out);
+      if (!owner && blockId && flags.keepTogether.includes(blockId)) {
+        out.push({ pos, node, inTable: false, blockId, whole: true });
+        return;
+      }
+      walkUnits(node, pos + 1, out, blockId, flags);
       return;
     }
     if (node.type.name !== "table") {
-      out.push({ pos, node, inTable: false });
+      out.push({ pos, node, inTable: false, blockId });
+      return;
+    }
+    if (blockId && flags.keepTogether.includes(blockId)) {
+      out.push({ pos, node, inTable: false, blockId, whole: true });
       return;
     }
     // 간격 행은 **표의 실제 칸 수만큼** 걸쳐야 한다. 칸 수를 크게(99) 잡았더니 고정 칸 너비 표가 첫 행
@@ -72,7 +111,7 @@ function walkUnits(parent: PMNode, base: number, out: Unit[]) {
     let first = true;
     node.forEach((row) => {
       const rowRef = { pos: rowPos, node: row };
-      out.push(first ? { pos, node, inTable: false, row: rowRef } : { pos: rowPos, node: row, inTable: true, columns, row: rowRef });
+      out.push(first ? { pos, node, inTable: false, row: rowRef, blockId } : { pos: rowPos, node: row, inTable: true, columns, row: rowRef, blockId });
       first = false;
       rowPos += row.nodeSize;
     });
@@ -84,7 +123,7 @@ function walkUnits(parent: PMNode, base: number, out: Unit[]) {
  * (Ⅸ장)는 행 단위로만 넘기면 바닥글을 뚫고 넘쳤다(2026-10-01). 내용이 가장 많은 칸의 자식들을 단위로
  * 삼고, 간격은 그 칸 안에 끼운다(왼쪽 항목 칸은 행 높이만큼 늘어나 병합 칸처럼 이어진다).
  */
-function rowChildren(row: { pos: number; node: PMNode }): Unit[] {
+function rowChildren(row: { pos: number; node: PMNode }, blockId: string | undefined, flags: LayoutFlags): Unit[] {
   let best: { pos: number; node: PMNode } | null = null;
   let cellPos = row.pos + 1;
   row.node.forEach((cell) => {
@@ -94,7 +133,7 @@ function rowChildren(row: { pos: number; node: PMNode }): Unit[] {
   if (!best) return [];
   const chosen = best as { pos: number; node: PMNode };
   const out: Unit[] = [];
-  walkUnits(chosen.node, chosen.pos + 1, out);
+  walkUnits(chosen.node, chosen.pos + 1, out, blockId, flags);
   return out;
 }
 
@@ -103,6 +142,15 @@ function rowChildren(row: { pos: number; node: PMNode }): Unit[] {
  * 카테고리 라벨(`[...]` 굵은 한 줄), 제목·문항 그림. 쪽이 갈리면 다음 단위와 함께 넘어간다.
  */
 function keepsWithNext(node: PMNode): boolean {
+  // 표의 제목·머리글 행은 첫 데이터 행과 함께 — 제목 줄만 쪽 끝에 남았다(2026-10-06 "유사 서비스 경험 조사").
+  // 표 단위(첫 행)는 그 첫 행으로 본다.
+  const row = node.type.name === "table" ? node.firstChild : node.type.name === "tableRow" ? node : null;
+  if (row) {
+    let headers = row.childCount > 0;
+    row.forEach((cell) => { if (cell.type.name !== "tableHeader") headers = false; });
+    if (headers) return true;
+    if (node.type.name === "tableRow") return false;
+  }
   // 사분면은 바로 아래 "영역별 참고 지표"와 한 쪽에 둔다(원본 배치).
   if (node.type.name === "reportAtom") return /heading|__section-banner__|quadrant/.test(String(node.attrs.blockId));
   if (node.type.name === "heading") return true;
@@ -142,11 +190,77 @@ function gapWidget(gap: Gap): HTMLElement {
 }
 
 function decorationsFor(doc: PMNode, gaps: Gap[]): DecorationSet {
-  return DecorationSet.create(doc, gaps.map((gap) => Decoration.widget(gap.pos, () => gapWidget(gap), {
+  const decorations = gaps.map((gap) => Decoration.widget(gap.pos, () => gapWidget(gap), {
     side: -1,
     key: `gap-${gap.pos}-${Math.round(gap.height)}`,
     ignoreSelection: true,
-  })));
+  }));
+  return DecorationSet.create(doc, [...decorations, ...rowspanDecorations(doc, gaps)]);
+}
+
+/**
+ * **쪽 경계가 병합 셀(rowspan) 한가운데 떨어지면 그 셀을 쪽마다 나눠 그린다.** 간격 행을 병합 구간 안에
+ * 그냥 끼우면 병합 셀이 간격 행까지 세어 한 행 일찍 끝나고, 그 아래 행 칸이 한 칸씩 밀렸다
+ * (2026-10-06 설문 항목 표: "Q28"이 단계 칸에, 문항이 번호 칸에 한 자씩 쌓임). 그래서
+ * 원래 셀은 경계 앞 행까지만 걸치게 줄이고, 경계 뒤에는 같은 배경의 **빈** 셀을 남은 행만큼 얹는다
+ * (옛 블록 화면 splitBlock의 restoreRowspanCells와 같은 규칙 — 새 쪽에 라벨을 또 적지 않는다).
+ */
+function rowspanDecorations(doc: PMNode, gaps: Gap[]): Decoration[] {
+  const breaksByTable = new Map<number, Set<number>>();
+  for (const gap of gaps) {
+    if (gap.kind !== "row") continue;
+    const $pos = doc.resolve(gap.pos);
+    if ($pos.parent.type.name !== "table") continue;
+    const tablePos = $pos.before();
+    if (!breaksByTable.has(tablePos)) breaksByTable.set(tablePos, new Set());
+    breaksByTable.get(tablePos)!.add($pos.index());
+  }
+  const out: Decoration[] = [];
+  for (const [tablePos, breaks] of breaksByTable) {
+    const table = doc.nodeAt(tablePos);
+    if (!table) continue;
+    // 행마다 칸의 시작 열과 문서 위치(병합 셀이 차지한 열을 건너뛰며 센다).
+    const grid: { pos: number; col: number; node: PMNode }[][] = [];
+    const taken: number[] = []; // 열 → 그 열이 비는 행 번호
+    let rowPos = tablePos + 1;
+    table.forEach((row, _offset, r) => {
+      const cells: { pos: number; col: number; node: PMNode }[] = [];
+      let col = 0;
+      let cellPos = rowPos + 1;
+      row.forEach((cell) => {
+        while ((taken[col] ?? 0) > r) col += 1;
+        cells.push({ pos: cellPos, col, node: cell });
+        const span = Number(cell.attrs.colspan ?? 1);
+        for (let k = 0; k < span; k += 1) taken[col + k] = r + Number(cell.attrs.rowspan ?? 1);
+        col += span;
+        cellPos += cell.nodeSize;
+      });
+      grid.push(cells);
+      rowPos += row.nodeSize;
+    });
+    grid.forEach((cells, r) => cells.forEach((cell) => {
+      const rowspan = Number(cell.node.attrs.rowspan ?? 1);
+      const cuts = [...breaks].filter((b) => b > r && b < r + rowspan).sort((a, b) => a - b);
+      if (cuts.length === 0) return;
+      out.push(Decoration.node(cell.pos, cell.pos + cell.node.nodeSize, { rowspan: String(cuts[0] - r) }));
+      cuts.forEach((start, index) => {
+        const end = cuts[index + 1] ?? r + rowspan;
+        const before = grid[start].find((other) => other.col > cell.col);
+        const at = before ? before.pos : grid[start].length ? grid[start][grid[start].length - 1].pos + grid[start][grid[start].length - 1].node.nodeSize : null;
+        if (at === null) return;
+        out.push(Decoration.widget(at, () => {
+          const td = document.createElement("td");
+          td.setAttribute("data-page-gap", "");
+          td.contentEditable = "false";
+          td.rowSpan = end - start;
+          td.colSpan = Number(cell.node.attrs.colspan ?? 1);
+          if (cell.node.attrs.style) td.setAttribute("style", String(cell.node.attrs.style));
+          return td;
+        }, { side: -1, key: `span-${cell.pos}-${start}-${end}`, ignoreSelection: true }));
+      });
+    }));
+  }
+  return out;
 }
 
 /**
@@ -181,6 +295,7 @@ function lineBoxes(view: EditorView, dom: HTMLElement, origin: number, placed: G
 function measure(view: EditorView, geometry: PageGeometry, onPages: (count: number) => void) {
   const state = paginationKey.getState(view.state);
   if (!state) return;
+  const { flags } = state;
   const origin = view.dom.getBoundingClientRect().top;
   const placed = state.gaps;
 
@@ -193,7 +308,7 @@ function measure(view: EditorView, geometry: PageGeometry, onPages: (count: numb
   let onPage: { pos: number; top: number; kind: Gap["kind"]; keep: boolean; columns?: number }[] = [];
   let lastBreak: { gapIndex: number; units: typeof onPage; shiftBefore: number; page: number } | null = null;
   let lastBottom = 0;
-  const queue = units(view.state.doc);
+  const queue = units(view.state.doc, flags);
   for (let index = 0; index < queue.length; index += 1) {
     const unit = queue[index];
     // 한 쪽보다 큰 행 → 칸 안 내용으로 펼쳐 그것들을 단위로 넘긴다(행 자체는 자리만 잡는다).
@@ -201,8 +316,13 @@ function measure(view: EditorView, geometry: PageGeometry, onPages: (count: numb
       const rowDom = view.nodeDOM(unit.row.pos);
       const rowEnd = unit.row.pos + unit.row.node.nodeSize;
       const insideGaps = placed.reduce((sum, gap) => (gap.pos > unit.row!.pos && gap.pos < rowEnd ? sum + gap.height : sum), 0);
-      if (rowDom instanceof HTMLElement && rowDom.getBoundingClientRect().height - insideGaps > geometry.contentHeight) {
-        const children = rowChildren(unit.row);
+      const rowRect = rowDom instanceof HTMLElement ? rowDom.getBoundingClientRect() : null;
+      const beforeRow = placed.reduce((sum, gap) => (gap.pos <= unit.row!.pos ? sum + gap.height : sum), 0);
+      // 행 속성 "페이지 끝에서 행을 자동으로 나누기"가 켜진 표는 쪽 끝에 걸린 행도 칸 안 내용 단위로 나눈다.
+      const rowSplits = !!unit.blockId && flags.rowBreak.includes(unit.blockId) && !firstOnPage && !!rowRect
+        && rowRect.bottom - origin - beforeRow - insideGaps + shift > page * geometry.pageStride + geometry.contentHeight;
+      if (rowRect && (rowRect.height - insideGaps > geometry.contentHeight || rowSplits)) {
+        const children = rowChildren(unit.row, unit.blockId, flags);
         if (children.length > 1) {
           // 행(또는 표) 앞 간격은 첫 자식 앞 간격으로 대신한다 — 표 머리·왼쪽 칸은 행과 함께 시작한다.
           queue.splice(index + 1, 0, ...children);
@@ -212,13 +332,13 @@ function measure(view: EditorView, geometry: PageGeometry, onPages: (count: numb
     }
     const nodeDom = view.nodeDOM(unit.pos);
     if (!(nodeDom instanceof HTMLElement)) continue;
-    // 표는 첫 행만 잰다(나머지 행은 각자 단위다).
-    const dom = unit.node.type.name === "table" ? (nodeDom.querySelector("tr:not([data-page-gap])") as HTMLElement | null) ?? nodeDom : nodeDom;
+    // 표는 첫 행만 잰다(나머지 행은 각자 단위다). 쪼개지 않는 표는 통째로 잰다.
+    const dom = unit.node.type.name === "table" && !unit.whole ? (nodeDom.querySelector("tr:not([data-page-gap])") as HTMLElement | null) ?? nodeDom : nodeDom;
     const rect = dom.getBoundingClientRect();
     if (rect.height === 0 && unit.node.type.name !== "pageBreak") continue;
     // 장식을 뺀 원래 위치: 위쪽은 이 단위 앞의 간격만, 아래쪽은 이 단위 **안쪽** 간격(줄 넘김)까지 뺀다.
     const before = placed.reduce((sum, gap) => (gap.pos <= unit.pos ? sum + gap.height : sum), 0);
-    const end = unit.node.type.name === "table" ? unit.pos + 2 : unit.pos + unit.node.nodeSize;
+    const end = unit.node.type.name === "table" && !unit.whole ? unit.pos + 2 : unit.pos + unit.node.nodeSize;
     const inside = placed.reduce((sum, gap) => (gap.pos > unit.pos && gap.pos < end ? sum + gap.height : sum), 0);
     const top = rect.top - origin - before;
     const bottom = rect.bottom - origin - before - inside;
@@ -227,6 +347,10 @@ function measure(view: EditorView, geometry: PageGeometry, onPages: (count: numb
       forceBreak = true;
       continue;
     }
+    // 단락·표 속성 "앞에서 쪽 나누기".
+    if (unit.first && flags.pageBreakBefore.includes(unit.blockId!)) forceBreak = true;
+    // 통째로 두는 표는 제목 행 규칙(keepsWithNext)을 따르지 않는다 — 표 전체가 다음 단위를 끌고 가면 안 된다.
+    const keep = (!unit.whole && keepsWithNext(unit.node)) || (!!unit.last && flags.keepWithNext.includes(unit.blockId!));
     const pageTop = page * geometry.pageStride;
     const overflows = bottom + shift > pageTop + geometry.contentHeight;
 
@@ -266,7 +390,7 @@ function measure(view: EditorView, geometry: PageGeometry, onPages: (count: numb
       // 쪽 끝의 제목·배너는 이 단위와 함께 다음 쪽으로 — 단, 그 쪽에 제목만 남는 경우만(쪽 전체가 제목이면 그대로).
       let lead: { pos: number; top: number; kind: Gap["kind"]; columns?: number } = { pos: unit.pos, top, kind: unit.inTable ? "row" : "block", columns: unit.columns };
       let cut = onPage.length;
-      while (!forceBreak && cut > 1 && onPage[cut - 1].keep && onPage[cut - 1].kind === "block") cut -= 1;
+      while (!forceBreak && cut > 1 && onPage[cut - 1].keep) cut -= 1;
       if (cut < onPage.length) lead = onPage[cut];
       page += 1;
       const height = page * geometry.pageStride - (lead.top + shift);
@@ -280,7 +404,7 @@ function measure(view: EditorView, geometry: PageGeometry, onPages: (count: numb
     }
     forceBreak = false;
     firstOnPage = false;
-    onPage.push({ pos: unit.pos, top, kind: unit.inTable ? "row" : "block", keep: keepsWithNext(unit.node), columns: unit.columns });
+    onPage.push({ pos: unit.pos, top, kind: unit.inTable ? "row" : "block", keep, columns: unit.columns });
     // 한 쪽보다 큰 단위는 다음 쪽까지 넘친다 — 그 아래 내용은 넘친 끝에서 이어진다.
     while (bottom + shift > page * geometry.pageStride + geometry.contentHeight) { page += 1; onPage = []; lastBreak = null; }
     lastBottom = bottom;
@@ -332,14 +456,15 @@ export const Pagination = Extension.create<{ geometry: PageGeometry; onPages: (c
       new Plugin({
         key: paginationKey,
         state: {
-          init: (_, state): { gaps: Gap[]; decorations: DecorationSet } => ({ gaps: [], decorations: DecorationSet.create(state.doc, []) }),
+          init: (_, state): PaginationState => ({ gaps: [], decorations: DecorationSet.create(state.doc, []), flags: NO_FLAGS }),
           apply(tr, previous) {
+            const flags = (tr.getMeta(layoutFlagsKey) as LayoutFlags | undefined) ?? previous.flags;
             const gaps = tr.getMeta(paginationKey) as Gap[] | undefined;
-            if (gaps) return { gaps, decorations: decorationsFor(tr.doc, gaps) };
-            if (!tr.docChanged) return previous;
+            if (gaps) return { gaps, decorations: decorationsFor(tr.doc, gaps), flags };
+            if (!tr.docChanged) return flags === previous.flags ? previous : { ...previous, flags };
             // 내용이 바뀌면 간격 위치만 따라 옮기고, 다음 측정이 다시 계산한다.
             const moved = previous.gaps.map((gap) => ({ ...gap, pos: tr.mapping.map(gap.pos, -1) }));
-            return { gaps: moved, decorations: decorationsFor(tr.doc, moved) };
+            return { gaps: moved, decorations: decorationsFor(tr.doc, moved), flags };
           },
         },
         props: { decorations: (state) => paginationKey.getState(state)?.decorations },

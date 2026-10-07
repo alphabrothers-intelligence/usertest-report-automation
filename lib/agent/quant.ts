@@ -99,7 +99,15 @@ export type RoleQuantStats = {
     /** 구매요소별 만족도 척도(있는 raw data만). */
     satisfaction: ScaleStat[];
   };
-  priorService: { experienceRate: number; satisfaction: MeanSd | null } | null;
+  priorService: {
+    experienceRate: number;
+    satisfaction: MeanSd | null;
+    gateQuestion: string;
+    satisfactionQuestion: string | null;
+    experienced: number;
+    notExperienced: number;
+    scoreDistribution: number[];
+  } | null;
   overall: ScaleStat | null;
   nps: NpsResult | null;
   crossAnalysis: CrossAxis[];
@@ -390,16 +398,26 @@ export function computeRoleQuantStats(
   const experienced = gate
     ? rows.filter((row) => /있|네|예/.test(cell(row, gate.columnIndex)))
     : [];
+  const priorScores = priorSatisfaction
+    ? experienced.map((row) => asNumber(row, priorSatisfaction.columnIndex)).filter((v): v is number => v !== null)
+    : [];
+  const priorAnswered = gate ? rows.filter((row) => cell(row, gate.columnIndex).trim() !== "").length : 0;
   const priorService = gate
     ? {
         experienceRate: rows.length === 0 ? 0 : Math.round((experienced.length / rows.length) * 1000) / 10,
-        satisfaction: priorSatisfaction
-          ? meanSd(
-              experienced
-                .map((row) => asNumber(row, priorSatisfaction.columnIndex))
-                .filter((v): v is number => v !== null),
-            )
+        satisfaction: priorSatisfaction ? meanSd(priorScores) : null,
+        gateQuestion: profileOf.get(gate.columnIndex)!.header.replace(/\s+/g, " ").trim(),
+        // 점수 문항인데 머리글이 서술형 질문이면 머리글이 훼손된 것이다(정리습관 36번 열 — 옆 열 문구가
+        // 붙어 "만족스러웠던 점은 무엇이었나요?"로 읽힌다). 그 문구를 점수 그래프 제목으로 쓰지 않는다.
+        satisfactionQuestion: priorSatisfaction
+          ? (() => {
+            const header = profileOf.get(priorSatisfaction.columnIndex)!.header.replace(/\s+/g, " ").trim();
+            return /무엇|어떤 점|적어/.test(header) ? "경험하신 서비스에 대한 만족도" : header;
+          })()
           : null,
+        experienced: experienced.length,
+        notExperienced: priorAnswered - experienced.length,
+        scoreDistribution: scoreHistogram(priorScores),
       }
     : null;
 

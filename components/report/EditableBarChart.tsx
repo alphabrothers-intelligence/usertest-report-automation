@@ -162,7 +162,7 @@ export function EditableBarChart({ block }: { block: ReportChartBlock }) {
               텍스트가 겹쳐 보인다"는 지적의 근본 원인이 이 구조 차이였다. 선 옆 플로팅 텍스트를
               없애고 범례로 옮기면 애초에 겹칠 대상이 사라진다. PNG 내보내기는 이 svg 전체를
               그대로 래스터화하므로(exportImage.ts) 범례도 SVG 안에 있어야 내보내기에 포함된다. */}
-          {block.items.length > 1 && (
+          {block.items.length > 1 && !block.hideAverage && (
             <g>
               <rect x={width / 2 - 114} y="34" width="11" height="11" fill={emphasisColors[0]} />
               <text x={width / 2 - 99} y="43" fontSize="10" fill="#334155">값이 높을수록 진함</text>
@@ -205,7 +205,7 @@ export function EditableBarChart({ block }: { block: ReportChartBlock }) {
           {/* 평균선 — 막대보다 나중에(=위에) 그려야 막대에 가려지지 않는다(CLAUDE.md에 이미
               기록된 PDF 쪽 동일 원칙: "평균선은 막대 View보다 나중에 그려야 항상 또렷하게
               보인다"). */}
-          {block.items.length > 1 && (
+          {block.items.length > 1 && !block.hideAverage && (
             <line x1={left} x2={left + plotWidth} y1={averageY} y2={averageY} stroke="#ef7268" strokeWidth="2" />
           )}
           {/* 값 라벨 — 평균선보다도 나중에(최상단 레이어) 그리고, 막대 밖이 아니라 "안"에 둔다.
@@ -217,7 +217,8 @@ export function EditableBarChart({ block }: { block: ReportChartBlock }) {
             const barWidth = Math.min(48, slot * 0.62);
             const barHeight = Math.max(0, ((item.value - block.axisMin) / range) * plotHeight);
             const x = left + index * slot + (slot - barWidth) / 2;
-            const avgPx = ((average - block.axisMin) / range) * plotHeight;
+            // 평균선이 없으면 라벨이 피할 대상도 없다.
+            const avgPx = block.hideAverage ? -plotHeight : ((average - block.axisMin) / range) * plotHeight;
             const labelBottom = placeBarLabel(barHeight, avgPx);
             const labelY = top + plotHeight - labelBottom;
             return (

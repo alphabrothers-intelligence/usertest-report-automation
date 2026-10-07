@@ -27,6 +27,8 @@ export type ReportChartBlock = {
   axisMin: number;
   axisMax: number;
   items: ReportChartItem[];
+  /** 평균선·범례를 그리지 않는다 — 인원 분포(0~10점별 명수)처럼 막대끼리 평균을 내면 뜻이 없는 차트. */
+  hideAverage?: boolean;
 };
 
 /** PDF의 `RankCompositionChart`와 같은 순위별 가로 누적 막대. */
@@ -297,6 +299,7 @@ export function chartBlock(params: {
   axisMin?: number;
   axisMax?: number;
   items: ReportChartItem[];
+  hideAverage?: boolean;
 }): ReportChartBlock {
   return {
     id: params.id,
@@ -307,6 +310,7 @@ export function chartBlock(params: {
     axisMin: params.axisMin ?? 0,
     axisMax: params.axisMax ?? niceAxisMax(params.items.map((item) => item.value)),
     items: params.items.map((item) => ({ ...item, value: round2(item.value) })),
+    ...(params.hideAverage ? { hideAverage: true } : {}),
   };
 }
 

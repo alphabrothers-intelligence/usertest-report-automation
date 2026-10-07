@@ -42,6 +42,8 @@ export interface QuantStats {
     walkFrequencyPerWeek: CategoryCount[];
     priorServiceExperienceRate: number; // %
     priorServiceSatisfaction: MeanSd; // 경험자 중
+    /** 유사 서비스 경험 조사 묶음(경험 유무 표 → 만족도 분포). 경험 유무 문항이 없는 raw data는 없다. */
+    priorServiceDetail?: PriorServiceDetail;
     genderByAgeBracket: CrossTabRow[]; // 성별×연령대 교차표
   };
   featureSatisfaction: FeatureStat[]; // Ⅲ
@@ -68,6 +70,15 @@ export interface QuantStats {
   surveyQuestions: SurveyQuestionRow[];
 }
 
+export type PriorServiceDetail = {
+  gateQuestion: string;
+  satisfactionQuestion: string | null;
+  experienced: number;
+  notExperienced: number;
+  /** 경험자 만족도 0~10점 응답자 수. */
+  scoreDistribution: number[];
+};
+
 export function computeQuantStats(records: WallaRecord[], headerRow?: unknown[]): QuantStats {
   const featureNames = records[0]?.featureSatisfaction.map((f) => f.name) ?? [];
 
@@ -79,6 +90,10 @@ export function computeQuantStats(records: WallaRecord[], headerRow?: unknown[])
   const priorServiceRespondents = records.filter((r) => r.priorService.hasExperience);
 
   const uxIndices = [0, 1, 2, 3] as const;
+  const surveyQuestions = headerRow ? buildSurveyQuestionRows(headerRow) : [];
+  const priorAsked = surveyQuestions.filter((row) => row.stage === "유사 서비스 경험 조사");
+  const priorAnswered = records.filter((r) => r.priorService.hasExperience !== null).length;
+  const priorScores = scores(priorServiceRespondents.map((r) => r.priorService.satisfaction));
 
   return {
     respondentCount: records.length,
@@ -104,6 +119,15 @@ export function computeQuantStats(records: WallaRecord[], headerRow?: unknown[])
         records.map((r) => (r.age === null ? null : ageBracketLabel(r.age))),
         [...AGE_BRACKETS],
       ),
+      priorServiceDetail: priorAnswered > 0
+        ? {
+          gateQuestion: priorAsked[0]?.question || "유사 서비스 경험 유무",
+          satisfactionQuestion: priorScores.length > 0 ? priorAsked[2]?.question || "경험한 서비스 만족도" : null,
+          experienced: priorServiceRespondents.length,
+          notExperienced: priorAnswered - priorServiceRespondents.length,
+          scoreDistribution: scoreHistogram(priorScores),
+        }
+        : undefined,
     },
     featureSatisfaction,
     relativeImportance: relativeImportance(
@@ -135,6 +159,6 @@ export function computeQuantStats(records: WallaRecord[], headerRow?: unknown[])
     overallSatisfactionDistribution: scoreHistogram(scores(records.map((r) => r.overallSatisfaction.score))),
     nps: computeNps(scores(records.map((r) => r.nps.score))),
     crossAnalysis: computeCrossAnalysis(records),
-    surveyQuestions: headerRow ? buildSurveyQuestionRows(headerRow) : [],
+    surveyQuestions,
   };
 }

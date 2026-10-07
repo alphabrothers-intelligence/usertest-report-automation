@@ -162,6 +162,15 @@ export function toQuantStats(
       walkFrequencyPerWeek: [],
       priorServiceExperienceRate: role.priorService?.experienceRate ?? 0,
       priorServiceSatisfaction: role.priorService?.satisfaction ?? EMPTY_MEAN_SD,
+      priorServiceDetail: role.priorService && role.priorService.experienced + role.priorService.notExperienced > 0
+        ? {
+          gateQuestion: role.priorService.gateQuestion,
+          satisfactionQuestion: role.priorService.satisfaction ? role.priorService.satisfactionQuestion : null,
+          experienced: role.priorService.experienced,
+          notExperienced: role.priorService.notExperienced,
+          scoreDistribution: role.priorService.scoreDistribution,
+        }
+        : undefined,
       genderByAgeBracket: extra.genderByAgeBracket ?? [],
     },
     featureSatisfaction: role.features.map(toFeatureStat),
