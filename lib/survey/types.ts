@@ -10,7 +10,6 @@
 export const SURVEY_STAGES = [
   "인적 사항 및 특성·경험 조사",
   "기능별 고객 경험 평가 - 자사 제품 평가",
-  "기능별 고객 경험 평가 - 타사 제품 평가",
   "고객 여정 기반 경험 평가",
   "핵심구매요인 파악",
   "가치 만족도 평가",
@@ -24,7 +23,7 @@ export const SURVEY_STAGES = [
 const STAGE_COLORS: Record<string, string> = {
   "인적 사항 및 특성·경험 조사": "DCE6F2",
   "기능별 고객 경험 평가 - 자사 제품 평가": "EBF1DE",
-  "기능별 고객 경험 평가 - 타사 제품 평가": "FDE9D9",
+  "기능별 고객 경험 평가 - 타사 제품 평가": "FDE9D9", // 2026-10-12 인적 사항으로 옮겼다 — 이전 저장본 색
   "고객 여정 기반 경험 평가": "E4DFEC",
   "핵심구매요인 파악": "FFF2CC",
   "가치 만족도 평가": "DAEEF3",
@@ -206,6 +205,7 @@ export function wallaChecklist(questions: SurveyQuestion[]): string {
   lines.push(...(optional.length ? optional.map((s) => `  · ${ref(s)}`) : ["  (모든 문항 필수)"]));
   section("■ 3. 문항 유형 → 선형배율(0~10)로 바꾸기", layout.filter((s) => s.q.type === "척도(0-10)"));
   section("■ 4. '기타(직접 입력)' 보기를 지우고 '기타' 옵션 추가", layout.filter((s) => isChoice(s.q.type) && s.q.options.some(isOther)));
+  section("■ 5. 순위 문항 — '중복 선택 방지' 설정(같은 항목을 두 순위에 못 고르게)", layout.filter((s) => isChoice(s.q.type) && /^\d+위$/.test(s.q.text.trim())));
   return lines.join("\r\n") + "\r\n";
 }
 
@@ -227,7 +227,8 @@ export function toWallaTxt(questions: SurveyQuestion[]): string {
       out.push("", `[[Block:${name}]]`);
     }
     // ponytail: 문항타입이 '주관식' 하나라 짧은 답은 단계로 가린다(인적 사항 = 나이 등 한 줄 답). 틀리면 WALLA에서 바꾸면 된다.
-    const shortText = q.stage === SURVEY_STAGES[0];
+    // 딸린 문항(타사 제품의 장점·단점·이유)은 인적 사항 안에 있어도 긴 답이다.
+    const shortText = q.stage === SURVEY_STAGES[0] && !q.followUp;
     const tag =
       q.type === "객관식-단일" ? "[[Question:MC:SingleAnswer:Vertical]]" :
       q.type === "객관식-복수" ? "[[Question:MC:MultipleAnswer:Vertical]]" :
@@ -276,13 +277,32 @@ export function splitByProduct(draft: SurveyDraft): SurveyDraft[] | null {
     }
     return questions.filter((q) => !dropped.has(q.id));
   };
-  return [...new Set(questions.filter((d) => d.branchOn === track.id).map((d) => d.branchValue))].map((product) => ({
-    ...draft,
-    productName: product,
-    questions: keepFor(product)
-      .map((q) => (q.branchOn === track.id
-        ? { ...q, branchOn: "", branchValue: "", note: q.note.replace(`[${product}]`, "").trim() }
+  const products = [...new Set(questions.filter((d) => d.branchOn === track.id).map((d) => d.branchValue))];
+  return products.map((product) => {
+    // 나눈 설문에 다른 제품의 흔적이 남으면 안 된다(2026-10-12 담당자). 다른 제품 이름에만 있는 낱말로 알아본다
+    // ("기관용 필톡 biz cares" 대 "일반인용 필톡" → biz·cares·기관용) — 문구를 줄여 써도 걸린다.
+    // ponytail: 낱말 일치라 제품명이 내 제품과 낱말을 전부 공유하면 못 잡는다. 그때는 제품 태그를 스키마 필드로.
+    const own = new Set(product.split(/\s+/));
+    const marks = products.filter((p) => p !== product).flatMap((p) => p.split(/\s+/).filter((w) => w.length >= 2 && !own.has(w)));
+    const foreign = (text: string) => marks.some((w) => text.includes(w));
+    const untag = (text: string) => text.replace(`[${product}]`, "").trim();
+    const kept = keepFor(product).map((q) => (q.branchOn === track.id
+      ? { ...q, branchOn: "", branchValue: "", note: untag(q.note) }
+      : q));
+    return {
+      ...draft,
+      productName: product,
+      // 공통 문항에 다른 제품이 섞였으면 고칠 수 있게 그 문항에 표시한다(AI 재호출 없이 지우거나 고쳐 쓸 수는 없다).
+      questions: kept.map((q) => (foreign(`${q.text} ${q.note}`)
+        ? { ...q, caution: [`다른 제품 내용이 섞여 있습니다. '${product}'에 맞게 고쳐 주세요.`, q.caution].filter(Boolean).join(" ") }
         : q)),
-    reviewNotes: [`'${draft.productName}' 설문에서 '${product}' 응답자 문항만 떼어 낸 설문입니다. 공통 문항의 제품명이 맞는지 확인하세요.`, ...draft.reviewNotes],
-  }));
+      excludedFeatures: draft.excludedFeatures
+        .filter((f) => !foreign(`${f.name} ${f.reason}`))
+        .map((f) => ({ ...f, name: untag(f.name) })),
+      reviewNotes: [
+        `'${draft.productName}' 설문에서 '${product}' 응답자 문항만 떼어 낸 설문입니다.`,
+        ...draft.reviewNotes.filter((n) => !n.startsWith("[공통 설문]") && !foreign(n)).map(untag),
+      ],
+    };
+  });
 }

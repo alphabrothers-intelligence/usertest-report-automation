@@ -8,6 +8,7 @@ import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { numberQuestions, toCsv, toSheetRows, toWallaTxt, wallaChecklist, wallaLayout, wallaTodos, splitByProduct, type SurveyQuestion } from "../lib/survey/types";
 import { buildSurveyXlsx } from "../lib/survey/xlsx";
+import { normalizeSurvey, RANK_CAUTION } from "../lib/survey/generate";
 
 const q = (id: string, patch: Partial<SurveyQuestion> = {}): SurveyQuestion => ({
   id, stage: "인적 사항 및 특성·경험 조사", text: id, type: "주관식", options: [], required: true,
@@ -88,6 +89,36 @@ assert.ok(split[0].questions.every((x) => x.branchOn !== "track"), "제품 분�
 assert.strictEqual(split[0].questions[1].note, "설명", "[제품명] 꼬리표 제거");
 assert.strictEqual(split[0].questions.find((x) => x.id === "name")!.branchOn, "used", "작은 분기는 남는다");
 assert.strictEqual(splitByProduct(draftOf(questions)), null, "가르는 문항이 없으면 나누지 않는다");
+
+// 나눈 설문에 다른 제품의 흔적이 남지 않는다 — 실제 피매치 이름으로(2026-10-12).
+const pt = "일반인용 필톡", bz = "기관용 필톡 biz cares";
+const pm = splitByProduct({
+  companyName: "피매치", productName: `${pt} / ${bz}`,
+  questions: [
+    q("track", { type: "객관식-단일", options: [pt, bz] }),
+    ...Array.from({ length: 6 }, (_, i) => q(`p${i}`, { branchOn: "track", branchValue: pt })),
+    q("b0", { branchOn: "track", branchValue: bz }),
+    q("price", { note: "일반인용 필톡은 무료이며, 기관용 필톡 biz cares는 연 5만 원입니다." }),
+  ],
+  excludedFeatures: [{ name: `[${pt}] 회원가입`, reason: "x" }, { name: "매니저 로그인(기관용 필톡 biz cares)", reason: "승인 필요" }],
+  reviewNotes: ["[공통 설문] 응답 비율 7:3", `[${bz}] 엑셀 준비 필요`, "필톡 biz cares 요금제 확인", `[${pt}] 본인인증 안내`],
+})!;
+const general = pm.find((d) => d.productName === pt)!;
+assert.deepStrictEqual(general.excludedFeatures.map((f) => f.name), ["회원가입"], "다른 제품 제외 기능은 빠지고 꼬리표는 벗긴다");
+assert.deepStrictEqual(general.reviewNotes.slice(1), ["본인인증 안내"], "[공통 설문]·다른 제품 메모는 빠진다");
+assert.ok(general.questions.find((x) => x.id === "price")!.caution?.includes("다른 제품 내용"), "섞인 공통 문항은 표시한다");
+assert.ok(!pm.find((d) => d.productName === bz)!.reviewNotes.some((n) => n.includes("본인인증")));
+
+// 순위 문항: 첫 문항에 중복 선택 경고, WALLA 설정 목록에 따로 한 줄.
+const ranked = normalizeSurvey({
+  companyName: "회사", productName: "앱", excludedFeatures: [], reviewNotes: [],
+  questions: ["1위", "2위"].map((text, i) => ({ ...q(`r${i}`, { type: "객관식-단일", options: ["A", "B"], followUp: i > 0 }), text, caution: "" })),
+} as Parameters<typeof normalizeSurvey>[0]);
+assert.ok(ranked.questions[0].caution?.startsWith(RANK_CAUTION) && !ranked.questions[1].caution);
+assert.ok(wallaChecklist(ranked.questions).includes("■ 5. 순위 문항 — '중복 선택 방지' 설정"));
+// 인적 사항 안의 딸린 주관식(타사 장점·단점)은 긴 답이다.
+const longTxt = toWallaTxt([q("used2", { type: "객관식-단일", options: ["네"] }), q("pros", { followUp: true, branchOn: "used2", branchValue: "네" })]).split("\r\n");
+assert.strictEqual(longTxt[longTxt.indexOf("pros") - 1], "[[Question:TE:Essay]]");
 
 async function main() {
 const template = readFileSync("public/templates/survey-question-template.xlsx");
