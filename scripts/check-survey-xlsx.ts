@@ -6,7 +6,7 @@ import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
-import { numberQuestions, toCsv, toSheetRows, toWallaTxt, wallaChecklist, wallaLayout, wallaTodos, type SurveyQuestion } from "../lib/survey/types";
+import { numberQuestions, toCsv, toSheetRows, toWallaTxt, wallaChecklist, wallaLayout, wallaTodos, splitByProduct, type SurveyQuestion } from "../lib/survey/types";
 import { buildSurveyXlsx } from "../lib/survey/xlsx";
 
 const q = (id: string, patch: Partial<SurveyQuestion> = {}): SurveyQuestion => ({
@@ -68,6 +68,26 @@ assert.ok(list.includes("'A앱' → 2-1 a1"), list);
 assert.ok(list.includes("'B앱' → 4-1 b1"));
 assert.ok(list.includes("3-1(‘A앱’ 묶음 끝)의 기본 이동 → 5-1 common"));
 assert.ok(list.includes("· 5-1 common"), "필수 아닌 문항만 나열");
+
+// 제품별로 나누기: 가르는 문항 빼고, 제품 문항은 분기를 풀고, 공통 문항은 양쪽에.
+const many = Array.from({ length: 6 }, (_, i) => q(`a${i}`, { branchOn: "track", branchValue: "A앱", note: "[A앱] 설명" }));
+const draftOf = (qs: SurveyQuestion[]) => ({ companyName: "회사", productName: "A앱 / B앱", questions: qs, excludedFeatures: [], reviewNotes: [] });
+const productDraft = draftOf([
+  q("age"), tracked[0], ...many,
+  q("b0", { branchOn: "track", branchValue: "B앱" }),
+  q("bComp", { type: "객관식-단일", options: ["네", "아니요"], branchOn: "track", branchValue: "B앱" }),
+  q("bCompName", { branchOn: "bComp", branchValue: "네" }),
+  q("used", { type: "객관식-단일", options: ["네", "아니요"] }), q("name", { branchOn: "used", branchValue: "네" }),
+  q("common"),
+]);
+const split = splitByProduct(productDraft)!;
+assert.deepStrictEqual(split.map((d) => d.productName), ["A앱", "B앱"]);
+assert.deepStrictEqual(split[1].questions.map((x) => x.id), ["age", "b0", "bComp", "bCompName", "used", "name", "common"]);
+assert.ok(!split[0].questions.some((x) => x.id === "bCompName"), "다른 제품 문항에 딸린 문항도 빠진다");
+assert.ok(split[0].questions.every((x) => x.branchOn !== "track"), "제품 분기는 풀린다");
+assert.strictEqual(split[0].questions[1].note, "설명", "[제품명] 꼬리표 제거");
+assert.strictEqual(split[0].questions.find((x) => x.id === "name")!.branchOn, "used", "작은 분기는 남는다");
+assert.strictEqual(splitByProduct(draftOf(questions)), null, "가르는 문항이 없으면 나누지 않는다");
 
 async function main() {
 const template = readFileSync("public/templates/survey-question-template.xlsx");

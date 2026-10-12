@@ -251,3 +251,38 @@ export function toWallaTxt(questions: SurveyQuestion[]): string {
 /** `{기업명}_문항리스트.xlsx` — 템플릿 안내 6번: 다음 단계가 기업명을 파일명에서만 읽는다. */
 export const surveyFileName = (companyName: string, ext: "xlsx" | "csv" | "txt", suffix = ext === "txt" ? "_WALLA" : "") =>
   `${companyName.trim().replace(/[\\/:*?"<>|]/g, "") || "기업명"}_문항리스트${suffix}.${ext}`;
+
+/**
+ * 제품이 둘 이상이라 "어떤 서비스를 체험하셨나요?" 같은 문항으로 응답자를 가른 설문을, 제품마다 완성된
+ * 설문 하나씩으로 나눈다(2026-10-06 실무자 요청 — 폼을 따로 돌리고 싶다). 문항을 다시 만들지 않고
+ * 재배치만 한다: 가르는 문항은 빼고, 그 제품 문항은 분기를 풀어 남기고, 공통 문항은 양쪽에 다 넣는다.
+ * 가르는 문항이 없으면 null.
+ */
+export function splitByProduct(draft: SurveyDraft): SurveyDraft[] | null {
+  const { questions } = draft;
+  // 가장 많은 문항이 걸린 분기 기준 문항 — 타사 경험(후속 3문항) 같은 작은 분기와 구분된다.
+  const sources = questions
+    .map((q) => ({ q, values: new Set(questions.filter((d) => d.branchOn === q.id).map((d) => d.branchValue)), count: questions.filter((d) => d.branchOn === q.id).length }))
+    .filter((s) => s.values.size >= 2 && s.count >= 6)
+    .sort((a, b) => b.count - a.count);
+  const track = sources[0]?.q;
+  if (!track) return null;
+  // 다른 제품 문항에 딸린 문항(예: 기관용 타사 경험 → 그 후속 질문)도 같이 뺀다 — 안 빼면 기준 없는 분기로 남는다(실측).
+  const keepFor = (product: string) => {
+    const dropped = new Set([track.id, ...questions.filter((q) => q.branchOn === track.id && q.branchValue !== product).map((q) => q.id)]);
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const q of questions) if (!dropped.has(q.id) && q.branchOn && dropped.has(q.branchOn) && q.branchOn !== track.id) { dropped.add(q.id); grew = true; }
+    }
+    return questions.filter((q) => !dropped.has(q.id));
+  };
+  return [...new Set(questions.filter((d) => d.branchOn === track.id).map((d) => d.branchValue))].map((product) => ({
+    ...draft,
+    productName: product,
+    questions: keepFor(product)
+      .map((q) => (q.branchOn === track.id
+        ? { ...q, branchOn: "", branchValue: "", note: q.note.replace(`[${product}]`, "").trim() }
+        : q)),
+    reviewNotes: [`'${draft.productName}' 설문에서 '${product}' 응답자 문항만 떼어 낸 설문입니다. 공통 문항의 제품명이 맞는지 확인하세요.`, ...draft.reviewNotes],
+  }));
+}

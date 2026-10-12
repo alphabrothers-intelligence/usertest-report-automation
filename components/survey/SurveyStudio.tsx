@@ -14,6 +14,7 @@ import {
   surveyFileName,
   toCsv,
   toWallaTxt,
+  splitByProduct,
   wallaChecklist,
   wallaLayout,
   wallaTodos,
@@ -202,7 +203,7 @@ export function SurveyStudio({ initialId }: { initialId: string | null }) {
             </>
           )}
 
-          {draft && <SurveyEditor draft={draft} onChange={setDraft} />}
+          {draft && <SurveyEditor draft={draft} onChange={setDraft} surveyId={id} />}
         </div>
       </main>
     </div>
@@ -285,7 +286,26 @@ function Chevron({ className }: { className?: string }) {
  * 칸이 열리고 닫히면 위치가 계속 밀려 훑기가 어렵다(2026-10-01 지적). 고른 게 없을 때 패널은
  * 설문 개요(단계별 문항 수·전체 확인 사항)를 보여준다. ↑/↓로 행을 옮기고 Esc로 선택을 푼다.
  */
-function SurveyEditor({ draft, onChange }: { draft: SurveyDraft; onChange: (d: SurveyDraft) => void }) {
+function SurveyEditor({ draft, onChange, surveyId }: { draft: SurveyDraft; onChange: (d: SurveyDraft) => void; surveyId: string | null }) {
+  const router = useRouter();
+  const [splitting, setSplitting] = useState(false);
+  const parts = useMemo(() => splitByProduct(draft), [draft]);
+  /** 제품마다 따로 폼을 돌리고 싶을 때 — 원래 설문은 남기고 제품별 설문을 새로 저장한 뒤 목록으로 간다. */
+  async function splitIntoSurveys() {
+    if (!surveyId || !parts) return;
+    if (!window.confirm(`제품별로 완성된 설문 ${parts.length}개(${parts.map((p) => p.productName).join(" / ")})를 새로 만듭니다.\n지금 설문은 그대로 남습니다. 계속할까요?`)) return;
+    setSplitting(true);
+    try {
+      const res = await fetch(`/api/survey/${surveyId}/split`, { method: "POST" });
+      const payload = await res.json();
+      if (!payload.ok) throw new Error(payload.error);
+      router.push("/survey");
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "나누지 못했습니다.");
+    } finally {
+      setSplitting(false);
+    }
+  }
   const { questions } = draft;
   const numbers = useMemo(() => numberQuestions(questions), [questions]);
   const stages = useMemo(
@@ -416,6 +436,21 @@ function SurveyEditor({ draft, onChange }: { draft: SurveyDraft; onChange: (d: S
         >
           WALLA 설정 목록
         </button>
+        {parts && (
+          <div className="flex w-full flex-wrap items-center gap-3 border-t border-[#eef1f5] pt-3 text-[13px] text-[#4a566b]">
+            <span>
+              제품 <b className="text-[#1d2433]">{parts.length}개</b>({parts.map((p) => p.productName).join(" / ")})를 한 설문에서 분기로 나눠 묻고 있어요.
+            </span>
+            <button
+              type="button"
+              onClick={splitIntoSurveys}
+              disabled={splitting || !surveyId}
+              className="rounded-lg bg-[#eef3fe] px-3 py-1.5 font-semibold text-[#356df3] hover:bg-[#e0eafd] disabled:opacity-50"
+            >
+              {splitting ? "나누는 중…" : "제품별 설문으로 나누기"}
+            </button>
+          </div>
+        )}
       </section>
 
       <div className="grid grid-cols-[minmax(0,1fr)_380px] items-start gap-4">
