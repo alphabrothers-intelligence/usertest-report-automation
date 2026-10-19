@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
   // HWPX 다운로드 Route Handler가 한컴 호환 베이스 패키지를 런타임에 읽는다.
   outputFileTracingIncludes: {
     "/api/report-workspace/hwpx": ["./output/hwpx-templates/01_공통_기본_사용성테스트_보고서_양식.hwpx"],
+    // 설문 기획안 양식(케어클 기획안 원본) — 공개 폴더에 두지 않으려고 서버에서만 읽는다.
+    "/api/survey/plan": ["./templates/survey-plan-template.hwpx"],
   },
 };
 

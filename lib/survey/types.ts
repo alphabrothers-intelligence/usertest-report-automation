@@ -5,11 +5,14 @@
  * **문항번호는 저장하지 않고 순서에서 계산한다** — 행을 옮기거나 지울 때마다 번호를 손으로
  * 맞추지 않게 하려는 것이고, 분기조건도 번호가 아니라 문항 id를 가리켜 번호가 바뀌어도 안 깨진다.
  */
+import { z } from "zod";
+
 
 /** 템플릿 `단계` 드롭다운 값 + 기획안(케어클)에 있던 `고객 여정 기반 경험 평가`. 순서가 곧 표준 설문 순서다. */
 export const SURVEY_STAGES = [
   "인적 사항 및 특성·경험 조사",
   "기능별 고객 경험 평가 - 자사 제품 평가",
+  "기능별 고객 경험 평가 - 타사 제품 평가",
   "고객 여정 기반 경험 평가",
   "핵심구매요인 파악",
   "가치 만족도 평가",
@@ -23,7 +26,7 @@ export const SURVEY_STAGES = [
 const STAGE_COLORS: Record<string, string> = {
   "인적 사항 및 특성·경험 조사": "DCE6F2",
   "기능별 고객 경험 평가 - 자사 제품 평가": "EBF1DE",
-  "기능별 고객 경험 평가 - 타사 제품 평가": "FDE9D9", // 2026-10-12 인적 사항으로 옮겼다 — 이전 저장본 색
+  "기능별 고객 경험 평가 - 타사 제품 평가": "FDE9D9",
   "고객 여정 기반 경험 평가": "E4DFEC",
   "핵심구매요인 파악": "FFF2CC",
   "가치 만족도 평가": "DAEEF3",
@@ -38,6 +41,19 @@ export const stageColor = (stage: string) => STAGE_COLORS[stage] ?? "F2F2F2";
 export const SURVEY_TYPES = ["척도(0-10)", "객관식-단일", "객관식-복수", "주관식", "이미지업로드", "날짜"] as const;
 
 export type SurveyType = (typeof SURVEY_TYPES)[number];
+
+/** 화면에서 고친 설문을 서버가 받을 때의 형식 검사(저장·기획안 내보내기 공용). */
+export const SurveyDraftSchema = z.object({
+  companyName: z.string(),
+  productName: z.string(),
+  questions: z.array(z.object({
+    id: z.string(), stage: z.string(), text: z.string(), type: z.enum(SURVEY_TYPES), options: z.array(z.string()),
+    required: z.boolean(), followUp: z.boolean(), branchOn: z.string(), branchValue: z.string(), note: z.string(), caution: z.string().optional(),
+  })),
+  excludedFeatures: z.array(z.object({ name: z.string(), reason: z.string() })),
+  reviewNotes: z.array(z.string()),
+  plan: z.object({ businessArea: z.string(), testers: z.string(), schedule: z.string(), managers: z.string() }).optional(),
+});
 
 export interface SurveyQuestion {
   id: string;
@@ -65,9 +81,25 @@ export interface SurveyDraft {
   excludedFeatures: { name: string; reason: string }[];
   /** 특정 문항에 붙일 수 없는 설문 전체의 확인 사항. */
   reviewNotes: string[];
+  /** 기획안에만 들어가고 사전요청서에 없는 칸 — 기획안을 내려받을 때 입력받는다. 비워도 된다. */
+  plan?: PlanInfo;
+}
+
+export interface PlanInfo {
+  businessArea: string;
+  testers: string;
+  schedule: string;
+  managers: string;
 }
 
 export const isChoice = (type: string) => type.startsWith("객관식");
+
+/** 기능 중요도 순위 문항의 순위 — 새 문구는 "…무엇인가요? (2순위)", 옛 저장본은 "2위". 순위 문항이 아니면 null. */
+export function rankOf(q: Pick<SurveyQuestion, "text" | "type">): number | null {
+  if (!isChoice(q.type)) return null;
+  const m = q.text.trim().match(/^(\d+)위$|\((\d+)순위\)$/);
+  return m ? Number(m[1] ?? m[2]) : null;
+}
 
 /** 순서대로 Q1, Q2 … 를 매기고, 딸린 문항은 앞 본문항 번호에 -1, -2 를 붙인다. */
 export function numberQuestions(questions: SurveyQuestion[]): Map<string, string> {
@@ -154,6 +186,15 @@ export function wallaLayout(questions: SurveyQuestion[]): WallaSlot[] {
   });
 }
 
+/**
+ * 척도 양 끝 라벨 — 매뉴얼 2-3은 0·10 옆에 '매우 불만족 / 매우 만족'을 적게 한다. 템플릿은 척도 보기를
+ * 비우고 WALLA txt도 숫자 열만 받으므로, note의 "0=…, 10=…"에서 읽고 없으면 만족도 기본값을 쓴다.
+ */
+export function scaleAnchors(note: string): [string, string] {
+  const m = note.match(/0\s*[=:]\s*([^,，\n]+?)\s*[,，]\s*10\s*[=:]\s*([^.\n]+)/);
+  return m ? [m[1].trim(), m[2].trim()] : ["매우 불만족", "매우 만족"];
+}
+
 const snippet = (text: string) => (text.length > 28 ? `${text.slice(0, 28)}…` : text);
 
 /** WALLA로 가져온 뒤 이 문항에서 손으로 해야 할 일. txt 형식에 담을 수 없는 것들이다. */
@@ -165,7 +206,10 @@ export function wallaTodos(q: SurveyQuestion, layout: WallaSlot[]): string[] {
   const dependents = layout.filter((s) => s.q.branchOn === q.id);
   if (dependents.length) todos.push(`로직 설정: 응답에 따라 이동(아래 'WALLA 설정 목록' 참고)`);
   if (q.required) todos.push("필수입력 켜기");
-  if (q.type === "척도(0-10)") todos.push("문항 유형을 선형배율(0~10)로 바꾸기");
+  if (q.type === "척도(0-10)") {
+    const [low, high] = scaleAnchors(q.note);
+    todos.push(`문항 유형을 선형배율(0~10)로 바꾸고 양 끝 라벨 0='${low}', 10='${high}' 입력`);
+  }
   if (isChoice(q.type) && q.options.some(isOther)) todos.push("'기타(직접 입력)' 보기를 지우고 '기타' 옵션 추가");
   return todos;
 }
@@ -203,9 +247,11 @@ export function wallaChecklist(questions: SurveyQuestion[]): string {
   const optional = layout.filter((s) => !s.q.required);
   lines.push("", "■ 2. 필수입력 — 아래 문항을 뺀 나머지 전부 켜기");
   lines.push(...(optional.length ? optional.map((s) => `  · ${ref(s)}`) : ["  (모든 문항 필수)"]));
-  section("■ 3. 문항 유형 → 선형배율(0~10)로 바꾸기", layout.filter((s) => s.q.type === "척도(0-10)"));
+  const scales = layout.filter((s) => s.q.type === "척도(0-10)");
+  lines.push("", `■ 3. 문항 유형 → 선형배율(0~10), 양 끝 라벨 입력 (${scales.length}개)`);
+  lines.push(...(scales.length ? scales.map((s) => `  · ${ref(s)} — 0='${scaleAnchors(s.q.note)[0]}', 10='${scaleAnchors(s.q.note)[1]}'`) : ["  없음"]));
   section("■ 4. '기타(직접 입력)' 보기를 지우고 '기타' 옵션 추가", layout.filter((s) => isChoice(s.q.type) && s.q.options.some(isOther)));
-  section("■ 5. 순위 문항 — '중복 선택 방지' 설정(같은 항목을 두 순위에 못 고르게)", layout.filter((s) => isChoice(s.q.type) && /^\d+위$/.test(s.q.text.trim())));
+  section("■ 5. 순위 문항 — '중복 선택 방지' 설정(같은 항목을 두 순위에 못 고르게)", layout.filter((s) => rankOf(s.q) !== null));
   return lines.join("\r\n") + "\r\n";
 }
 
@@ -253,20 +299,30 @@ export function toWallaTxt(questions: SurveyQuestion[]): string {
 export const surveyFileName = (companyName: string, ext: "xlsx" | "csv" | "txt", suffix = ext === "txt" ? "_WALLA" : "") =>
   `${companyName.trim().replace(/[\\/:*?"<>|]/g, "") || "기업명"}_문항리스트${suffix}.${ext}`;
 
+/** `[알파브라더스] 사용성테스트_기획안_{기업명}_{YYMMDD}.hwpx` — 기존 기획안 파일 이름 규칙. */
+export const planFileName = (companyName: string, today = new Date()) => {
+  const d = `${String(today.getFullYear()).slice(2)}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+  return `[알파브라더스] 사용성테스트_기획안_${companyName.trim().replace(/[\\/:*?"<>|]/g, "") || "기업명"}_${d}.hwpx`;
+};
+
 /**
  * 제품이 둘 이상이라 "어떤 서비스를 체험하셨나요?" 같은 문항으로 응답자를 가른 설문을, 제품마다 완성된
  * 설문 하나씩으로 나눈다(2026-10-06 실무자 요청 — 폼을 따로 돌리고 싶다). 문항을 다시 만들지 않고
  * 재배치만 한다: 가르는 문항은 빼고, 그 제품 문항은 분기를 풀어 남기고, 공통 문항은 양쪽에 다 넣는다.
  * 가르는 문항이 없으면 null.
  */
-export function splitByProduct(draft: SurveyDraft): SurveyDraft[] | null {
-  const { questions } = draft;
-  // 가장 많은 문항이 걸린 분기 기준 문항 — 타사 경험(후속 3문항) 같은 작은 분기와 구분된다.
+/** 제품(대상자)을 가르는 분기 기준 문항 — 가장 많은 문항이 걸린 분기다. 타사 경험(후속 3문항) 같은 작은 분기와 구분된다. */
+export function productTrack(questions: SurveyQuestion[]): SurveyQuestion | null {
   const sources = questions
     .map((q) => ({ q, values: new Set(questions.filter((d) => d.branchOn === q.id).map((d) => d.branchValue)), count: questions.filter((d) => d.branchOn === q.id).length }))
     .filter((s) => s.values.size >= 2 && s.count >= 6)
     .sort((a, b) => b.count - a.count);
-  const track = sources[0]?.q;
+  return sources[0]?.q ?? null;
+}
+
+export function splitByProduct(draft: SurveyDraft): SurveyDraft[] | null {
+  const { questions } = draft;
+  const track = productTrack(questions);
   if (!track) return null;
   // 다른 제품 문항에 딸린 문항(예: 기관용 타사 경험 → 그 후속 질문)도 같이 뺀다 — 안 빼면 기준 없는 분기로 남는다(실측).
   const keepFor = (product: string) => {
@@ -298,6 +354,10 @@ export function splitByProduct(draft: SurveyDraft): SurveyDraft[] | null {
         : q)),
       excludedFeatures: draft.excludedFeatures
         .filter((f) => !foreign(`${f.name} ${f.reason}`))
+        // 태그 없는 제외 기능은 이 제품 문항에 그 기능 이름이 나올 때만 남긴다 — 실측(피매치): 모델이 [제품명]을 빠뜨려
+        // 일반인용 '사진 촬영 등록(약봉투 촬영)'이 기관용 설문에도 들어갔다.
+        .filter((f) => f.name.includes(`[${product}]`) || /^\[/.test(f.name)
+          || kept.some((q) => q.text.includes(f.name.replace(/\(.*$/, "").trim())))
         .map((f) => ({ ...f, name: untag(f.name) })),
       reviewNotes: [
         `'${draft.productName}' 설문에서 '${product}' 응답자 문항만 떼어 낸 설문입니다.`,

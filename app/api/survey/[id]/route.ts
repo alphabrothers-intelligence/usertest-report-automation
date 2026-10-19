@@ -1,22 +1,11 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { deleteSurvey, getSurvey, updateSurvey } from "@/lib/db/surveys";
-import { SURVEY_TYPES } from "@/lib/survey/types";
+import { SurveyDraftSchema as DraftSchema } from "@/lib/survey/types";
 
 export const runtime = "nodejs";
 
 type Params = { params: Promise<{ id: string }> };
 
-const DraftSchema = z.object({
-  companyName: z.string(),
-  productName: z.string(),
-  questions: z.array(z.object({
-    id: z.string(), stage: z.string(), text: z.string(), type: z.enum(SURVEY_TYPES), options: z.array(z.string()),
-    required: z.boolean(), followUp: z.boolean(), branchOn: z.string(), branchValue: z.string(), note: z.string(), caution: z.string().optional(),
-  })),
-  excludedFeatures: z.array(z.object({ name: z.string(), reason: z.string() })),
-  reviewNotes: z.array(z.string()),
-});
 
 export async function GET(_: Request, { params }: Params) {
   const survey = await getSurvey((await params).id);

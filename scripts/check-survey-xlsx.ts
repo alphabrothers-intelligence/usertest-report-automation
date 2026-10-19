@@ -6,9 +6,10 @@ import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
-import { numberQuestions, toCsv, toSheetRows, toWallaTxt, wallaChecklist, wallaLayout, wallaTodos, splitByProduct, type SurveyQuestion } from "../lib/survey/types";
+import { numberQuestions, rankOf, scaleAnchors, toCsv, toSheetRows, toWallaTxt, wallaChecklist, wallaLayout, wallaTodos, splitByProduct, type SurveyQuestion } from "../lib/survey/types";
 import { buildSurveyXlsx } from "../lib/survey/xlsx";
-import { normalizeSurvey, RANK_CAUTION } from "../lib/survey/generate";
+import { addUpcomingFeatureQuestions, fixParticles, normalizeSurvey, RANK_CAUTION, UPCOMING_CAUTION, type RawSurvey } from "../lib/survey/generate";
+import { lintSurvey } from "../lib/survey/lint";
 
 const q = (id: string, patch: Partial<SurveyQuestion> = {}): SurveyQuestion => ({
   id, stage: "인적 사항 및 특성·경험 조사", text: id, type: "주관식", options: [], required: true,
@@ -109,13 +110,100 @@ assert.deepStrictEqual(general.reviewNotes.slice(1), ["본인인증 안내"], "[
 assert.ok(general.questions.find((x) => x.id === "price")!.caution?.includes("다른 제품 내용"), "섞인 공통 문항은 표시한다");
 assert.ok(!pm.find((d) => d.productName === bz)!.reviewNotes.some((n) => n.includes("본인인증")));
 
-// 순위 문항: 첫 문항에 중복 선택 경고, WALLA 설정 목록에 따로 한 줄.
+// 표준 이유·순위 문항은 코드가 붙인다: 기능 만족도 → 이유 + (마지막 기능 뒤) 순위, 4대 가치 전부, 추천 의향(종합 만족도는 안 붙임).
+// 모델이 만든 순위·표준 이유 문항은 지우고 새로 붙인다(기타 기업 요청사항의 이유는 남긴다).
+const F = "기능별 고객 경험 평가 - 자사 제품 평가";
+const scale = (id: string, stage: string, text: string) => ({ ...q(id, { stage, type: "척도(0-10)", text }), caution: "" });
 const ranked = normalizeSurvey({
   companyName: "회사", productName: "앱", excludedFeatures: [], reviewNotes: [],
-  questions: ["1위", "2위"].map((text, i) => ({ ...q(`r${i}`, { type: "객관식-단일", options: ["A", "B"], followUp: i > 0 }), text, caution: "" })),
-} as Parameters<typeof normalizeSurvey>[0]);
-assert.ok(ranked.questions[0].caution?.startsWith(RANK_CAUTION) && !ranked.questions[1].caution);
+  questions: [
+    scale("f1", F, "'기능 A' 기능에 대해 얼마나 만족하시나요?"),
+    { ...q("f1r", { stage: F, followUp: true, text: "이유는요?" }), caution: "" },
+    scale("f2", F, "'기능 B' 기능에 대해 얼마나 만족하시나요?"),
+    { ...q("old", { stage: F, type: "객관식-단일", text: "1위", options: ["X"] }), caution: "" },
+    { ...q("old2", { stage: F, text: "다음 기능 중 중요하다고 생각하는 순서대로 순위를 매겨 주세요." }), caution: "" },
+    scale("v1", "가치 만족도 평가", "앱의 기능적 가치 영역에 대한 만족도는 몇 점인가요?"),
+    { ...q("v1r", { stage: "가치 만족도 평가", followUp: true, text: "이유" }), caution: "" },
+    scale("v2", "가치 만족도 평가", "앱의 심미적 가치 영역에 대한 만족도는 몇 점인가요?"),
+    scale("n1", "구매/추천 의향 조사", "본 제품을 체험해 보았을 때, 앱을 사용할 의향이 있나요?"),
+    scale("n2", "구매/추천 의향 조사", "본 제품을 체험해 보았을 때, 앱을 지인에게 추천할 의향이 얼마나 있나요?"),
+    scale("o", "종합 만족도", "앱의 전반적인 만족도(종합 점수)는 몇 점인가요?"),
+    { ...q("or", { stage: "종합 만족도", followUp: true, text: "위와 같이 평가한 이유는 무엇인가요?" }), caution: "" },
+    { ...q("e", { stage: "기타 기업 요청사항", type: "객관식-단일", options: ["A", "B"], text: "가장 불편했던 단계는?" }), caution: "" },
+    { ...q("er", { stage: "기타 기업 요청사항", followUp: true, text: "그 이유는 무엇인가요?" }), caution: "" },
+  ],
+} as unknown as RawSurvey);
+assert.deepStrictEqual(ranked.questions.map((x) => x.id),
+  ["f1", "f1_reason", "f2", "f2_reason", "f2_rank1", "f2_rank2", "v1", "v1_reason", "v2", "v2_reason", "n1", "n2", "n2_reason", "o", "e", "er"]);
+const r1 = ranked.questions.find((x) => x.id === "f2_rank1")!;
+assert.strictEqual(r1.text, "앱의 기능 중 가장 중요하다고 생각하는 기능은 무엇인가요? (1순위)");
+assert.deepStrictEqual(r1.options, ["기능 A", "기능 B"]);
+assert.strictEqual(ranked.questions.find((x) => x.id === "f2_rank2")!.text, "두 번째로 중요하다고 생각하는 기능은 무엇인가요? (2순위)");
+assert.ok(r1.caution?.startsWith(RANK_CAUTION) && !ranked.questions.find((x) => x.id === "f2_rank2")!.caution);
 assert.ok(wallaChecklist(ranked.questions).includes("■ 5. 순위 문항 — '중복 선택 방지' 설정"));
+// 출시 예정이라 뺀 기능은 기타 기업 요청사항에 수요 문항이 생긴다(제품 태그 → 그 제품 분기). 이미 있으면 안 만든다.
+const trackQ = q("track", { type: "객관식-단일", options: ["앱 A", "앱 B"] });
+const perB = Array.from({ length: 6 }, (_, k) => q(`b${k}`, { stage: "기타 기업 요청사항", branchOn: "track", branchValue: k % 2 ? "앱 B" : "앱 A" }));
+const upcoming = addUpcomingFeatureQuestions([trackQ, ...perB], [{ name: "[앱 A] 약봉투 촬영 등록", reason: "출시 예정" }, { name: "코드 입력", reason: "결제 필요" }]);
+const demand = upcoming.filter((x) => x.id.startsWith("upcoming"));
+assert.strictEqual(demand.length, 1);
+assert.strictEqual(demand[0].text, "'약봉투 촬영 등록' 기능이 추가된다면 얼마나 유용할 것 같나요?");
+assert.deepStrictEqual([demand[0].branchOn, demand[0].branchValue, demand[0].caution], ["track", "앱 A", UPCOMING_CAUTION]);
+assert.strictEqual(addUpcomingFeatureQuestions(upcoming, [{ name: "[앱 A] 약봉투 촬영 등록", reason: "출시 예정" }]).length, upcoming.length, "이미 있으면 안 만든다");
+// 척도 양 끝 라벨: 빠지면 코드가 만족도 기본값을 붙이고, 모델이 다른 라벨을 적었으면 그대로 둔다.
+const scaled = normalizeSurvey({
+  companyName: "회사", productName: "앱", excludedFeatures: [], reviewNotes: [],
+  questions: [
+    { ...q("s1", { type: "척도(0-10)", note: "'A'는 B 기능입니다." }), caution: "" },
+    { ...q("s2", { type: "척도(0-10)", note: "0=매우 어려웠다, 10=매우 쉬웠다" }), caution: "" },
+  ],
+} as unknown as RawSurvey);
+assert.strictEqual(scaled.questions[0].note, "'A'는 B 기능입니다. 0=매우 불만족, 10=매우 만족");
+assert.strictEqual(scaled.questions[1].note, "0=매우 어려웠다, 10=매우 쉬웠다");
+// 복수 선택 표기·'해당 없어요' 뒤 이유 문항 표시(코드가 단다), 매뉴얼 lint.
+const fixed = normalizeSurvey({
+  companyName: "회사", productName: "앱", excludedFeatures: [], reviewNotes: [],
+  questions: [
+    { ...q("m", { stage: "기타 기업 요청사항", type: "객관식-복수", options: ["A", "해당 없어요"], text: "우려되는 점은 무엇인가요?" }), caution: "" },
+    { ...q("step", { stage: "기타 기업 요청사항", type: "객관식-단일", options: ["A", "해당 없어요"], text: "가장 불편했던 단계는 무엇인가요?" }), caution: "" },
+    { ...q("why", { stage: "기타 기업 요청사항", followUp: true, text: "그 단계가 불편했던 이유는 무엇인가요?" }), caution: "" },
+  ],
+} as unknown as RawSurvey);
+assert.strictEqual(fixed.questions[0].text, "우려되는 점은 무엇인가요? (중복 선택 가능)");
+assert.ok(fixed.questions[2].caution?.startsWith("'해당 없어요' 응답자는"));
+const branchedWhy = normalizeSurvey({ companyName: "회사", productName: "앱", excludedFeatures: [], reviewNotes: [], questions: [
+  { ...q("t", { type: "객관식-단일", options: ["앱 A", "앱 B"] }), caution: "" },
+  { ...q("s", { stage: "기타 기업 요청사항", type: "객관식-단일", options: ["A", "특별히 어려운 단계는 없었어요"], branchOn: "t", branchValue: "앱 A" }), caution: "" },
+  { ...q("w", { stage: "기타 기업 요청사항", followUp: true, branchOn: "t", branchValue: "앱 A" }), caution: "" },
+] } as unknown as RawSurvey);
+assert.ok(branchedWhy.questions[2].caution?.startsWith("'특별히 어려운 단계는 없었어요' 응답자는"), "제품 분기 안에서도 건너뛰기 표시");
+const lint = lintSurvey({ ...fixed, questions: [
+  q("a", { text: "성별은 무엇입니까?" }),
+  q("b", { type: "척도(0-10)", text: "디자인·UI는 만족스러우셨나요?" }),
+  q("c", { type: "객관식-단일", options: ["1회~3회", "3회~5회"] }),
+] });
+assert.deepStrictEqual(lint.filter((i) => i.level === "위반").map((i) => i.principle),
+  ["통일성", "통일성", "명확성", "만족도 형식", "배타성"]);
+assert.deepStrictEqual(lintSurvey({ ...fixed, questions: [q("d", { type: "객관식-단일", options: ["1회 이상 3회 미만", "3회 이상 5회 미만"] })] }), []);
+assert.deepStrictEqual(lintSurvey({ ...fixed, questions: [
+  q("kbf", { type: "객관식-단일", options: ["A", "기타(직접 입력)"], text: "필톡을 이용함에 있어서 가장 영향을 미칠 수 있는 핵심 요인은 무엇이라고 생각하나요?" }),
+  q("use", { type: "척도(0-10)", note: "0=전혀 없음, 10=매우 있음", text: "본 제품을 체험해 보았을 때, 필톡을 사용할 의향이 있나요?" }),
+] }), [], "표준 문구는 '~요' 통일");
+assert.ok(lintSurvey({ ...fixed, questions: [q("x", { text: "사용하실 의향이 있으신가요?" })] }).some((i) => i.principle === "통일성"));
+assert.strictEqual(rankOf({ type: "객관식-단일", text: "두 번째로 중요하다고 생각하는 기능은 무엇인가요? (2순위)" }), 2);
+assert.strictEqual(rankOf({ type: "객관식-단일", text: "3위" }), 3);
+assert.strictEqual(rankOf({ type: "주관식", text: "1위" }), null);
+// 조사: 받침으로 고르고, 한글 아닌 글자 뒤는 중복만 합친다.
+assert.strictEqual(fixParticles("필톡을(를) 지인에게"), "필톡을 지인에게");
+assert.strictEqual(fixParticles("케어로그을(를) 쓰고 앱이(가) 좋은(는)"), "케어로그를 쓰고 앱이 좋은");
+assert.strictEqual(fixParticles("biz cares를(를) 이용"), "biz cares를 이용");
+assert.strictEqual(fixParticles("biz cares을(를) 이용"), "biz cares을(를) 이용");
+// 제품별로 나눌 때 태그 없는 제외 기능은 그 기능 문항이 있는 제품에만 남는다.
+const tagless = splitByProduct({ ...productDraft, excludedFeatures: [{ name: "a0(일부)", reason: "출시 예정" }] })!;
+assert.deepStrictEqual(tagless.map((d) => d.excludedFeatures.length), [1, 0]);
+assert.deepStrictEqual(scaleAnchors("무료입니다. 0=매우 불만족, 10=매우 만족"), ["매우 불만족", "매우 만족"]);
+assert.deepStrictEqual(scaleAnchors(""), ["매우 불만족", "매우 만족"], "옛 저장본은 기본값");
+assert.ok(wallaChecklist(scaled.questions).includes("— 0='매우 어려웠다', 10='매우 쉬웠다'"));
 // 인적 사항 안의 딸린 주관식(타사 장점·단점)은 긴 답이다.
 const longTxt = toWallaTxt([q("used2", { type: "객관식-단일", options: ["네"] }), q("pros", { followUp: true, branchOn: "used2", branchValue: "네" })]).split("\r\n");
 assert.strictEqual(longTxt[longTxt.indexOf("pros") - 1], "[[Question:TE:Essay]]");

@@ -56,6 +56,8 @@
     "check:table-props": "tsx scripts/check-table-props.ts",
     "check:continuous-editor": "tsx scripts/check-continuous-editor.ts",
     "check:survey-xlsx": "tsx scripts/check-survey-xlsx.ts",
+    "check:survey-plan": "tsx scripts/check-survey-plan.ts",
+    "check:survey-lint": "tsx --env-file=.env.local scripts/check-survey-lint.ts",
     "check:editor-save": "tsx scripts/check-editor-save.ts",
     "check:editor-toolbar": "tsx scripts/check-editor-toolbar.ts",
     "check:editor-links": "tsx scripts/check-editor-links.ts",

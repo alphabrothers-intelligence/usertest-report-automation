@@ -16,6 +16,7 @@ import {
   toWallaTxt,
   splitByProduct,
   wallaChecklist,
+  planFileName,
   wallaLayout,
   wallaTodos,
   type SurveyDraft,
@@ -394,6 +395,21 @@ function SurveyEditor({ draft, onChange, surveyId }: { draft: SurveyDraft; onCha
     }
   }
 
+  const [planOpen, setPlanOpen] = useState(false);
+  const plan = draft.plan ?? { businessArea: "", testers: "", schedule: "", managers: "" };
+  async function downloadPlan() {
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/survey/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...draft, questions, plan }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `기획안을 만들지 못했습니다 (${res.status})`);
+      download(await res.blob(), planFileName(draft.companyName), "application/hwp+zip");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   const selected = selectedIndex >= 0 ? questions[selectedIndex] : null;
   const layout = useMemo(() => wallaLayout(questions), [questions]);
   const wallaInfo = (q: SurveyQuestion) => ({ label: layout.find((s) => s.q.id === q.id)?.label ?? "", todos: wallaTodos(q, layout) });
@@ -436,6 +452,33 @@ function SurveyEditor({ draft, onChange, surveyId }: { draft: SurveyDraft; onCha
         >
           WALLA 설정 목록
         </button>
+        <button
+          type="button"
+          title="알파브라더스 설문 구성 기획안 양식에 이 설문과 기업 정보를 채운 한글(HWPX) 파일입니다."
+          onClick={() => setPlanOpen((v) => !v)}
+          className="rounded-lg bg-[#eef3fe] px-4 py-2 text-sm font-semibold text-[#356df3] hover:bg-[#e0eafd]"
+        >
+          기획안 HWPX
+        </button>
+        {planOpen && (
+          <div className="flex w-full flex-wrap items-end gap-3 border-t border-[#eef1f5] pt-3">
+            {([
+              ["businessArea", "핵심 비즈니스 영역", "B2C, B2B"],
+              ["testers", "테스트 인원", "총 100명 (일반인용 70명 / 기관용 30명)"],
+              ["schedule", "진행 일정", "2026년 10월 20일 ~ 2026년 11월 3일"],
+              ["managers", "담당자", "송영민 팀장 / ○○○ 매니저"],
+            ] as const).map(([key, label, hint]) => (
+              <label key={key} className="min-w-[180px] flex-1 text-[12px] font-semibold text-[#6b778a]">
+                {label}
+                <input className={`${field} mt-1`} placeholder={hint} value={plan[key]} onChange={(e) => onChange({ ...draft, plan: { ...plan, [key]: e.target.value } })} />
+              </label>
+            ))}
+            <button type="button" onClick={downloadPlan} disabled={downloading} className="rounded-lg bg-[#356df3] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2b5bd0] disabled:opacity-50">
+              {downloading ? "만드는 중…" : "기획안 다운로드"}
+            </button>
+            <p className="w-full text-[12px] text-[#94a0b2]">비운 칸은 문서에 파란 글씨 ‘(입력 필요)’로 들어갑니다. 목차의 쪽 번호는 어림값이니 한글에서 열어 확인해 주세요.</p>
+          </div>
+        )}
         {parts && (
           <div className="flex w-full flex-wrap items-center gap-3 border-t border-[#eef1f5] pt-3 text-[13px] text-[#4a566b]">
             <span>
