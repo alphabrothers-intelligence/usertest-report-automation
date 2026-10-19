@@ -3,6 +3,7 @@
  * 저장은 하지 않는다(새로고침하면 원래대로). 과금 없음. 필요: dev 서버, 저장된 리바랩스 보고서, Chrome.
  */
 import { openChrome } from "./chromeSession";
+const BASE = process.env.CHECK_BASE_URL ?? "http://localhost:3000";
 
 const REPORT = process.env.CHECK_REPORT ?? "83e75d8d-a48f-471b-94b6-aa53f2e9b014";
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -18,7 +19,7 @@ const check = (name: string, ok: boolean, detail = "") => { console.log(`${ok ? 
   try {
     // 화면 없는 크롬은 창 포커스가 없어 편집기가 커서 위치를 못 받는다 — 포커스를 흉내 낸다.
     await s.send("Emulation.setFocusEmulationEnabled", { enabled: true });
-    await s.send("Page.navigate", { url: `http://localhost:3000/viewer?report=${REPORT}` });
+    await s.send("Page.navigate", { url: `${BASE}/viewer?report=${REPORT}` });
     await wait(25000);
     await ev(select); await wait(200);
     await ev(press("굵게")); await wait(300);

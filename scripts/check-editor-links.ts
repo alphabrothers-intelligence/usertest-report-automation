@@ -5,6 +5,7 @@
  *  3. 목차 — 소제목 쪽 번호가 장 시작 쪽과 다르게(실제 놓인 쪽으로) 나온다.
  */
 import { openChrome } from "./chromeSession";
+const BASE = process.env.CHECK_BASE_URL ?? "http://localhost:3000";
 
 const REPORT = process.env.CHECK_REPORT ?? "83e75d8d-a48f-471b-94b6-aa53f2e9b014";
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -17,7 +18,7 @@ const check = (name: string, ok: boolean, detail = "") => { console.log(`${ok ? 
   try {
     await s.send("Emulation.setFocusEmulationEnabled", { enabled: true });
     await s.send("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1100, deviceScaleFactor: 1, mobile: false });
-    await s.send("Page.navigate", { url: `http://localhost:3000/viewer?report=${REPORT}` });
+    await s.send("Page.navigate", { url: `${BASE}/viewer?report=${REPORT}` });
     await wait(25000);
 
     await ev(`(()=>{const g=document.querySelector('[data-chapter="III"] .ProseMirror [data-quote-group]');window.scrollTo(0,g.getBoundingClientRect().top+scrollY-window.innerHeight*0.32+40)})()`);

@@ -515,6 +515,8 @@ export function ReportStudio({
                   <FormatButton label={<AlignGlyph variant="right" />} title="오른쪽 정렬" onApply={() => applyTextFormat("alignRight")} />
                   <FormatButton label={<span className="text-[12px]">•≡</span>} title="글머리 기호 목록" onApply={() => applyTextFormat("bullet")} />
                   <FormatButton label={<span className="text-[12px]">1≡</span>} title="번호 매기기 목록" onApply={() => applyTextFormat("number")} />
+                  {/* Word의 쪽 나누기(Ctrl+Enter). 표 안이면 그 행(첫 행이면 표 전체)을 다음 쪽으로 보낸다. 다시 누르면 푼다. */}
+                  <FormatButton label={<span className="text-[11px] font-semibold">쪽↵</span>} title="쪽 나누기 (Ctrl+Enter) — 표 안에서는 이 행부터 다음 쪽으로" onApply={() => runEditorCommand("pageBreak")} />
                 </div>
                 <span className="mx-2 h-7 w-px bg-[#dce2ea]" />
                 <div className="flex shrink-0 items-center gap-1">

@@ -5,6 +5,7 @@ import { richTextToInlineHtml } from "@/lib/report/richText";
 import { dataTableCss } from "@/lib/report/sectionStyle";
 import {
   headingBlock,
+  isFullQuestionText,
   npsBlock,
   PENDING_QUALITATIVE_NOTICE,
   richStaticBlock,
@@ -25,7 +26,26 @@ export type NpsSectionServices = {
   questionsByKeys: (questions: QuestionWithApprovedCategories[], keys: string[]) => QuestionWithApprovedCategories[];
   findSurveyQuestion: (stats: QuantStats, stage: string, occurrenceIndex: number) => { qno: number; question: string } | null;
   qualitativeBlock: (id: string, label: string, questions: QuestionWithApprovedCategories[]) => ReportBlock[];
+  /** 제품 정보의 서비스명 — raw data 헤더가 "개선 아이디어 제안" 같은 요약 라벨일 때 원본 문항을 만든다. */
+  serviceName?: string;
 };
+
+/**
+ * 개선 아이디어 문항 제목. raw data 헤더가 온전한 문항이면 그대로, 요약 라벨이면 원본 보고서 문항
+ * ("캣독런을 사용해 보면서 어떤 부분에서 개선이 필요하다고 느끼셨나요?")으로 만든다 — 기능 만족도
+ * 문항과 같은 규칙(workspace.ts). 라벨을 그대로 두면 문항 없이 "개선 아이디어 제안"이 두 번 나왔다(2026-10-12).
+ */
+/** 개선 아이디어 문항 바로 아래 "주요 의견 종합" 띠(원본 47쪽). */
+export const IMPROVEMENT_BANNER_HTML = `<p style="margin:0 0 6pt;padding:4pt;background-color:${dataTableCss().palette.header};border-top:0.75pt dotted #9ca3af;border-bottom:0.75pt dotted #9ca3af;text-align:center;font-weight:700;font-size:10.5pt">주요 의견 종합</p>`;
+
+export function improvementQuestionText(header: string | undefined, serviceName?: string): string {
+  if (isFullQuestionText(header)) return header!;
+  const name = serviceName?.trim();
+  if (!name) return "서비스를 사용해 보면서 어떤 부분에서 개선이 필요하다고 느끼셨나요?";
+  const last = name.charCodeAt(name.length - 1);
+  const batchim = last >= 0xac00 && last <= 0xd7a3 && (last - 0xac00) % 28 !== 0;
+  return `${name}${batchim ? "을" : "를"} 사용해 보면서 어떤 부분에서 개선이 필요하다고 느끼셨나요?`;
+}
 
 function npsReferenceHtml(stats: QuantStats): string {
   const nps = stats.nps;
@@ -153,7 +173,7 @@ export function buildNpsSection(
       id: "nps-improvement-question",
       variant: "question",
       number: improvementSurvey ? `Q${improvementSurvey.qno}` : undefined,
-      text: improvementSurvey?.question ?? improvementQuestion?.label ?? "개선 아이디어 제안",
+      text: improvementQuestionText(improvementSurvey?.question, services.serviceName),
     }),
     ...(improvementQuestion
       ? services.qualitativeBlock("nps-improvement-idea", "개선 아이디어", [improvementQuestion])

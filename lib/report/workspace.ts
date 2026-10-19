@@ -20,7 +20,7 @@ import { genericOf } from "@/lib/report/genericStats";
 import { buildUxQualitySection } from "@/lib/report/workspaceUxQuality";
 import { buildCrossAnalysisSection } from "@/lib/report/workspaceCrossAnalysis";
 import { buildJourneySection } from "@/lib/report/workspaceJourney";
-import { buildNpsSection } from "@/lib/report/workspaceNps";
+import { buildNpsSection, IMPROVEMENT_BANNER_HTML } from "@/lib/report/workspaceNps";
 import { donutSvg, satisfactionHistogramSvg } from "@/lib/report/chartSvg";
 import { DATA_TABLE, dataTableCss } from "@/lib/report/sectionStyle";
 import {
@@ -502,7 +502,11 @@ function qualitativeBlocks(idPrefix: string, questions: QuestionWithApprovedCate
       // 개선 아이디어(2단): label이 "대분류소분류"로 인코딩돼 있으면 원본 45~49쪽처럼
       // [대분류] → <소분류> → 원문 인용(인사이트 없음) 계층으로 렌더링한다.
       const groups = improvementCategoryHtml(q.categories, q.question_key);
-      const title = `<p style="font-weight:700;font-size:10.5pt;margin:16pt 0 6pt">${escapeHtml(q.label)}</p>`;
+      // 원본 47쪽: 문항 바로 아래 "주요 의견 종합" 띠, 의견 묶음, 끝에 가로선 한 줄. 예전엔 문항 라벨
+      // ("개선 아이디어 제안")을 다시 적어 문항 제목과 같은 말이 두 번 나왔다(2026-10-12 담당자 지적).
+      const title = IMPROVEMENT_BANNER_HTML;
+      const closing = `<p style="margin:4pt 0 12pt;border-bottom:0.75pt solid #9ca3af;font-size:2pt;line-height:1">&nbsp;</p>`;
+      if (groups.length > 0) groups[groups.length - 1] += closing;
       // 대분류마다 한 블록. id 접두(`...-q1`)는 그대로라 이 문항을 접두로 찾는 곳은 안 바뀐다.
       blocks.push(...(groups.length > 0 ? groups : [""]).map((html, index) => textBlock({
         id: index === 0 ? `${idPrefix}-q${qi}` : `${idPrefix}-q${qi}-${index + 1}`,
@@ -954,6 +958,7 @@ export function buildReportWorkspaceSeed(input: {
       questionsByKeys,
       findSurveyQuestion,
       qualitativeBlock,
+      serviceName: productInfo?.serviceName,
     }),
     X: buildConclusionSection(stats, resultSummary, qual, recommendations),
   };

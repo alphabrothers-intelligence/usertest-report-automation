@@ -579,6 +579,7 @@ export function ReportWebDocument({ sections, setSections, checkpoint, reportDat
             sourceFileUrl={sourceFileUrl}
             firstPage={chapterFirstPage[section.numeral]}
             footerBrand={footerBrand}
+            serviceName={productInfo.serviceName}
             footerYear={footerYear}
             onPageCount={(count) => setChapterPages((previous) => (previous[section.numeral] === count ? previous : { ...previous, [section.numeral]: count }))}
             onHeadingPages={(pages) => setHeadingPages((previous) => ({ ...previous, [section.numeral]: pages }))}

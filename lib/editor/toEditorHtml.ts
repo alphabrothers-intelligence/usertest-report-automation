@@ -1,5 +1,6 @@
 import type { ReportBlock, ReportSectionContent, ReportTableBlock } from "@/lib/report/sections";
 import { DATA_TABLE, REPORT_TEXT, tablePalette } from "@/lib/report/sectionStyle";
+import { IMPROVEMENT_BANNER_HTML, improvementQuestionText } from "@/lib/report/workspaceNps";
 
 /**
  * 블록 목록을 **하나로 이어진 편집 문서**(TipTap HTML)로 바꾼다 — A안 시제품(2026-10-01).
@@ -173,4 +174,59 @@ function rowGroupHtml(block: Extract<ReportBlock, { kind: "row-group" }>): strin
 
 function sectionToEditorParts(section: ReportSectionContent): string[] {
   return [`<div data-report-atom="${BANNER_ATOM_ID}"></div>`, ...section.blocks.map(blockHtml)];
+}
+
+/**
+ * **4대 가치 의견 상자(긍정 | 부정)를 한 행으로 합친다.** 블록 화면 시절엔 묶음 한 쌍을 한 행으로 맞춰
+ * (workspace.ts valueOpinionBoxHtml) 쪽 넘김을 도왔는데, 이어진 편집기에서는 두 칸의 높이가 행마다 맞춰져
+ * 짧은 쪽 칸에 지워지지 않는 큰 빈칸이 생겼다(2026-10-12 담당자 지적). 편집기는 행을 칸마다 따로 나누므로
+ * (pagination.ts splitRow) 한 행이어도 쪽을 자연스럽게 넘긴다. 이미 저장된 편집본에도 적용되게 열 때 바꾼다.
+ */
+export function mergeOpinionRows(html: string): string {
+  if (!html.includes("부정 의견")) return html;
+  const root = document.createElement("div");
+  root.innerHTML = html;
+  root.querySelectorAll("table").forEach((table) => {
+    // 편집기를 한 번 거친 HTML은 <thead>도 data-quote-section 표식도 없다 — 머리 행 글자로 알아본다.
+    const all = [...table.rows];
+    const head = all.findIndex((row) => row.cells.length === 2 && row.cells[0].textContent?.trim() === "긍정 의견" && row.cells[1].textContent?.trim() === "부정 의견");
+    if (head < 0) return;
+    const rows = all.slice(head + 1).filter((row) => row.cells.length === 2 && [...row.cells].every((cell) => cell.tagName === "TD"));
+    if (rows.length < 2) return;
+    const [first, ...rest] = rows;
+    const cells = [...first.cells];
+    rest.forEach((row) => {
+      [...row.cells].forEach((cell, index) => cells[index].append(...cell.childNodes));
+      row.remove();
+    });
+    cells.forEach((cell) => {
+      cell.style.borderBottomWidth = cell.style.borderLeftWidth;
+      cell.style.borderBottomStyle = cell.style.borderLeftStyle;
+      cell.style.borderBottomColor = cell.style.borderLeftColor;
+      cell.style.paddingBottom = cell.style.paddingTop;
+    });
+  });
+  return root.innerHTML;
+}
+
+/**
+ * **저장된 옛 편집본의 개선 아이디어 머리를 지금 양식으로 바꾼다** — 문항 자리에 "Q31. 개선 아이디어 제안",
+ * 그 아래 같은 말이 또 한 줄 있던 양식(2026-10-12 담당자 지적). 새로 만드는 보고서는 workspace.ts가 처음부터
+ * 이 양식으로 만든다. 편집본은 초안에 그대로 저장되므로 열 때 이 한 자리만 고친다(다른 편집은 그대로 둔다).
+ */
+export function upgradeImprovementIdea(html: string, serviceName?: string): string {
+  if (!html.includes("개선 아이디어 제안")) return html;
+  const root = document.createElement("div");
+  root.innerHTML = html;
+  root.querySelectorAll("h3").forEach((heading) => {
+    const match = heading.textContent?.trim().match(/^(Q\d+\.)\s*개선 아이디어 제안$/);
+    if (!match) return;
+    heading.textContent = `${match[1]} ${improvementQuestionText(undefined, serviceName)}`;
+    // 바로 뒤 첫 문단(블록 감싸기 div 안일 수 있다)이 같은 라벨이면 "주요 의견 종합" 띠로.
+    let next = heading.nextElementSibling;
+    while (next && next.tagName === "DIV" && next.firstElementChild && next.firstElementChild.tagName !== "P") next = next.firstElementChild;
+    const label = next?.tagName === "P" ? next : next?.querySelector(":scope > p");
+    if (label && label.textContent?.trim() === "개선 아이디어 제안") label.outerHTML = IMPROVEMENT_BANNER_HTML;
+  });
+  return root.innerHTML;
 }

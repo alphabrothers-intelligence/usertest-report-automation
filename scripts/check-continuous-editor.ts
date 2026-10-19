@@ -16,6 +16,7 @@
  *     뚫고 넘친 사고(2026-10-01)를 고정한다. 그림이 든 블록(차트)은 글줄이 아니라 제외.
  */
 import { openChrome } from "./chromeSession";
+const BASE = process.env.CHECK_BASE_URL ?? "http://localhost:3000";
 
 const REPORT = process.env.CHECK_REPORT ?? "83e75d8d-a48f-471b-94b6-aa53f2e9b014";
 const MM = 96 / 25.4;
@@ -46,8 +47,8 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
   try {
     // 기본은 실제 `/viewer`(본 기능). CHECK_PAGE=editor면 시제품 `/editor`.
     const url = process.env.CHECK_PAGE === "editor"
-      ? `http://localhost:3000/editor?report=${REPORT}&section=III`
-      : `http://localhost:3000/viewer?report=${REPORT}`;
+      ? `${BASE}/editor?report=${REPORT}&section=III`
+      : `${BASE}/viewer?report=${REPORT}`;
     // 화면 없는 크롬은 창 포커스가 없어 편집기가 커서 위치를 못 받는다 — 포커스를 흉내 낸다.
     await s.send("Emulation.setFocusEmulationEnabled", { enabled: true });
     await s.send("Page.navigate", { url });

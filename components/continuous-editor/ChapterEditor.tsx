@@ -8,8 +8,8 @@ import { FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { registerEditor, setActiveEditor, unregisterEditor } from "@/lib/editor/activeEditor";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
-import { Pagination, layoutFlagsKey, type LayoutFlags } from "@/lib/editor/pagination";
-import { sectionToEditorHtml } from "@/lib/editor/toEditorHtml";
+import { Pagination, layoutFlagsKey, type CutLine, type LayoutFlags } from "@/lib/editor/pagination";
+import { mergeOpinionRows, sectionToEditorHtml, upgradeImprovementIdea } from "@/lib/editor/toEditorHtml";
 import { PageFooter } from "@/components/report-web-document/ReportDocumentChrome";
 import { AtomContext, KeepStyle, PageBreak, ReportAtom, ReportDiv } from "./extensions";
 
@@ -24,6 +24,13 @@ import { AtomContext, KeepStyle, PageBreak, ReportAtom, ReportDiv } from "./exte
  */
 const PAGE_GAP_PX = 40;
 export const EDITOR_CSS = `
+/* 쪽마다 본문 영역만 보이게 — 쪽을 넘긴 표 칸이 바닥글·쪽 사이를 덮지 않는다(화면). 인쇄에서는 크롬이 가림막을
+   쪽 조각마다 처음부터 다시 그려 18mm 어긋나 본문 끝줄을 가렸다(2026-10-12 PDF 실측) — 인쇄는 종이 위 흰 띠
+   ([data-margin-band])가 위·아래 여백을 덮는다. */
+[data-margin-band] { display: none; }
+.editor-body { -webkit-mask-image: repeating-linear-gradient(#000 0 var(--content-h), transparent var(--content-h) var(--stride)); mask-image: repeating-linear-gradient(#000 0 var(--content-h), transparent var(--content-h) var(--stride)); }
+/* 칸마다 쪽을 넘긴 행은 칸 내용을 위에서부터 — 가운데 정렬이면 항목 이름이 쪽 사이에 걸려 안 보인다. */
+.continuous-editor tr:has(> td [data-page-gap]) > td { vertical-align: top !important; }
 .continuous-editor .editor-page-break { border-top: 1px dashed #9aa3b0; margin: 6px 0; }
 .continuous-editor table { border-collapse: collapse; width: 100%; }
 .continuous-editor .tableWrapper { overflow: visible; }
@@ -67,6 +74,9 @@ export const EDITOR_CSS = `
      쪽이 생겼다(2026-10-02 PDF 실측, 화면은 정상). */
   body [data-chapter] * { break-inside: auto !important; page-break-inside: auto !important; break-before: auto !important; break-after: auto !important; }
   body [data-chapter] .ProseMirror-selectednode { outline: none !important; }
+  body [data-chapter] .editor-body { -webkit-mask-image: none; mask-image: none; }
+  body [data-chapter] [data-section-page][data-a4-page] { z-index: 2; background: transparent !important; }
+  body [data-chapter] [data-margin-band] { display: block; position: absolute; left: 0; right: 0; background: #fff; }
 }
 /* 문단으로 푼 테두리 상자(종합 해석 등) — 쪽 경계에서 닫히고 다음 쪽에서 다시 열린다. */
 .continuous-editor p[data-box] { border-left: 0.75pt solid #8ea7de; border-right: 0.75pt solid #8ea7de; }
@@ -89,6 +99,8 @@ export type ChapterEditorProps = {
   firstPage: number;
   footerBrand: string;
   footerYear: string;
+  /** 제품 정보의 서비스명 — 저장된 옛 편집본의 개선 아이디어 문항을 고칠 때 쓴다. */
+  serviceName?: string;
   onPageCount?: (count: number) => void;
   /** 이 장의 제목 블록(번호 제목·문항 제목 그림)이 몇 번째 쪽(0부터)에 놓였는지 — 목차 쪽 번호에 쓴다. */
   onHeadingPages?: (pages: Record<string, number>) => void;
@@ -100,7 +112,7 @@ export type ChapterEditorProps = {
   sectionRef?: (element: HTMLElement | null) => void;
 };
 
-export function ChapterEditor({ section, sourceFileUrl, firstPage, footerBrand, footerYear, onPageCount, onHeadingPages, onBlockChange, onHtmlChange, onSelectBlock, sectionRef }: ChapterEditorProps) {
+export function ChapterEditor({ section, sourceFileUrl, firstPage, footerBrand, footerYear, serviceName, onPageCount, onHeadingPages, onBlockChange, onHtmlChange, onSelectBlock, sectionRef }: ChapterEditorProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const headingPagesRef = useRef("");
   // 쪽 나눔이 다시 끝날 때마다 올라간다 — 제목 블록의 쪽 위치를 그때 다시 잰다.
@@ -125,7 +137,8 @@ export function ChapterEditor({ section, sourceFileUrl, firstPage, footerBrand, 
   // 편집기 내용은 **처음 한 번만** 블록에서 만든다 — 이후 글은 편집기가 들고 있다. 그림(차트 등)은
   // 매번 최신 블록으로 그리므로 오른쪽 수정 탭의 변경이 바로 보인다.
   // ponytail: 서버가 블록을 통째로 다시 만들어 주는 경우(극성 재판정 등)는 아직 편집기에 반영 안 된다.
-  const [html] = useState(() => section.editorHtml || sectionToEditorHtml(section));
+  const [html] = useState(() => upgradeImprovementIdea(mergeOpinionRows(section.editorHtml || sectionToEditorHtml(section)), serviceName));
+  const [cutLines, setCutLines] = useState<CutLine[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 오른쪽 패널의 쪽 배치(표 속성·단락 속성). 값이 바뀔 때마다 쪽 넘김 확장에 트랜잭션으로 넘긴다.
   const flagsKey = JSON.stringify({
@@ -166,6 +179,7 @@ export function ChapterEditor({ section, sourceFileUrl, firstPage, footerBrand, 
           onPageCount?.(count);
           setLayoutTick((tick) => tick + 1);
         },
+        onLines: (lines) => setCutLines((previous) => (JSON.stringify(previous) === JSON.stringify(lines) ? previous : lines)),
       }),
     ],
     content: html,
@@ -202,19 +216,27 @@ export function ChapterEditor({ section, sourceFileUrl, firstPage, footerBrand, 
       data-chapter={section.numeral}
       className="relative scroll-mt-36"
       // 종이 위치·높이는 CSS 변수로 — 인쇄 서식이 쪽 사이 띄움만 0으로 바꾸면 그대로 A4 쪽에 맞는다.
-      style={{ width: PAGE.width, height: `calc(${pages} * var(--stride) - var(--gap))`, ["--stride" as string]: `${PAGE_STRIDE}px`, ["--gap" as string]: `${PAGE.gap}px`, ["--page-gap-cut" as string]: "0px" }}
+      style={{ width: PAGE.width, height: `calc(${pages} * var(--stride) - var(--gap))`, ["--stride" as string]: `${PAGE_STRIDE}px`, ["--gap" as string]: `${PAGE.gap}px`, ["--page-gap-cut" as string]: "0px", ["--content-h" as string]: `${CONTENT_HEIGHT}px` }}
     >
       <style>{EDITOR_CSS}</style>
       {Array.from({ length: pages }, (_, index) => (
         // 종이 한 장 = 웹뷰 카드 한 장. `data-section-page`는 쪽 수 검사·목차 스크롤이 센다.
         <div key={index} data-section-page={section.numeral} data-a4-page aria-hidden className="absolute left-0 box-border border border-[#dfe3e9] bg-white shadow-[0_12px_34px_rgba(28,39,55,.11)]" style={{ top: `calc(${index} * var(--stride))`, width: PAGE.width, height: PAGE.height }}>
+          {/* 인쇄 전용 여백 가리개(아래 EDITOR_CSS 인쇄 규칙). 바닥글보다 앞에 둬야 바닥글이 위에 그려진다. */}
+          <div data-margin-band style={{ top: 0, height: PAGE.top }} />
+          <div data-margin-band style={{ bottom: 0, height: PAGE.bottom }} />
           <PageFooter page={firstPage + index} brand={footerBrand} year={footerYear} />
         </div>
       ))}
-      <div className="absolute" style={{ top: PAGE.top, left: PAGE.side, right: PAGE.side }}>
+      {/* 본문은 쪽의 본문 영역에서만 보인다(editor-body 가림막) — 쪽을 넘긴 표의 테두리·배경이 바닥글과
+          쪽 사이 여백을 덮지 않는다. 잘린 표는 cutLines로 쪽마다 가로선을 그어 닫는다. */}
+      <div className="editor-body absolute" style={{ top: PAGE.top, left: PAGE.side, right: PAGE.side, bottom: 0 }}>
         <AtomContext.Provider value={atomContext}>
           <EditorContent editor={editor} />
         </AtomContext.Provider>
+        {cutLines.map((line, index) => (
+          <div key={index} aria-hidden data-cut-line className="pointer-events-none absolute" style={{ top: `calc(${line.page} * var(--stride) + ${line.y}px)`, left: line.left, width: line.width, height: line.size, background: line.color }} />
+        ))}
       </div>
     </div>
   );

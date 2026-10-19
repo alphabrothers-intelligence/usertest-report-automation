@@ -51,6 +51,7 @@ export function runEditorCommand(command: string): boolean {
       // 제언 화살표 문단: 지금 문단 뒤에 굵은 기울임 "→ " 줄을 넣는다.
       chain.insertContentAt(editor.state.selection.$to.after(1), { type: "paragraph", content: [{ type: "text", text: "→ ", marks: [{ type: "bold" }, { type: "italic" }] }] }).run();
       return true;
+    case "pageBreak": chain.insertPageBreakHere().run(); return true;
     case "undo": chain.undo().run(); return true;
     case "redo": chain.redo().run(); return true;
     default: return false;

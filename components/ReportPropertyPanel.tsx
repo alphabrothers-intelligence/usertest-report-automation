@@ -95,7 +95,7 @@ export function BlockLayoutFields({ layout }: { layout: BlockLayoutControls }) {
       </div>
       {tab === "table" ? (
         <div className="space-y-1">
-          <Toggle label="다음 쪽으로 이어지게 허용" hint="끄면 표를 쪼개지 않고 통째로 한 쪽에 둡니다." checked={!layout.keepTogether} onChange={(on) => layout.onToggleKeepTogether(!on)} />
+          <Toggle label="다음 쪽으로 이어지게 허용" hint="끄면 표를 쪼개지 않고 통째로 한 쪽에 둡니다. 한 쪽보다 긴 표는 쪽 경계에서 나뉩니다." checked={!layout.keepTogether} onChange={(on) => layout.onToggleKeepTogether(!on)} />
           <Toggle label="이 표 앞에서 쪽 나누기" hint="자리가 남아도 이 표부터 새 쪽에서 시작합니다." checked={layout.pageBreakBefore} onChange={layout.onTogglePageBreakBefore} />
         </div>
       ) : (

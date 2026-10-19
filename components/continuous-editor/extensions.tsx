@@ -44,6 +44,13 @@ export const KeepStyle = Extension.create({
           parseHTML: (element) => element.getAttribute("data-box"),
           renderHTML: (attributes) => (attributes.box ? { "data-box": attributes.box } : {}),
         },
+        // 표 행 앞에서 쪽 나누기(Ctrl+Enter / 툴바 "쪽 나누기"를 표 안에서 눌렀을 때). tableRow에만 의미가 있다.
+        breakBefore: {
+          default: false,
+          keepOnSplit: false,
+          parseHTML: (element) => element.hasAttribute("data-break-before"),
+          renderHTML: (attributes) => (attributes.breakBefore ? { "data-break-before": "" } : {}),
+        },
         style: {
           default: null,
           // Enter로 문단을 나눌 때 **뒤 문단에는 서식을 물려주지 않는다** — 극성 배너 끝에서 Enter를
@@ -178,9 +185,48 @@ export const PageBreak = Node.create({
   renderHTML() {
     return ["div", { "data-page-break": "", class: "editor-page-break", contenteditable: "false" }];
   },
+  addCommands() {
+    return {
+      /**
+       * Word의 쪽 나누기. **표 안에서는** 그 자리에 점선을 넣지 않고(칸 안 점선은 쪽 넘김이 못 읽는다)
+       * 커서가 있는 행을 다음 쪽으로 보낸다 — 첫 행이면 바깥 행, 그것도 없으면 표 전체를 보낸다
+       * (2026-10-12 담당자: "표의 위치나 다음 페이지로 넘어가게 하는 작업도 할 수 있게"). 다시 누르면 푼다.
+       */
+      insertPageBreakHere: () => ({ state, tr, dispatch }) => {
+        const { $from } = state.selection;
+        for (let depth = $from.depth; depth > 0; depth -= 1) {
+          if ($from.node(depth).type.name !== "tableRow") continue;
+          if ($from.index(depth - 1) === 0) continue; // 첫 행 → 한 겹 바깥에서 다시 본다
+          const pos = $from.before(depth);
+          const row = $from.node(depth);
+          if (dispatch) dispatch(tr.setNodeMarkup(pos, undefined, { ...row.attrs, breakBefore: !row.attrs.breakBefore }));
+          return true;
+        }
+        let tableDepth = 0;
+        for (let depth = 1; depth <= $from.depth; depth += 1) {
+          if ($from.node(depth).type.name === "table") { tableDepth = depth; break; }
+        }
+        const at = tableDepth ? $from.before(tableDepth) : $from.pos;
+        const before = tableDepth ? state.doc.resolve(at).nodeBefore : null;
+        // 이미 표 바로 앞에 쪽 나누기가 있으면 지운다(되돌리기와 같은 토글).
+        if (before?.type.name === this.name) {
+          if (dispatch) dispatch(tr.delete(at - before.nodeSize, at));
+          return true;
+        }
+        if (dispatch) dispatch(tr.insert(at, this.type.create()));
+        return true;
+      },
+    };
+  },
   addKeyboardShortcuts() {
     return {
-      "Mod-Enter": () => this.editor.chain().focus().insertContent({ type: this.name }).run(),
+      "Mod-Enter": () => this.editor.chain().focus().insertPageBreakHere().run(),
     };
   },
 });
+
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    pageBreak: { insertPageBreakHere: () => ReturnType };
+  }
+}
