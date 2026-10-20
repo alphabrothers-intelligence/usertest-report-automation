@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import JSZip from "jszip";
 import { normalizeSurvey, type RawSurvey } from "../lib/survey/generate";
 import { blocks, buildSurveyPlanHwpx } from "../lib/survey/plan";
-import type { SurveyQuestion } from "../lib/survey/types";
+import { splitByProduct, type SurveyQuestion } from "../lib/survey/types";
 
 const q = (id: string, stage: string, patch: Partial<SurveyQuestion> = {}): SurveyQuestion => ({
   id, stage, text: `${id} 문항이에요?`, type: "주관식", options: [], required: true,
@@ -97,12 +97,18 @@ async function main() {
   const { zip, tables } = await inspect(out);
   const body = await zip.file("Contents/section1.xml")!.async("string");
   const text = [...body.matchAll(/<hp:t>([^<]*)/g)].map((m) => m[1]).join("\n");
-  for (const want of ["테스트기업", "(입력 필요)", "2026년 10월 20일", "(앱 A)", "(서비스 B)", "의 기능 중 가장 중요하다고 생각하는 기능은 무엇인가요? (1~2순위)",
-    "매우 비싸다", "매우 불만족", "복수 선택", "2026 by Alphabrothers", "4대 가치별 만족도 평가", "2-1) 기능별 고객경험 평가 _ 자사 제품 평가", "2-2) 기능별 고객경험 평가 _ 타사 제품 평가"]) {
+  for (const want of ["테스트기업", "(입력 필요)", "2026년 10월 20일", "■ 앱 A", "■ 서비스 B", "1. 앱 A 설문", "2. 서비스 B 설문", "의 기능 중 가장 중요하다고 생각하는 기능은 무엇인가요? (1~2순위)",
+    "매우 비싸다", "매우 불만족", "복수 선택", "2026 by Alphabrothers", "4대 가치별 만족도 평가", "1-2) 기능별 고객경험 평가 _ 자사 제품 평가", "2-3) 기능별 고객경험 평가 _ 타사 제품 평가"]) {
     assert.ok(text.includes(want), `본문에 '${want}' 없음`);
   }
   assert.match(text, /\(Q\d+ '네, 있어요' 응답 시\)/, "분기 문항에 조건 표기 없음");
-  assert.match(text, new RegExp(`총 ${draft.questions.length} 문항`), "총 문항 수");
+  // 제품이 둘이면 진행 프로세스 표도 둘 — 각 표의 총 문항 수는 그 제품 응답자가 받는 문항(공통 포함) 수다.
+  const totals = [...text.matchAll(/총 (\d+) 문항/g)].map((m) => +m[1]);
+  assert.deepStrictEqual(totals, splitByProduct(draft)!.map((d) => d.questions.length), `제품별 총 문항 수 ${totals}`);
+  // 한 제품의 장 안에서 문항 번호가 Q1부터 다시 시작한다.
+  const second = text.slice(text.lastIndexOf("2. 서비스 B 설문"));
+  assert.match(second, /^[\s\S]*?\nQ1\n/, "두 번째 제품 설문이 Q1부터 시작하지 않음");
+  const leak = second.split("\n").find((l) => l.includes("앱 A") && l !== draft.productName); assert.ok(!leak, `두 번째 제품 장에 첫 제품 내용이 섞임: ${leak}`);
   assert.ok(!/1위|2위/.test(text), "옛 순위 문구(1위)가 남음");
   assert.ok(!text.includes("고객 여정 기반"), "없는 단계가 목차·본문에 남음");
   if (process.argv[2]) writeFileSync(process.argv[2], out);

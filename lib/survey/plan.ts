@@ -9,7 +9,7 @@
  * 템플릿에 케어클 문항이 들어 있어 `public/`에 두지 않는다(배포 사이트에서 누구나 받게 된다). 서버에서만 만든다.
  */
 import JSZip from "jszip";
-import { isChoice, numberQuestions, productTrack, rankOf, scaleAnchors, SURVEY_STAGES, type PlanInfo, type SurveyDraft, type SurveyQuestion } from "./types";
+import { isChoice, numberQuestions, rankOf, scaleAnchors, splitByProduct, SURVEY_STAGES, type PlanInfo, type SurveyDraft, type SurveyQuestion } from "./types";
 
 // ── XML 조각 ─────────────────────────────────────────────────────────────
 
@@ -188,37 +188,31 @@ export async function buildSurveyPlanHwpx(templateBytes: ArrayBuffer | Uint8Arra
     note: feature[2], banner: feature[0], answer: rowsOf(ideaP)[1],
   };
 
-  // 문항 묶기: 단계 → 제품(공통 먼저). 제품은 분기 기준 문항("어떤 서비스를 체험하셨나요?")으로 가른다.
-  const { questions } = draft;
-  const numbers = numberQuestions(questions);
-  const byId = new Map(questions.map((q) => [q.id, q]));
-  const track = productTrack(questions);
-  const products = track ? [...new Set(questions.filter((q) => q.branchOn === track.id).map((q) => q.branchValue))] : [];
-  const productOf = (q: SurveyQuestion): string => {
-    for (let cur: SurveyQuestion | undefined = q; cur?.branchOn; cur = byId.get(cur.branchOn)) {
-      if (cur.branchOn === track?.id) return cur.branchValue;
-    }
-    return "";
+  // 문항 묶기. 응답자가 제품별로 갈리는 설문(피매치 일반인용·기관용)은 제품마다 그 응답자가 실제로 받는 설문으로
+  // 나눠(`splitByProduct` — 공통 문항 포함, 번호는 제품마다 Q1부터) 진행 프로세스 표와 Ⅱ장을 제품마다 따로 싣는다.
+  // 단계마다 두 제품을 번갈아 실었더니 한 제품의 설문을 끝까지 따라 읽을 수 없었다(2026-10-20 담당자).
+  type Group = { stage: string; qs: SurveyQuestion[] };
+  interface Unit { product: string; questions: SurveyQuestion[]; numbers: Map<string, string>; byId: Map<string, SurveyQuestion>; groups: Group[] }
+  const toUnit = (product: string, questions: SurveyQuestion[]): Unit => {
+    const groups: Group[] = SURVEY_STAGES.map((stage) => ({ stage: stage as string, qs: questions.filter((q) => q.stage === stage) })).filter((g) => g.qs.length);
+    // 옛 저장본의 '타사 제품 평가' 단계 등 표준 밖 단계도 버리지 않는다.
+    const known = new Set<string>(SURVEY_STAGES);
+    const extra = questions.filter((q) => !known.has(q.stage));
+    if (extra.length) groups.push({ stage: "기타 기업 요청사항", qs: extra });
+    return { product, questions, numbers: numberQuestions(questions), byId: new Map(questions.map((q) => [q.id, q])), groups };
   };
-  const branchNote = (q: SurveyQuestion) =>
-    q.branchOn && q.branchOn !== track?.id && byId.has(q.branchOn) ? ` (${numbers.get(q.branchOn)} '${q.branchValue}' 응답 시)` : "";
-  const groups: { stage: string; product: string; qs: SurveyQuestion[] }[] = [];
-  for (const stage of SURVEY_STAGES) {
-    for (const product of ["", ...products]) {
-      const qs = questions.filter((q) => q.stage === stage && productOf(q) === product);
-      if (qs.length) groups.push({ stage, product, qs });
-    }
-  }
-  // 옛 저장본의 '타사 제품 평가' 단계 등 표준 밖 단계도 버리지 않는다.
-  const known = new Set<string>(SURVEY_STAGES);
-  const extra = questions.filter((q) => !known.has(q.stage));
-  if (extra.length) groups.push({ stage: "기타 기업 요청사항", product: "", qs: extra });
+  const split = splitByProduct(draft);
+  const units = split ? split.map((d) => toUnit(d.productName, d.questions)) : [toUnit("", draft.questions)];
+  const multi = units.length > 1;
+  const branchNote = (u: Unit, q: SurveyQuestion) =>
+    q.branchOn && u.byId.has(q.branchOn) ? ` (${u.numbers.get(q.branchOn)} '${q.branchValue}' 응답 시)` : "";
   /** 순위 묶음은 한 줄로 보인다 — 첫 질문 문장 + 순위 범위. 옛 저장본("1위")은 이름만 붙인다. */
   const rankText = (qs: SurveyQuestion[]) => {
     const n = qs.filter(isRank).length;
     const first = qs.find((q) => rankOf(q) === 1)?.text.trim() ?? "";
     return /\(1순위\)$/.test(first) ? first.replace(/\(1순위\)$/, `(1~${n}순위)`) : `기능 중요도 순위 (1위~${n}위)`;
   };
+  const heading = (text: string, pb?: boolean) => para(headingP, [[mainCharPr(headingP), text]], pb);
 
   // ── 1) 대상 표, 2) 일정
   const targetRows = rowsOf(targetP);
@@ -230,55 +224,71 @@ export async function buildSurveyPlanHwpx(templateBytes: ArrayBuffer | Uint8Arra
   const labelChar = mainCharPr(scheduleP);
   const line = (proto: string, label: string, v: string) => para(proto, [[labelChar, label], [v.trim() ? labelChar : blue, value(v)]]);
 
-  // ── 3) 진행 프로세스 표
+  // ── 3) 진행 프로세스 표 — 제품마다 하나
   const process = rowsOf(processP);
-  const processRows: Row[] = [row(process[0], [undefined, undefined])];
-  for (const g of groups) {
-    const shown = g.qs.filter((q) => !isRank(q) || rankOf(q) === 1);
-    const label = [...(STAGE_TITLE[g.stage]?.process ?? [g.stage]), ...(g.product ? [`(${g.product})`] : [])];
-    const rows = shown.map((q, i) => {
-      const text = isRank(q) ? rankText(g.qs) : q.text + branchNote(q);
-      return i === 0
-        ? row(process[1], [label, [numbers.get(q.id)!], [text]])
-        : row(process[2], [[numbers.get(q.id)!], [text]]);
-    });
-    const span = rows.reduce((s, r) => s + r.height, 0);
-    rows[0].cells[0] = cellTail(rows[0].cells[0], { rowSpan: rows.length, height: span });
-    processRows.push(...rows);
-  }
-  processRows.push(row(totalRow, [[`총 ${questions.length} 문항`]]));
-  const processTable = table(processP, processRows);
+  const processParts: { xml: string; height: number }[] = [];
+  units.forEach((u, i) => {
+    const rows: Row[] = [row(process[0], [undefined, undefined])];
+    for (const g of u.groups) {
+      const shown = g.qs.filter((q) => !isRank(q) || rankOf(q) === 1);
+      const label = STAGE_TITLE[g.stage]?.process ?? [g.stage];
+      const rs = shown.map((q, j) => {
+        const text = isRank(q) ? rankText(g.qs) : q.text + branchNote(u, q);
+        return j === 0
+          ? row(process[1], [label, [u.numbers.get(q.id)!], [text]])
+          : row(process[2], [[u.numbers.get(q.id)!], [text]]);
+      });
+      const span = rs.reduce((s, r) => s + r.height, 0);
+      rs[0].cells[0] = cellTail(rs[0].cells[0], { rowSpan: rs.length, height: span });
+      rows.push(...rs);
+    }
+    rows.push(row(totalRow, [[`총 ${u.questions.length} 문항`]]));
+    if (multi) processParts.push(...(i ? [{ xml: spacerP, height: 1600 }] : []), { xml: heading(`■ ${u.product}`), height: PARA_HEIGHT });
+    processParts.push(table(processP, rows));
+  });
 
-  // ── 2. 설문 구성 — 단계별 상세
+  // ── 2. 설문 구성 — 단계별 상세. 제품이 하나면 목차 한 칸 = 단계 장 하나(자사·타사 제품 평가는 원본처럼 한 장 안의
+  // 2-1)·2-2)), 제품이 둘 이상이면 목차 한 칸 = 제품 하나("1. 일반인용 필톡 설문" 안에 1-1) 인적 사항 …).
   const out: { xml: string; height: number; pageBreak?: boolean; tocStage?: string }[] = [];
-  // 목차 한 칸 = 장 하나. 자사·타사 제품 평가는 원본처럼 한 장("2. 기능별 고객경험 평가") 안의 2-1)·2-2)다.
-  const chapterOf = (stage: string) => STAGE_TITLE[stage]?.toc ?? stage;
-  const chapters = [...new Set(groups.map((g) => chapterOf(g.stage)))];
-  const stagesIn = (chapter: string) => [...new Set(groups.filter((g) => chapterOf(g.stage) === chapter).map((g) => g.stage))];
-  const headed = new Set<string>(); // 제목을 이미 단 장
-  const seen = new Set<string>();
-  for (const g of groups) {
-    if (!seen.has(g.stage)) {
-      seen.add(g.stage);
+  const chapters: string[] = [];
+  const pushGroup = (u: Unit, g: Group, label: string | null, tocStage?: string) => {
+    if (label !== null) {
+      const pb = PAGE_BREAK_STAGES.has(g.stage);
+      out.push({ xml: heading(`${label} ${STAGE_TITLE[g.stage]?.heading ?? g.stage}`, pb), height: PARA_HEIGHT, pageBreak: pb, tocStage });
+    } else out.push({ xml: spacerP, height: 1600 });
+    const tables = g.stage === SURVEY_STAGES[0] ? personaTables(u, g) : g.stage === "핵심구매요인 파악" ? kbfTables(u, g) : [genericTable(u, g)];
+    tables.forEach((t, i) => out.push(...(i ? [{ xml: spacerP, height: 1600 }] : []), t));
+  };
+  if (multi) {
+    units.forEach((u, i) => {
+      const chapter = `${u.product} 설문`;
+      chapters.push(chapter);
+      // 첫 제품은 "2. 사용성 테스트 설문 구성" 띠와 같은 쪽에서 시작한다(띠가 이미 새 쪽이다).
+      out.push({ xml: heading(`${i + 1}. ${chapter}`, i > 0), height: PARA_HEIGHT, pageBreak: i > 0, tocStage: chapter });
+      u.groups.forEach((g, k) => pushGroup(u, g, `${i + 1}-${k + 1})`));
+    });
+  } else {
+    const [u] = units;
+    const chapterOf = (stage: string) => STAGE_TITLE[stage]?.toc ?? stage;
+    chapters.push(...new Set(u.groups.map((g) => chapterOf(g.stage))));
+    const stagesIn = (chapter: string) => [...new Set(u.groups.filter((g) => chapterOf(g.stage) === chapter).map((g) => g.stage))];
+    const headed = new Set<string>(); // 제목을 이미 단 장
+    for (const g of u.groups) {
       const chapter = chapterOf(g.stage);
       const n = chapters.indexOf(chapter) + 1;
       const siblings = stagesIn(chapter);
-      const label = siblings.length > 1 ? `${n}-${siblings.indexOf(g.stage) + 1})` : `${n})`;
-      const pb = PAGE_BREAK_STAGES.has(g.stage);
       const first = !headed.has(chapter);
       headed.add(chapter);
-      out.push({ xml: para(headingP, [[mainCharPr(headingP), `${label} ${STAGE_TITLE[g.stage]?.heading ?? g.stage}`]], pb), height: PARA_HEIGHT, pageBreak: pb, tocStage: first ? chapter : undefined });
-    } else out.push({ xml: spacerP, height: 1600 });
-    const tables = g.stage === SURVEY_STAGES[0] ? personaTables(g) : g.stage === "핵심구매요인 파악" ? kbfTables(g) : [genericTable(g)];
-    tables.forEach((t, i) => out.push(...(i ? [{ xml: spacerP, height: 1600 }] : []), t));
+      pushGroup(u, g, siblings.length > 1 ? `${n}-${siblings.indexOf(g.stage) + 1})` : `${n})`, first ? chapter : undefined);
+    }
   }
 
-  function personaTables(g: (typeof groups)[number]) {
+  function personaTables(u: Unit, g: Group) {
     const P = rowsOf(personaP);
-    const rows: Row[] = [row(P[0], [[g.product ? `${g.product} — 사용자의 인적 사항 및 특성 · 경험 파악 단계` : textOf(P[0][0]).trim()]])];
+    const rows: Row[] = [row(P[0], [undefined])];
     for (const q of g.qs) {
-      const no = [numbers.get(q.id)!];
-      const text = q.text + branchNote(q);
+      const no = [u.numbers.get(q.id)!];
+      const text = q.text + branchNote(u, q);
       if (isChoice(q.type)) rows.push(row(P[3], [no, [`(객관식${q.type === "객관식-복수" ? "·복수" : ""}) ${text}`], undefined, q.options.map((o, i) => `${circled(i)} ${o}`)]));
       else if (q.type === "척도(0-10)") rows.push(row(P[1], [no, [`(척도 0~10) ${text}`, scaleAnchors(q.note).map((a, i) => `${i ? 10 : 0}=${a}`).join(", ")]]));
       else rows.push(row(P[1], [no, [`(주관식) ${text}`, ...(plainNote(q) ? [plainNote(q)] : [])]]));
@@ -286,35 +296,34 @@ export async function buildSurveyPlanHwpx(templateBytes: ArrayBuffer | Uint8Arra
     return [table(personaP, rows)];
   }
 
-  function kbfTables(g: (typeof groups)[number]) {
+  function kbfTables(u: Unit, g: Group) {
     const main = g.qs.find((q) => isChoice(q.type));
-    if (!main) return [genericTable(g)];
+    if (!main) return [genericTable(u, g)];
     const K = rowsOf(kbfP);
     const items = main.options.map((o, i) => row(K[3], [[String(i + 1)], [o], undefined]));
     const header = row(K[2], [undefined, undefined, undefined, undefined]);
     header.cells[0] = cellTail(header.cells[0], { rowSpan: items.length + 1, height: header.height + items.reduce((s, r) => s + r.height, 0) });
     const kbf = table(kbfP, [
       row(K[0], [undefined]),
-      row(K[1], [[`${numbers.get(main.id)}. ${main.text}${branchNote(main)}`]]),
+      row(K[1], [[`${u.numbers.get(main.id)}. ${main.text}${branchNote(u, main)}`]]),
       header, ...items,
     ]);
     const rest = g.qs.filter((q) => q !== main);
-    return rest.length ? [kbf, genericTable({ ...g, product: "", qs: rest })] : [kbf];
+    return rest.length ? [kbf, genericTable(u, { ...g, qs: rest })] : [kbf];
   }
 
-  function genericTable(g: (typeof groups)[number]) {
+  function genericTable(u: Unit, g: Group) {
     const rows: Row[] = [];
-    if (g.product) rows.push(row(R.banner, [[g.product]], { width: W }));
-    else if (g.stage === "기능별 고객 경험 평가 - 자사 제품 평가") rows.push(row(R.banner, [undefined], { width: W }));
+    if (g.stage === "기능별 고객 경험 평가 - 자사 제품 평가") rows.push(row(R.banner, [undefined], { width: W }));
     for (const q of g.qs) {
       if (isRank(q) && rankOf(q) !== 1) continue;
-      const no = numbers.get(q.id)!;
+      const no = u.numbers.get(q.id)!;
       const note = plainNote(q);
       if (q.followUp && q.type === "주관식" && !isRank(q)) {
-        rows.push(row(R.reason, [["주관식"], [`${no}. ${q.text}${branchNote(q)}`, ...(note ? [note] : [])]]));
+        rows.push(row(R.reason, [["주관식"], [`${no}. ${q.text}${branchNote(u, q)}`, ...(note ? [note] : [])]]));
         continue;
       }
-      rows.push(row(R.head, [[`${no}. ${isRank(q) ? rankText(g.qs) : q.text}${branchNote(q)}`]]));
+      rows.push(row(R.head, [[`${no}. ${isRank(q) ? rankText(g.qs) : q.text}${branchNote(u, q)}`]]));
       if (note) rows.push(row(R.note, [[note]], { width: W }));
       if (q.type === "척도(0-10)") {
         const [low, high] = scaleAnchors(q.note);
@@ -337,7 +346,7 @@ export async function buildSurveyPlanHwpx(templateBytes: ArrayBuffer | Uint8Arra
     pos += h;
     while (pos > BODY_HEIGHT) { page += 1; pos -= BODY_HEIGHT; }
   };
-  [PARA_HEIGHT, target.height, 1600, PARA_HEIGHT, 1800, 1800, 1600, PARA_HEIGHT, processTable.height].forEach(advance);
+  [PARA_HEIGHT, target.height, 1600, PARA_HEIGHT, 1800, 1800, 1600, PARA_HEIGHT, ...processParts.map((p) => p.height)].forEach(advance);
   page += 1; pos = 0; advance(4000); // "2. 사용성 테스트 설문 구성" 띠는 새 쪽에서 시작한다
   const surveyPage = page;
   const tocPages = new Map<string, number>();
@@ -355,7 +364,7 @@ export async function buildSurveyPlanHwpx(templateBytes: ArrayBuffer | Uint8Arra
   const bodySpan = blocks(sec1, "p");
   const year = String(today.getFullYear());
   let section1 = sec1.slice(0, bodySpan[0].start)
-    + [toc, ...newIntro, processTable.xml, tpl.body[bannerIndex], ...out.map((o) => o.xml)].join("")
+    + [toc, ...newIntro, ...processParts.map((p) => p.xml), tpl.body[bannerIndex], ...out.map((o) => o.xml)].join("")
     + sec1.slice(bodySpan.at(-1)!.end);
   section1 = section1.replace(/\d{4}( by Alphabrothers)/g, `${year}$1`);
 
