@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
+import { SelectionBar } from "@/components/SelectionBar";
 
 interface ReportItem {
   id: string;
@@ -21,6 +22,24 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<ReportItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const toggle = (id: string) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+
+  /** 고른 보고서를 지운다 — 한 건 삭제 API를 그대로 여러 번 부른다. 실패한 것은 목록에 남는다. */
+  async function deletePicked() {
+    const ids = [...picked];
+    if (!ids.length || !window.confirm(`고른 보고서 ${ids.length}개를 삭제할까요? 삭제한 보고서는 복구할 수 없습니다.`)) return;
+    setBulkDeleting(true);
+    const results = await Promise.all(ids.map((id) => fetch("/api/reports", {
+      method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }),
+    }).then((r) => (r.ok ? id : null), () => null)));
+    const gone = new Set(results.filter((id): id is string => !!id));
+    setReports((items) => items?.filter((item) => !gone.has(item.id)) ?? []);
+    setPicked(new Set());
+    setBulkDeleting(false);
+    if (gone.size < ids.length) setError(`${ids.length - gone.size}개 보고서를 삭제하지 못했습니다.`);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +80,18 @@ export default function ReportsPage() {
           </header>
 
           <section className="overflow-hidden rounded-2xl border border-[#e3e7ee] bg-white shadow-[0_2px_10px_rgba(31,48,78,0.04)]">
+            {!!reports?.length && (
+              <div className="flex items-center border-b border-[#eef1f5] px-6 py-3">
+                <span className="text-[13px] text-[#6b778a]">보고서 {reports.length}개</span>
+                <SelectionBar
+                  total={reports.length}
+                  count={picked.size}
+                  deleting={bulkDeleting}
+                  onAll={() => setPicked(picked.size === reports.length ? new Set() : new Set(reports.map((r) => r.id)))}
+                  onDelete={() => void deletePicked()}
+                />
+              </div>
+            )}
             {error && <p className="px-6 py-10 text-center text-sm text-[#c44848]">{error}</p>}
             {!error && reports === null && <p className="px-6 py-10 text-center text-sm text-[#94a0b2]">불러오는 중…</p>}
             {!error && reports?.length === 0 && (
@@ -76,7 +107,14 @@ export default function ReportsPage() {
                 {reports.map((r) => {
                   const when = new Date(r.workspaceDraftSavedAt ?? r.updatedAt);
                   return (
-                    <li key={r.id} className="group relative">
+                    <li key={r.id} className={`group relative rounded-md ${picked.has(r.id) ? "outline outline-2 outline-offset-4 outline-[#356df3]" : ""}`}>
+                      <input
+                        type="checkbox"
+                        aria-label={`${displayName(r)} 선택`}
+                        checked={picked.has(r.id)}
+                        onChange={() => toggle(r.id)}
+                        className={`absolute left-2 top-2 z-10 size-5 cursor-pointer accent-[#356df3] transition-opacity ${picked.size ? "opacity-100" : "opacity-0 focus:opacity-100 group-hover:opacity-100"}`}
+                      />
                       <Link href={`/viewer?report=${r.id}`} title={r.fileName ?? undefined} className="block">
                         <div className="relative aspect-[210/297] overflow-hidden rounded-md border border-[#e3e7ee] bg-white shadow-[0_4px_14px_rgba(31,48,78,0.08)] transition group-hover:-translate-y-0.5 group-hover:shadow-[0_10px_24px_rgba(31,48,78,0.14)]">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
