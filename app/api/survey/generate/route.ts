@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSurvey } from "@/lib/db/surveys";
-import { readDocumentForModel } from "@/lib/productInfo/extractText";
+import { extractPdfText, readDocumentForModel } from "@/lib/productInfo/extractText";
 import { generateSurvey } from "@/lib/survey/generate";
+import { keepFoundSources } from "@/lib/survey/types";
 
 // 사전요청서 → 설문 문항. 만든 즉시 저장하고 id를 돌려준다 — 이후 화면의 수정은 PUT /api/survey/[id].
 export const maxDuration = 300;
@@ -16,7 +17,10 @@ export async function POST(request: Request) {
     const source = await readDocumentForModel(body.data.fileUrl);
     // PDF는 Claude가 그림으로도 읽으므로 스캔본도 된다. 글자로 넘기는 형식만 빈 문서를 걸러 낸다.
     if ("text" in source && source.text.trim().length < 50) throw new Error("문서에서 글자를 거의 읽지 못했습니다. PDF로 저장해 올려 주세요.");
-    const draft = await generateSurvey(source);
+    const generated = await generateSurvey(source);
+    // 기획안 칸의 근거 문장은 원문 글자와 대조해 실제로 있는 것만 남긴다(스캔 PDF면 글자가 없어 전부 빠진다).
+    const documentText = "text" in source ? source.text : await extractPdfText(source.pdf).catch(() => "");
+    const draft = { ...generated, plan: keepFoundSources(generated.plan, documentText) };
     const id = await createSurvey(draft, body.data.fileName ?? null, { sourceFileUrl: body.data.fileUrl });
     return NextResponse.json({ ok: true, id, draft });
   } catch (err) {

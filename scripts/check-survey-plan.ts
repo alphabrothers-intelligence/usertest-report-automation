@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import JSZip from "jszip";
 import { normalizeSurvey, type RawSurvey } from "../lib/survey/generate";
 import { blocks, buildSurveyPlanHwpx } from "../lib/survey/plan";
-import { splitByProduct, type SurveyQuestion } from "../lib/survey/types";
+import { keepFoundSources, splitByProduct, type SurveyQuestion } from "../lib/survey/types";
 
 const q = (id: string, stage: string, patch: Partial<SurveyQuestion> = {}): SurveyQuestion => ({
   id, stage, text: `${id} 문항이에요?`, type: "주관식", options: [], required: true,
@@ -115,6 +115,10 @@ async function main() {
   const leak = second.split("\n").find((l) => l.includes("앱 A") && l !== draft.productName); assert.ok(!leak, `두 번째 제품 장에 첫 제품 내용이 섞임: ${leak}`);
   assert.ok(!/1위|2위/.test(text), "옛 순위 문구(1위)가 남음");
   assert.ok(!text.includes("고객 여정 기반"), "없는 단계가 목차·본문에 남음");
+  // 기획안 칸 근거 문장: 원문에 있는 것만 남는다(띄어쓰기 무시), 지어낸 문장과 너무 짧은 조각은 빠진다.
+  const kept = keepFoundSources({ businessArea: "B2C", testers: "", schedule: "", managers: "",
+    sources: { businessArea: "주요 고객: 일반 소비자(B2C)", testers: "응답자는 100명 정도 희망합니다", schedule: "B2" } }, "■ 주요 고객 : 일반  소비자 (B2C)\n타겟 …");
+  assert.deepStrictEqual(kept?.sources, { businessArea: "주요 고객: 일반 소비자(B2C)" }, `근거 문장 대조 ${JSON.stringify(kept?.sources)}`);
   if (process.argv[2]) writeFileSync(process.argv[2], out);
   console.log(`PASS 기획안 HWPX — 표 ${tables}개 격자 정상, 템플릿 글 없음`);
 }

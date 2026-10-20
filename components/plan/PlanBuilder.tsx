@@ -94,7 +94,7 @@ export function PlanBuilder({ surveyId }: { surveyId: string }) {
         </div>
       </Step>
 
-      <Step n={2} title="사전요청서" hint="설문을 만들 때 읽은 파일입니다. 핵심 비즈니스 영역·테스트 인원·일정은 여기서 뽑았습니다.">
+      <Step n={2} title="사전요청서" hint="설문을 만들 때 읽은 파일입니다. 핵심 비즈니스 영역·테스트 인원·일정은 여기서 뽑았고, 뽑은 원문 문장을 ③의 칸 아래에 붙였습니다.">
         <p className="text-[14px] text-[#1d2433]">{sourceFileName ?? "사전요청서 없이 만든 설문입니다 — 아래 칸을 직접 채워 주세요."}</p>
       </Step>
 
@@ -105,7 +105,8 @@ export function PlanBuilder({ surveyId }: { surveyId: string }) {
             <Inline label="발주처" prefix="발주처 l " value={plan.client ?? ""} onChange={(v) => setPlan("client", v)} className="text-[11px] text-[#4a566b]" />
             <p className="mt-16 text-[17px] font-bold leading-snug text-[#1d2433]">사용성 테스트<br />설문 구성 기획안</p>
             <Inline label="기업명" value={draft.companyName} onChange={(v) => set({ companyName: v })} className="mt-3 text-[14px] font-semibold text-[#356df3]" />
-            <Inline label="제품명" prefix="Usablity Test Report for ‘" suffix="’" value={draft.productName} onChange={(v) => set({ productName: v })} className="mt-1 text-[10px] text-[#6b778a]" multiline />
+            <p className="mt-1 text-[10px] text-[#6b778a]">Usablity Test Report for</p>
+            <Inline label="제품명" value={draft.productName} onChange={(v) => set({ productName: v })} className="text-[10px] text-[#6b778a]" multiline />
           </div>
           {/* Ⅰ장 — 1) 대상 표, 2) 일정 */}
           <div className="rounded-md border border-[#e3e7ee] bg-white p-5 text-[13px] text-[#1d2433] shadow-[0_4px_14px_rgba(31,48,78,0.08)]">
@@ -114,20 +115,24 @@ export function PlanBuilder({ surveyId }: { surveyId: string }) {
             <table className="mt-2 w-full border-collapse">
               <tbody>
                 {([
-                  ["기업명", draft.companyName, (v: string) => set({ companyName: v })],
-                  ["제품명", draft.productName, (v: string) => set({ productName: v })],
-                  ["핵심 비즈니스 영역", plan.businessArea, (v: string) => setPlan("businessArea", v)],
-                  ["테스트 인원", plan.testers, (v: string) => setPlan("testers", v)],
-                ] as const).map(([label, v, on]) => (
+                  ["기업명", draft.companyName, (v: string) => set({ companyName: v }), undefined],
+                  ["제품명", draft.productName, (v: string) => set({ productName: v }), undefined],
+                  ["핵심 비즈니스 영역", plan.businessArea, (v: string) => setPlan("businessArea", v), plan.sources?.businessArea],
+                  ["테스트 인원", plan.testers, (v: string) => setPlan("testers", v), plan.sources?.testers],
+                ] as const).map(([label, v, on, source]) => (
                   <tr key={label} className="border-y border-[#dfe4ec]">
                     <th className="w-[150px] bg-[#eef3fb] px-3 py-2 text-left font-semibold">{label}</th>
-                    <td className="px-3 py-1.5"><Inline label={label} prefix="· " value={v} onChange={on} multiline /></td>
+                    <td className="px-3 py-1.5">
+                      <Inline label={label} prefix="· " value={v} onChange={on} multiline />
+                      <Source text={source} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <p className="mt-4 font-semibold">2) 사용성 테스트 진행 일정</p>
             <Inline label="진행 일정" prefix="• 일  시 : " value={plan.schedule} onChange={(v) => setPlan("schedule", v)} className="mt-2" />
+            <Source text={plan.sources?.schedule} />
             <Inline label="담당자" prefix="• 담당자 : " value={plan.managers} onChange={(v) => setPlan("managers", v)} className="mt-1" />
           </div>
         </div>
@@ -189,6 +194,12 @@ function Step({ n, title, hint, children }: { n: number; title: string; hint?: s
       <div className={hint ? "" : "mt-4"}>{children}</div>
     </section>
   );
+}
+
+/** 칸을 채운 사전요청서 원문 한 줄 — 문서에는 들어가지 않고 확인용으로만 보인다. 원문에서 찾은 문장만 온다. */
+function Source({ text }: { text?: string }) {
+  if (!text) return null;
+  return <p className="mt-0.5 pl-3 text-[11px] leading-snug text-[#94a0b2]">사전요청서 원문: “{text}”</p>;
 }
 
 /** 문서 모양 그대로 고치는 칸. 비어 있으면 문서와 같은 파란 `(입력 필요)`를 보여준다. */

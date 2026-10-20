@@ -65,6 +65,8 @@ export async function extractTextFromDocument(fileUrl: string): Promise<string> 
   return extractText(await readBlob(fileUrl), extensionOf(fileUrl));
 }
 
+export const extractPdfText = (buffer: Buffer) => extractText(buffer, "pdf");
+
 async function extractText(buffer: Buffer, ext: string): Promise<string> {
 
   if (ext === "pdf") {

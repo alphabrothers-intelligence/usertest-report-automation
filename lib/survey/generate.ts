@@ -45,6 +45,11 @@ const SurveySchema = z.object({
     testers: z.string().describe("기획안 '테스트 인원'. 사전요청서에 적힌 인원·응답자 비율·연령 조건만 옮긴다(예: '일반인용 : 기관용 = 약 7:3 희망, 일반인용 40대 이상 50% 이상'). 지어내지 말 것, 없으면 빈 문자열"),
     schedule: z.string().describe("기획안 '진행 일정'. 사전요청서에 테스트 기간이 적혀 있을 때만. 없으면 빈 문자열"),
     managers: z.string().describe("기획안 '담당자'(알파브라더스 담당자). 사전요청서에는 보통 없으므로 빈 문자열"),
+    sources: z.object({
+      businessArea: z.string(),
+      testers: z.string(),
+      schedule: z.string(),
+    }).describe("각 칸을 채운 근거 — 사전요청서에서 그 값을 읽은 문장을 고치지 말고 그대로 옮긴다(한 문장, 80자 이내). 칸을 비웠거나 근거 문장이 없으면 빈 문자열"),
   }).describe("기획안 첫 쪽 칸 — 사전요청서에서 확인되는 것만 채운다"),
 });
 

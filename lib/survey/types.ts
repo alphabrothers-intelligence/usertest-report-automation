@@ -52,7 +52,10 @@ export const SurveyDraftSchema = z.object({
   })),
   excludedFeatures: z.array(z.object({ name: z.string(), reason: z.string() })),
   reviewNotes: z.array(z.string()),
-  plan: z.object({ businessArea: z.string(), testers: z.string(), schedule: z.string(), managers: z.string(), client: z.string().optional() }).optional(),
+  plan: z.object({
+    businessArea: z.string(), testers: z.string(), schedule: z.string(), managers: z.string(), client: z.string().optional(),
+    sources: z.record(z.string(), z.string()).optional(),
+  }).optional(),
 });
 
 export interface SurveyQuestion {
@@ -92,6 +95,20 @@ export interface PlanInfo {
   managers: string;
   /** 표지 '발주처' — 사전요청서에 없다. 옛 저장본엔 없을 수 있다. */
   client?: string;
+  /** 칸을 채운 사전요청서 원문 문장(칸 이름 → 문장). 원문에서 실제로 찾은 것만 남는다(`keepFoundSources`). */
+  sources?: Partial<Record<"businessArea" | "testers" | "schedule", string>>;
+}
+
+/**
+ * 모델이 옮겼다는 근거 문장 중 원문에 실제로 있는 것만 남긴다 — 띄어쓰기·줄바꿈은 무시하고 비교한다.
+ * 화면에 '원문'이라고 보여 주므로 모델이 다듬거나 지어낸 문장이 섞이면 안 된다.
+ */
+export function keepFoundSources(plan: PlanInfo | undefined, documentText: string): PlanInfo | undefined {
+  if (!plan?.sources) return plan;
+  const squash = (v: string) => v.replace(/\s+/g, "");
+  const doc = squash(documentText);
+  const sources = Object.fromEntries(Object.entries(plan.sources).filter(([, v]) => v && squash(v).length >= 4 && doc.includes(squash(v))));
+  return { ...plan, sources };
 }
 
 export const isChoice = (type: string) => type.startsWith("객관식");
