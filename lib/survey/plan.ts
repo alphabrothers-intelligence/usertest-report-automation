@@ -9,7 +9,7 @@
  * 템플릿에 케어클 문항이 들어 있어 `public/`에 두지 않는다(배포 사이트에서 누구나 받게 된다). 서버에서만 만든다.
  */
 import JSZip from "jszip";
-import { isChoice, numberQuestions, rankOf, scaleAnchors, splitByProduct, SURVEY_STAGES, type PlanInfo, type SurveyDraft, type SurveyQuestion } from "./types";
+import { isChoice, kstDate, numberQuestions, rankOf, scaleAnchors, splitByProduct, SURVEY_STAGES, type PlanInfo, type SurveyDraft, type SurveyQuestion } from "./types";
 
 // ── XML 조각 ─────────────────────────────────────────────────────────────
 
@@ -370,14 +370,14 @@ export async function buildSurveyPlanHwpx(templateBytes: ArrayBuffer | Uint8Arra
   const toc = rewriteToc(first, chapters.map((c) => [c, tocPages.get(c) ?? surveyPage]), surveyPage);
   const sec1 = sections[1];
   const bodySpan = blocks(sec1, "p");
-  const year = String(today.getFullYear());
+  const { year, month, day } = kstDate(today);
   let section1 = sec1.slice(0, bodySpan[0].start)
     + [toc, ...newIntro, ...processParts.map((p) => p.xml), tpl.body[bannerIndex], ...out.map((o) => o.xml)].join("")
     + sec1.slice(bodySpan.at(-1)!.end);
   section1 = section1.replace(/\d{4}( by Alphabrothers)/g, `${year}$1`);
 
   // 표지·뒷표지
-  const date = `${year}.${String(today.getMonth() + 1).padStart(2, "0")}.${String(today.getDate()).padStart(2, "0")}`;
+  const date = `${year}.${month}.${day}`;
   const section0 = sections[0]
     .replace(/(<hp:t>발주처 l )[^<]*(<\/hp:t>)/, `$1${esc(value(info.client ?? ""))}$2`)
     .replace(/<hp:t>케어클<\/hp:t>/, `<hp:t>${esc(draft.companyName)}</hp:t>`)

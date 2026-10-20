@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import JSZip from "jszip";
 import { normalizeSurvey, type RawSurvey } from "../lib/survey/generate";
 import { blocks, buildSurveyPlanHwpx } from "../lib/survey/plan";
-import { keepFoundSources, splitByProduct, type SurveyQuestion } from "../lib/survey/types";
+import { keepFoundSources, planFileName, splitByProduct, type SurveyQuestion } from "../lib/survey/types";
 
 const q = (id: string, stage: string, patch: Partial<SurveyQuestion> = {}): SurveyQuestion => ({
   id, stage, text: `${id} 문항이에요?`, type: "주관식", options: [], required: true,
@@ -124,6 +124,8 @@ async function main() {
   const kept = keepFoundSources({ businessArea: "B2C", testers: "", schedule: "", managers: "",
     sources: { businessArea: "주요 고객: 일반 소비자(B2C)", testers: "응답자는 100명 정도 희망합니다", schedule: "B2" } }, "■ 주요 고객 : 일반  소비자 (B2C)\n타겟 …");
   assert.deepStrictEqual(kept?.sources, { businessArea: "주요 고객: 일반 소비자(B2C)" }, `근거 문장 대조 ${JSON.stringify(kept?.sources)}`);
+  // 날짜는 한국 시간 — UTC 10월 12일 23시 = 한국 10월 13일 오전 8시(배포 서버는 UTC로 돈다).
+  assert.match(planFileName("기업", new Date(Date.UTC(2026, 9, 12, 23))), /_261013\.hwpx$/, "파일명 날짜가 한국 시간이 아님");
   if (process.argv[2]) writeFileSync(process.argv[2], out);
   console.log(`PASS 기획안 HWPX — 표 ${tables}개 격자 정상, 템플릿 글 없음`);
 }

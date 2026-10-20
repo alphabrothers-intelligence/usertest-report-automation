@@ -319,8 +319,15 @@ export const surveyFileName = (companyName: string, ext: "xlsx" | "csv" | "txt",
   `${companyName.trim().replace(/[\\/:*?"<>|]/g, "") || "기업명"}_문항리스트${suffix}.${ext}`;
 
 /** `[알파브라더스] 사용성테스트_기획안_{기업명}_{YYMMDD}.hwpx` — 기존 기획안 파일 이름 규칙. */
+/** 한국 시간 기준 연·월·일(두 자리). 배포 서버는 UTC라 그냥 쓰면 오전 9시 전에 전날 날짜가 붙는다. */
+export function kstDate(at = new Date()): { year: string; month: string; day: string } {
+  const [year, month, day] = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(at).split("-");
+  return { year, month, day };
+}
+
 export const planFileName = (companyName: string, today = new Date()) => {
-  const d = `${String(today.getFullYear()).slice(2)}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+  const { year, month, day } = kstDate(today);
+  const d = `${year.slice(2)}${month}${day}`;
   return `[알파브라더스] 사용성테스트_기획안_${companyName.trim().replace(/[\\/:*?"<>|]/g, "") || "기업명"}_${d}.hwpx`;
 };
 
