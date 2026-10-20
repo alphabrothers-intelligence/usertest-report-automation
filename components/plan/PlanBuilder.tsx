@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
-import { planFileName, splitByProduct, SURVEY_STAGES, type PlanInfo, type SurveyDraft } from "@/lib/survey/types";
+import { planFileName, type PlanInfo, type SurveyDraft } from "@/lib/survey/types";
 
 const SAVE_DELAY_MS = 800;
 const PLAN_MEMO_KEY = "survey-plan";
@@ -53,8 +53,6 @@ export function PlanBuilder({ surveyId }: { surveyId: string }) {
   const plan = { ...EMPTY, ...draft.plan };
   const set = (patch: Partial<SurveyDraft>) => setDraft({ ...draft, ...patch });
   const setPlan = (k: keyof PlanInfo, v: string) => set({ plan: { ...plan, [k]: v } });
-  const products = splitByProduct(draft);
-  const stageCounts = SURVEY_STAGES.map((s) => [s, draft.questions.filter((q) => q.stage === s).length] as const).filter(([, n]) => n);
   const required: [string, string][] = [["발주처", plan.client ?? ""], ["핵심 비즈니스 영역", plan.businessArea], ["테스트 인원", plan.testers], ["진행 일정", plan.schedule], ["담당자", plan.managers]];
   const blanks = required.filter(([, v]) => !v.trim()).map(([k]) => k);
 
@@ -78,17 +76,11 @@ export function PlanBuilder({ surveyId }: { surveyId: string }) {
 
   return (
     <Shell surveyId={surveyId}>
-      <Step n={1} title="설문 문항" hint="기획안의 진행 프로세스 표와 Ⅱ장 설문 구성은 이 설문에서 그대로 만들어집니다.">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="text-[16px] font-semibold text-[#1d2433]">{draft.companyName || "기업명 없음"} <span className="font-normal text-[#6b778a]">· {draft.productName}</span></p>
-            <p className="mt-1 text-[13px] text-[#6b778a]">{draft.questions.length}문항 · {stageCounts.map(([s, n]) => `${s} ${n}`).join(" · ")}</p>
-            {products && (
-              <p className="mt-2 text-[13px] text-[#356df3]">
-                제품 {products.length}개({products.map((p) => p.productName).join(" / ")}) — 기획안 안에서 제품별 표·장으로 나눠 들어갑니다.
-              </p>
-            )}
-          </div>
+      <Step n={1} title="설문 문항">
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="min-w-0 flex-1 text-[16px] font-semibold text-[#1d2433]">
+            {draft.companyName || "기업명 없음"} <span className="font-normal text-[#6b778a]">· {draft.productName} · {draft.questions.length}문항</span>
+          </p>
           <Link href={`/survey?id=${surveyId}`} className="rounded-lg bg-[#f0f0f2] px-3 py-1.5 text-[13px] font-semibold text-[#4a566b] hover:bg-[#e6e7ea]">설문 고치기</Link>
           <Link href="/survey" className="rounded-lg bg-[#f0f0f2] px-3 py-1.5 text-[13px] font-semibold text-[#4a566b] hover:bg-[#e6e7ea]">다른 설문 고르기</Link>
         </div>
@@ -99,14 +91,21 @@ export function PlanBuilder({ surveyId }: { surveyId: string }) {
       </Step>
 
       <Step n={3} title="표지·개요 확인" hint="기획안 1~3쪽에 들어가는 칸입니다. 칸을 눌러 바로 고치세요. 비운 칸은 문서에 ‘(입력 필요)’로 들어갑니다.">
-        <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-          {/* 표지 — 실제 기획안 표지의 글자 배치를 줄여 그린다. */}
-          <div className="aspect-[210/297] rounded-md border border-[#e3e7ee] bg-white p-5 shadow-[0_4px_14px_rgba(31,48,78,0.08)]">
-            <Inline label="발주처" prefix="발주처 l " value={plan.client ?? ""} onChange={(v) => setPlan("client", v)} className="text-[11px] text-[#4a566b]" />
-            <p className="mt-16 text-[17px] font-bold leading-snug text-[#1d2433]">사용성 테스트<br />설문 구성 기획안</p>
-            <Inline label="기업명" value={draft.companyName} onChange={(v) => set({ companyName: v })} className="mt-3 text-[14px] font-semibold text-[#356df3]" />
-            <p className="mt-1 text-[10px] text-[#6b778a]">Usablity Test Report for</p>
-            <Inline label="제품명" value={draft.productName} onChange={(v) => set({ productName: v })} className="text-[10px] text-[#6b778a]" multiline />
+        <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
+          {/* 표지 — 원본 기획안 표지에서 글자만 지운 그림 위에 원본과 같은 자리(PDF 좌표 비율)로 글자를 얹는다.
+              글자 크기는 표지 폭 기준(cqw)이라 화면 폭이 바뀌어도 비율이 유지된다. */}
+          <div className="@container relative aspect-[210/297] overflow-hidden rounded-md border border-[#e3e7ee] bg-white shadow-[0_4px_14px_rgba(31,48,78,0.08)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/survey-plan-cover.png" alt="" className="absolute inset-0 size-full" />
+            <div className="absolute left-[7.5%] right-[6%] top-[7.3%] text-[2.6cqw] text-[#333]">
+              <Inline label="발주처" prefix="발주처 l " value={plan.client ?? ""} onChange={(v) => setPlan("client", v)} />
+            </div>
+            <div className="absolute left-[5.5%] right-[6%] top-[60%]">
+              <p className="text-[7cqw] font-bold leading-[1.18] tracking-[-0.03em] text-black">사용성 테스트<br />설문 구성 기획안</p>
+              <Inline label="기업명" value={draft.companyName} onChange={(v) => set({ companyName: v })} className="mt-[1.5cqw] text-[6.5cqw] font-bold text-[#1e3f8a]" />
+              <Inline label="제품명" prefix="Usablity Test Report for " value={draft.productName} onChange={(v) => set({ productName: v })} className="mt-[1.5cqw] text-[2.8cqw] text-[#444]" multiline />
+              <p className="mt-[1cqw] text-[2.2cqw] text-[#aaa]">{new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "")}</p>
+            </div>
           </div>
           {/* Ⅰ장 — 1) 대상 표, 2) 일정 */}
           <div className="rounded-md border border-[#e3e7ee] bg-white p-5 text-[13px] text-[#1d2433] shadow-[0_4px_14px_rgba(31,48,78,0.08)]">
