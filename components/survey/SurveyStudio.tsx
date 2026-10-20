@@ -47,6 +47,7 @@ function download(data: BlobPart, name: string, type: string) {
 }
 
 type SaveState = "saved" | "saving" | "error";
+const PLAN_MEMO_KEY = "survey-plan";
 
 /**
  * 설문 문항 화면. id가 없으면 목록 + 새로 만들기, 있으면 그 문항 편집.
@@ -245,8 +246,16 @@ function SurveyList() {
                 {item.companyName || "기업명 없음"}{item.productName && <span className="font-normal text-[#6b778a]"> · {item.productName}</span>}
               </span>
               <span className="block truncate text-[13px] text-[#94a0b2]">
+                {item.parentId && <span className="mr-1.5 rounded-full bg-[#f0f0f2] px-1.5 py-0.5 text-[11px] font-semibold text-[#6b778a]">제품별로 나눈 설문</span>}
                 {item.questionCount}문항 · {new Date(item.updatedAt).toLocaleString("ko-KR")} 수정{item.sourceFileName && ` · ${item.sourceFileName}`}
               </span>
+            </Link>
+            <Link
+              href={`/survey?id=${item.id}&plan=1`}
+              title={item.parentId ? "제품별로 나눈 설문입니다. 원래 설문으로 만들면 두 제품이 한 기획안에 제품별로 들어갑니다." : "이 설문으로 설문 구성 기획안(HWPX)을 만듭니다."}
+              className="rounded-lg bg-[#eef3fe] px-3 py-1.5 text-[13px] font-semibold text-[#356df3] hover:bg-[#e0eafd]"
+            >
+              기획안
             </Link>
             <button type="button" onClick={() => remove(item)} className="rounded-lg px-3 py-1.5 text-[13px] text-[#b42318] hover:bg-[#fff1ef]">
               삭제
@@ -395,14 +404,28 @@ function SurveyEditor({ draft, onChange, surveyId }: { draft: SurveyDraft; onCha
     }
   }
 
-  const [planOpen, setPlanOpen] = useState(false);
+  // 목록의 `기획안` 버튼(`/survey?id=…&plan=1`)으로 들어오면 패널을 펼친 채 연다.
+  const [planOpen, setPlanOpen] = useState(() => new URLSearchParams(window.location.search).has("plan"));
+  const [planSaved, setPlanSaved] = useState(false);
   const plan = draft.plan ?? { businessArea: "", testers: "", schedule: "", managers: "" };
+  // 담당자·발주처는 사전요청서에 없고 프로젝트마다 거의 같다 — 마지막 값을 이 브라우저에 기억해 빈 칸을 채운다.
+  useEffect(() => {
+    if (!planOpen) return;
+    const fill = Object.fromEntries((["managers", "client"] as const)
+      .map((k) => [k, localStorage.getItem(`${PLAN_MEMO_KEY}.${k}`) ?? ""] as const)
+      .filter(([k, v]) => v && !plan[k]));
+    if (Object.keys(fill).length) onChange({ ...draft, plan: { ...plan, ...fill } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 패널을 열 때 한 번만 채운다
+  }, [planOpen]);
   async function downloadPlan() {
+    if (!surveyId) return alert("설문이 아직 저장되지 않았습니다. 잠시 뒤 다시 눌러 주세요.");
     setDownloading(true);
     try {
-      const res = await fetch("/api/survey/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...draft, questions, plan }) });
+      const res = await fetch("/api/survey/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyId, draft: { ...draft, questions, plan } }) });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `기획안을 만들지 못했습니다 (${res.status})`);
       download(await res.blob(), planFileName(draft.companyName), "application/hwp+zip");
+      for (const k of ["managers", "client"] as const) if (plan[k]?.trim()) localStorage.setItem(`${PLAN_MEMO_KEY}.${k}`, plan[k]!.trim());
+      setPlanSaved(true);
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e));
     } finally {
@@ -463,6 +486,7 @@ function SurveyEditor({ draft, onChange, surveyId }: { draft: SurveyDraft; onCha
         {planOpen && (
           <div className="flex w-full flex-wrap items-end gap-3 border-t border-[#eef1f5] pt-3">
             {([
+              ["client", "발주처 (표지)", "정보통신산업진흥원"],
               ["businessArea", "핵심 비즈니스 영역", "B2C, B2B"],
               ["testers", "테스트 인원", "총 100명 (일반인용 70명 / 기관용 30명)"],
               ["schedule", "진행 일정", "2026년 10월 20일 ~ 2026년 11월 3일"],
@@ -470,13 +494,16 @@ function SurveyEditor({ draft, onChange, surveyId }: { draft: SurveyDraft; onCha
             ] as const).map(([key, label, hint]) => (
               <label key={key} className="min-w-[180px] flex-1 text-[12px] font-semibold text-[#6b778a]">
                 {label}
-                <input className={`${field} mt-1`} placeholder={hint} value={plan[key]} onChange={(e) => onChange({ ...draft, plan: { ...plan, [key]: e.target.value } })} />
+                <input className={`${field} mt-1`} placeholder={hint} value={plan[key] ?? ""} onChange={(e) => onChange({ ...draft, plan: { ...plan, [key]: e.target.value } })} />
               </label>
             ))}
             <button type="button" onClick={downloadPlan} disabled={downloading} className="rounded-lg bg-[#356df3] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2b5bd0] disabled:opacity-50">
               {downloading ? "만드는 중…" : "기획안 다운로드"}
             </button>
-            <p className="w-full text-[12px] text-[#94a0b2]">비운 칸은 문서에 파란 글씨 ‘(입력 필요)’로 들어갑니다. 목차의 쪽 번호는 어림값이니 한글에서 열어 확인해 주세요.</p>
+            <p className="w-full text-[12px] text-[#94a0b2]">
+              비운 칸은 문서에 ‘(입력 필요)’로 들어갑니다. 목차의 쪽 번호는 어림값이니 한글에서 열어 확인해 주세요.
+              {planSaved && <> 내려받은 기획안은 <Link href="/plan" className="font-semibold text-[#356df3] hover:underline">기획안 탭</Link>에 모여 있습니다.</>}
+            </p>
           </div>
         )}
         {parts && (

@@ -269,3 +269,22 @@ create table if not exists survey_drafts (
   updated_at timestamptz not null default now()
 );
 create index if not exists survey_drafts_updated_at_idx on survey_drafts(updated_at desc);
+
+-- 설문 → 기획안 연결(2026-10-20, PRD 3.4.3). 제품별로 나눈 설문은 원래 설문을, 사전요청서는 다시 읽을 수 있게 URL을 남긴다.
+alter table survey_drafts add column if not exists parent_id uuid references survey_drafts(id) on delete set null;
+alter table survey_drafts add column if not exists source_file_url text;
+
+-- 만든 기획안(HWPX) — `기획안` 탭(/plan)이 모아 보여준다. 파일은 private Blob에 두고 /api/download로 받는다.
+-- questions_hash는 만들 때 설문 문항의 md5 — 지금 설문과 다르면 "설문이 바뀌었음"을 표시한다.
+create table if not exists survey_plans (
+  id uuid primary key default gen_random_uuid(),
+  survey_id uuid references survey_drafts(id) on delete set null,
+  company_name text not null,
+  product_name text not null,
+  file_name text not null,
+  blob_url text not null,
+  question_count int not null,
+  questions_hash text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists survey_plans_created_at_idx on survey_plans(created_at desc);

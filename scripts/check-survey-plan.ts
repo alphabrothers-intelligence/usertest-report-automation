@@ -95,6 +95,10 @@ async function main() {
   const template = readFileSync("templates/survey-plan-template.hwpx");
   const out = await buildSurveyPlanHwpx(template, draft, { businessArea: "B2C", testers: "", schedule: "2026년 10월 20일 ~ 2026년 11월 3일", managers: "" }, new Date(2026, 9, 13));
   const { zip, tables } = await inspect(out);
+  const cover = await zip.file("Contents/section0.xml")!.async("string");
+  assert.ok(cover.includes("<hp:t>발주처 l (입력 필요)</hp:t>"), "발주처를 비웠는데 표지에 원본 발주처가 남음");
+  const withClient = await JSZip.loadAsync(await buildSurveyPlanHwpx(template, draft, { businessArea: "", testers: "", schedule: "", managers: "", client: "테스트진흥원" }));
+  assert.ok((await withClient.file("Contents/section0.xml")!.async("string")).includes("<hp:t>발주처 l 테스트진흥원</hp:t>"), "발주처가 표지에 안 들어감");
   const body = await zip.file("Contents/section1.xml")!.async("string");
   const text = [...body.matchAll(/<hp:t>([^<]*)/g)].map((m) => m[1]).join("\n");
   for (const want of ["테스트기업", "(입력 필요)", "2026년 10월 20일", "■ 앱 A", "■ 서비스 B", "1. 앱 A 설문", "2. 서비스 B 설문", "의 기능 중 가장 중요하다고 생각하는 기능은 무엇인가요? (1~2순위)",

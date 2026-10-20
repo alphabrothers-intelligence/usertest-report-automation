@@ -52,7 +52,7 @@ export const SurveyDraftSchema = z.object({
   })),
   excludedFeatures: z.array(z.object({ name: z.string(), reason: z.string() })),
   reviewNotes: z.array(z.string()),
-  plan: z.object({ businessArea: z.string(), testers: z.string(), schedule: z.string(), managers: z.string() }).optional(),
+  plan: z.object({ businessArea: z.string(), testers: z.string(), schedule: z.string(), managers: z.string(), client: z.string().optional() }).optional(),
 });
 
 export interface SurveyQuestion {
@@ -90,6 +90,8 @@ export interface PlanInfo {
   testers: string;
   schedule: string;
   managers: string;
+  /** 표지 '발주처' — 사전요청서에 없다. 옛 저장본엔 없을 수 있다. */
+  client?: string;
 }
 
 export const isChoice = (type: string) => type.startsWith("객관식");

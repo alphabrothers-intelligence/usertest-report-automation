@@ -371,6 +371,7 @@ export async function buildSurveyPlanHwpx(templateBytes: ArrayBuffer | Uint8Arra
   // 표지·뒷표지
   const date = `${year}.${String(today.getMonth() + 1).padStart(2, "0")}.${String(today.getDate()).padStart(2, "0")}`;
   const section0 = sections[0]
+    .replace(/(<hp:t>발주처 l )[^<]*(<\/hp:t>)/, `$1${esc(value(info.client ?? ""))}$2`)
     .replace(/<hp:t>케어클<\/hp:t>/, `<hp:t>${esc(draft.companyName)}</hp:t>`)
     .replace(/(Usablity Test Report for ‘)[^’<]*(’)/, `$1${esc(draft.productName)}$2`)
     .replace(/<hp:t>\d{4}\.\d{2}\.\d{2}<\/hp:t>/, `<hp:t>${date}</hp:t>`);

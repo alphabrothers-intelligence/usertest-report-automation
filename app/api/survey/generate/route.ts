@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const text = await extractTextFromDocument(body.data.fileUrl);
     if (text.trim().length < 50) throw new Error("문서에서 글자를 거의 읽지 못했습니다. 스캔한 이미지 PDF라면 글자가 있는 파일로 올려 주세요.");
     const draft = await generateSurvey(text);
-    const id = await createSurvey(draft, body.data.fileName ?? null);
+    const id = await createSurvey(draft, body.data.fileName ?? null, { sourceFileUrl: body.data.fileUrl });
     return NextResponse.json({ ok: true, id, draft });
   } catch (err) {
     return NextResponse.json(

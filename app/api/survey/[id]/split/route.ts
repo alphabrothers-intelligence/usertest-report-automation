@@ -11,6 +11,6 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   const parts = splitByProduct(survey.draft);
   if (!parts) return NextResponse.json({ ok: false, error: "제품별로 나눌 분기 문항이 없습니다." }, { status: 400 });
   const ids = [];
-  for (const part of parts) ids.push(await createSurvey(part, survey.sourceFileName));
+  for (const part of parts) ids.push(await createSurvey(part, survey.sourceFileName, { sourceFileUrl: survey.sourceFileUrl, parentId: (await params).id }));
   return NextResponse.json({ ok: true, ids });
 }
