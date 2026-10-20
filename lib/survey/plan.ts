@@ -92,13 +92,21 @@ function row(proto: string[], texts: (string[] | undefined)[], opts: { width?: n
   return { cells: cells.map((c) => (rowSpanOf(c) === 1 ? cellTail(c, { height }) : c)), height };
 }
 
-/** 표가 든 문단(원형)의 행을 갈아 끼운다. 표 높이·행 수·행 주소를 맞춘다. */
+/**
+ * 표가 든 문단(원형)의 행을 갈아 끼운다. 표 높이·행 수·행 주소를 맞춘다.
+ * 본문 표는 한 쪽보다 길어지므로(문항 수만큼 행이 는다) 한글의 `쪽 경계에서 나눔`(pageBreak=TABLE)으로,
+ * `글자처럼 취급`은 끈다(treatAsChar=0, 본문과의 배치 = 자리 차지). 원본 양식은 셀 단위로 나눔 + 글자처럼
+ * 취급이라 긴 표가 쪽 밑으로 잘려 사라졌다(2026-10-21 담당자). 칸 안에 든 중첩 표는 건드리지 않는다.
+ */
 function table(container: string, rows: Row[]): { xml: string; height: number } {
   const t = blocks(container, "tbl")[0];
   const tbl = container.slice(t.start, t.end);
   const height = rows.reduce((s, r) => s + r.height, 0);
   const head = tbl.slice(0, tbl.indexOf("<hp:tr>"))
     .replace(/rowCnt="\d+"/, `rowCnt="${rows.length}"`)
+    .replace(/pageBreak="\w+"/, 'pageBreak="TABLE"')
+    .replace(/textWrap="\w+"/, 'textWrap="TOP_AND_BOTTOM"')
+    .replace(/(<hp:pos [^>]*?)treatAsChar="1"/, '$1treatAsChar="0"')
     .replace(/(<hp:sz width="\d+" widthRelTo="\w+" height=")\d+/, `$1${height}`);
   const trs = rows.map((r, i) => `<hp:tr>${r.cells.map((c) => cellTail(c, { row: i })).join("")}</hp:tr>`).join("");
   return { xml: container.slice(0, t.start) + head + trs + "</hp:tbl>" + container.slice(t.end), height: height + 600 };

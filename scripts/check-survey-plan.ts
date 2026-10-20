@@ -115,6 +115,11 @@ async function main() {
   const leak = second.split("\n").find((l) => l.includes("앱 A") && l !== draft.productName); assert.ok(!leak, `두 번째 제품 장에 첫 제품 내용이 섞임: ${leak}`);
   assert.ok(!/1위|2위/.test(text), "옛 순위 문구(1위)가 남음");
   assert.ok(!text.includes("고객 여정 기반"), "없는 단계가 목차·본문에 남음");
+  // 본문 표(대상·진행 프로세스·설문 구성)는 쪽 경계에서 나뉘고 글자처럼 취급하지 않는다 — 안 그러면 긴 표가 쪽 밑으로 잘린다.
+  const bodyTables = blocks(body, "p").slice(1).flatMap((b) => blocks(body.slice(b.start, b.end), "tbl").slice(0, 1).map((t) => body.slice(b.start, b.end).slice(t.start, t.end)));
+  const head = (t: string) => t.slice(0, t.indexOf("<hp:tr>"));
+  const stuck = bodyTables.filter((t) => /(?:대상|단계|Q\d)/.test(t) && !(head(t).includes('pageBreak="TABLE"') && /treatAsChar="0"/.test(head(t))));
+  assert.strictEqual(stuck.length, 0, `쪽 경계에서 나뉘지 않는 본문 표 ${stuck.length}개`);
   // 기획안 칸 근거 문장: 원문에 있는 것만 남는다(띄어쓰기 무시), 지어낸 문장과 너무 짧은 조각은 빠진다.
   const kept = keepFoundSources({ businessArea: "B2C", testers: "", schedule: "", managers: "",
     sources: { businessArea: "주요 고객: 일반 소비자(B2C)", testers: "응답자는 100명 정도 희망합니다", schedule: "B2" } }, "■ 주요 고객 : 일반  소비자 (B2C)\n타겟 …");
