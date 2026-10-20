@@ -36,14 +36,36 @@ export async function extractHwpxText(buffer: Buffer | Uint8Array): Promise<stri
     .trim();
 }
 
-export async function extractTextFromDocument(fileUrl: string): Promise<string> {
+async function readBlob(fileUrl: string): Promise<Buffer> {
   const result = await getBlobWithRetry(fileUrl);
   if (!result) {
     throw new Error("파일을 찾을 수 없습니다.");
   }
-  const buffer = Buffer.from(await new Response(result.stream).arrayBuffer());
+  return Buffer.from(await new Response(result.stream).arrayBuffer());
+}
 
-  const ext = extensionOf(fileUrl);
+/** Claude가 PDF를 그대로 읽는 한도(쪽 수 100·크기 32MB) 안쪽으로 잡은 값. 넘으면 글자만 뽑아 넘긴다. */
+const MAX_DIRECT_PDF_BYTES = 30 * 1024 * 1024;
+
+/**
+ * 사전요청서처럼 모델이 읽을 문서 — PDF는 파일 그대로, 나머지는 글자로 돌려준다(PRD 3.4.3).
+ * Claude는 PDF를 쪽마다 글자와 그림으로 함께 읽어 표의 칸 구분·스캔본까지 읽는다. pdf-parse로 글자만 뽑으면
+ * 표의 칸 구분이 사라지고 스캔본은 빈 글자가 된다.
+ */
+export async function readDocumentForModel(fileUrl: string): Promise<{ pdf: Buffer } | { text: string }> {
+  if (extensionOf(fileUrl) === "pdf") {
+    const buffer = await readBlob(fileUrl);
+    if (buffer.length <= MAX_DIRECT_PDF_BYTES) return { pdf: buffer };
+    return { text: await extractText(buffer, "pdf") };
+  }
+  return { text: await extractTextFromDocument(fileUrl) };
+}
+
+export async function extractTextFromDocument(fileUrl: string): Promise<string> {
+  return extractText(await readBlob(fileUrl), extensionOf(fileUrl));
+}
+
+async function extractText(buffer: Buffer, ext: string): Promise<string> {
 
   if (ext === "pdf") {
     const { PDFParse } = await import("pdf-parse");

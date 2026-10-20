@@ -199,13 +199,19 @@ const SYSTEM_PROMPT = `당신은 알파브라더스의 사용성 테스트 설�
 /** 사전요청서는 길어야 수천 자다. 엉뚱한 대용량 파일이 들어와도 토큰이 폭주하지 않게 자른다. */
 const MAX_INPUT_CHARS = 40_000;
 
-export async function generateSurvey(documentText: string): Promise<SurveyDraft> {
-  const { output } = await withClaudeGuard("survey-generate", () =>
+/** 사전요청서 — PDF는 파일 그대로(표·스캔본까지 읽힌다), 나머지 형식은 뽑아낸 글자. */
+export type SurveySource = { pdf: Uint8Array } | { text: string };
+
+export async function generateSurvey(source: SurveySource): Promise<SurveyDraft> {
+  const ask = "다음 사전 요청서로 설문 문항을 설계하세요.";
+  const { output, usage } = await withClaudeGuard("survey-generate", () =>
     streamStructured<z.infer<typeof SurveySchema>>(
       {
         model: anthropic(MODEL),
         instructions: { role: "system", content: SYSTEM_PROMPT },
-        prompt: `다음 사전 요청서로 설문 문항을 설계하세요.\n\n${documentText.slice(0, MAX_INPUT_CHARS)}`,
+        ...("pdf" in source
+          ? { messages: [{ role: "user", content: [{ type: "text", text: ask }, { type: "file", mediaType: "application/pdf", data: source.pdf }] }] }
+          : { prompt: `${ask}\n\n${source.text.slice(0, MAX_INPUT_CHARS)}` }),
         output: Output.object({ schema: SurveySchema }),
         // 16000이면 기능이 많고 서비스가 둘인 요청서(피매치, 순위 문항 포함)에서 출력이 잘렸다(실측 2026-10-06).
         maxOutputTokens: 32000,
@@ -217,6 +223,8 @@ export async function generateSurvey(documentText: string): Promise<SurveyDraft>
       "survey-generate",
     ),
   );
+  // PDF를 그대로 넘기면 쪽마다 그림 토큰이 붙는다 — 입력 토큰을 남겨 비용을 볼 수 있게 한다(PRD 11장 21번).
+  console.info(`[survey-generate] ${"pdf" in source ? "pdf" : "text"} usage`, JSON.stringify(usage));
   return normalizeSurvey(output);
 }
 

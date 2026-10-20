@@ -103,7 +103,7 @@ export function SurveyStudio({ initialId }: { initialId: string | null }) {
   async function handleFile(file: File) {
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     if (ext === "hwp") {
-      setError("HWP(구버전) 파일은 읽을 수 없습니다. 한글에서 '다른 이름으로 저장 → HWPX'로 저장해 올려 주세요.");
+      setError("HWP(구버전) 파일은 읽을 수 없습니다. 한글에서 '다른 이름으로 저장 → PDF'로 저장해 올려 주세요(HWPX도 됩니다).");
       return;
     }
     setError(null);
@@ -155,7 +155,7 @@ export function SurveyStudio({ initialId }: { initialId: string | null }) {
               <p className="mt-1 text-[15px] text-[#6b778a]">
                 {draft
                   ? `${fileName ? `‘${fileName}’에서 만든 문항입니다. ` : ""}고친 내용은 자동으로 저장됩니다.`
-                  : "기업이 보낸 사전요청서(HWPX·PDF·DOCX)를 올리면 표준 구성에 맞춘 문항을 만듭니다. 여기서 고친 뒤 xlsx·csv로 내려받으세요."}
+                  : "기업이 보낸 사전요청서를 올리면 표준 구성에 맞춘 문항을 만듭니다. 고친 뒤 다음 단계에서 기획안을 만듭니다."}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -197,7 +197,7 @@ export function SurveyStudio({ initialId }: { initialId: string | null }) {
                 className="flex w-full flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-[#cdd5e1] bg-white px-6 py-12 text-center hover:border-[#356df3]"
               >
                 <span className="text-[17px] font-semibold text-[#1d2433]">사전요청서 파일을 선택하세요</span>
-                <span className="text-[14px] text-[#6b778a]">HWPX · PDF · DOCX · TXT (HWP 구버전은 HWPX로 저장해 올려 주세요)</span>
+                <span className="text-[14px] text-[#6b778a]"><b className="text-[#356df3]">PDF 권장</b> — 표와 스캔본까지 가장 정확하게 읽습니다. HWPX · DOCX · TXT도 됩니다. HWP(구버전)는 PDF로 저장해 올려 주세요.</span>
               </button>
               <SurveyList />
             </>
