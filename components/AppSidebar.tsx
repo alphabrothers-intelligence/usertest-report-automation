@@ -27,7 +27,7 @@ export function AppSidebar() {
       </Link>
       <nav className="space-y-1 px-3 py-4">
         {MENU.map((item) => {
-          const active = pathname === item.href;
+          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}

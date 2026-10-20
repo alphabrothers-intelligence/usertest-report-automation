@@ -16,7 +16,6 @@ import {
   toWallaTxt,
   splitByProduct,
   wallaChecklist,
-  planFileName,
   wallaLayout,
   wallaTodos,
   type SurveyDraft,
@@ -47,7 +46,6 @@ function download(data: BlobPart, name: string, type: string) {
 }
 
 type SaveState = "saved" | "saving" | "error";
-const PLAN_MEMO_KEY = "survey-plan";
 
 /**
  * 설문 문항 화면. id가 없으면 목록 + 새로 만들기, 있으면 그 문항 편집.
@@ -251,7 +249,7 @@ function SurveyList() {
               </span>
             </Link>
             <Link
-              href={`/survey?id=${item.id}&plan=1`}
+              href={`/plan/new?survey=${item.id}`}
               title={item.parentId ? "제품별로 나눈 설문입니다. 원래 설문으로 만들면 두 제품이 한 기획안에 제품별로 들어갑니다." : "이 설문으로 설문 구성 기획안(HWPX)을 만듭니다."}
               className="rounded-lg bg-[#eef3fe] px-3 py-1.5 text-[13px] font-semibold text-[#356df3] hover:bg-[#e0eafd]"
             >
@@ -404,35 +402,6 @@ function SurveyEditor({ draft, onChange, surveyId }: { draft: SurveyDraft; onCha
     }
   }
 
-  // 목록의 `기획안` 버튼(`/survey?id=…&plan=1`)으로 들어오면 패널을 펼친 채 연다.
-  const [planOpen, setPlanOpen] = useState(() => new URLSearchParams(window.location.search).has("plan"));
-  const [planSaved, setPlanSaved] = useState(false);
-  const plan = draft.plan ?? { businessArea: "", testers: "", schedule: "", managers: "" };
-  // 담당자·발주처는 사전요청서에 없고 프로젝트마다 거의 같다 — 마지막 값을 이 브라우저에 기억해 빈 칸을 채운다.
-  useEffect(() => {
-    if (!planOpen) return;
-    const fill = Object.fromEntries((["managers", "client"] as const)
-      .map((k) => [k, localStorage.getItem(`${PLAN_MEMO_KEY}.${k}`) ?? ""] as const)
-      .filter(([k, v]) => v && !plan[k]));
-    if (Object.keys(fill).length) onChange({ ...draft, plan: { ...plan, ...fill } });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 패널을 열 때 한 번만 채운다
-  }, [planOpen]);
-  async function downloadPlan() {
-    if (!surveyId) return alert("설문이 아직 저장되지 않았습니다. 잠시 뒤 다시 눌러 주세요.");
-    setDownloading(true);
-    try {
-      const res = await fetch("/api/survey/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ surveyId, draft: { ...draft, questions, plan } }) });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `기획안을 만들지 못했습니다 (${res.status})`);
-      download(await res.blob(), planFileName(draft.companyName), "application/hwp+zip");
-      for (const k of ["managers", "client"] as const) if (plan[k]?.trim()) localStorage.setItem(`${PLAN_MEMO_KEY}.${k}`, plan[k]!.trim());
-      setPlanSaved(true);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : String(e));
-    } finally {
-      setDownloading(false);
-    }
-  }
-
   const selected = selectedIndex >= 0 ? questions[selectedIndex] : null;
   const layout = useMemo(() => wallaLayout(questions), [questions]);
   const wallaInfo = (q: SurveyQuestion) => ({ label: layout.find((s) => s.q.id === q.id)?.label ?? "", todos: wallaTodos(q, layout) });
@@ -449,101 +418,82 @@ function SurveyEditor({ draft, onChange, surveyId }: { draft: SurveyDraft; onCha
           제품명
           <input className={`${field} mt-1`} value={draft.productName} onChange={(e) => onChange({ ...draft, productName: e.target.value })} />
         </label>
-        <button type="button" onClick={downloadXlsx} disabled={downloading} className="rounded-lg bg-[#1d2433] px-4 py-2 text-sm font-semibold text-white hover:bg-[#33405a] disabled:opacity-50">
-          xlsx 다운로드
-        </button>
-        <button
-          type="button"
-          onClick={() => download(toCsv(questions), surveyFileName(draft.companyName, "csv"), "text/csv;charset=utf-8")}
-          className="rounded-lg bg-[#f0f3f8] px-4 py-2 text-sm font-semibold text-[#1d2433] hover:bg-[#e4e9f1]"
-        >
-          csv 다운로드
-        </button>
-        <button
-          type="button"
-          title="WALLA ‘Qualtrics 심플 포맷으로 가져오기’에 올리는 파일입니다. 분기·필수 여부는 가져온 뒤 WALLA에서 설정해 주세요."
-          onClick={() => download(toWallaTxt(questions), surveyFileName(draft.companyName, "txt"), "text/plain;charset=utf-8")}
-          className="rounded-lg bg-[#f0f3f8] px-4 py-2 text-sm font-semibold text-[#1d2433] hover:bg-[#e4e9f1]"
-        >
-          WALLA용 txt
-        </button>
-        <button
-          type="button"
-          title="txt를 WALLA로 가져온 뒤 손으로 설정할 것(로직·필수·선형배율·기타 보기)을 WALLA 필드 번호 순서로 정리한 목록입니다."
-          onClick={() => download(wallaChecklist(questions), surveyFileName(draft.companyName, "txt", "_WALLA설정목록"), "text/plain;charset=utf-8")}
-          className="rounded-lg bg-[#f0f3f8] px-4 py-2 text-sm font-semibold text-[#1d2433] hover:bg-[#e4e9f1]"
-        >
-          WALLA 설정 목록
-        </button>
-        <button
-          type="button"
-          title="알파브라더스 설문 구성 기획안 양식에 이 설문과 기업 정보를 채운 한글(HWPX) 파일입니다."
-          onClick={() => setPlanOpen((v) => !v)}
-          className="rounded-lg bg-[#eef3fe] px-4 py-2 text-sm font-semibold text-[#356df3] hover:bg-[#e0eafd]"
-        >
-          기획안 HWPX
-        </button>
-        {planOpen && (
-          <div className="flex w-full flex-wrap items-end gap-3 border-t border-[#eef1f5] pt-3">
-            {([
-              ["client", "발주처 (표지)", "정보통신산업진흥원"],
-              ["businessArea", "핵심 비즈니스 영역", "B2C, B2B"],
-              ["testers", "테스트 인원", "총 100명 (일반인용 70명 / 기관용 30명)"],
-              ["schedule", "진행 일정", "2026년 10월 20일 ~ 2026년 11월 3일"],
-              ["managers", "담당자", "송영민 팀장 / ○○○ 매니저"],
-            ] as const).map(([key, label, hint]) => (
-              <label key={key} className="min-w-[180px] flex-1 text-[12px] font-semibold text-[#6b778a]">
-                {label}
-                <input className={`${field} mt-1`} placeholder={hint} value={plan[key] ?? ""} onChange={(e) => onChange({ ...draft, plan: { ...plan, [key]: e.target.value } })} />
-              </label>
-            ))}
-            <button type="button" onClick={downloadPlan} disabled={downloading} className="rounded-lg bg-[#356df3] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2b5bd0] disabled:opacity-50">
-              {downloading ? "만드는 중…" : "기획안 다운로드"}
-            </button>
-            <p className="w-full text-[12px] text-[#94a0b2]">
-              비운 칸은 문서에 ‘(입력 필요)’로 들어갑니다. 목차의 쪽 번호는 어림값이니 한글에서 열어 확인해 주세요.
-              {planSaved && <> 내려받은 기획안은 <Link href="/plan" className="font-semibold text-[#356df3] hover:underline">기획안 탭</Link>에 모여 있습니다.</>}
+        <DownloadMenu
+          disabled={downloading}
+          items={[
+            { label: "문항리스트 xlsx", hint: "Tally 설문 폼 입력용 템플릿", run: downloadXlsx },
+            { label: "문항리스트 csv", hint: "엑셀 없이 열 때", run: () => download(toCsv(questions), surveyFileName(draft.companyName, "csv"), "text/csv;charset=utf-8") },
+            { label: "WALLA용 txt", hint: "WALLA ‘Qualtrics 심플 포맷으로 가져오기’에 올리는 파일", run: () => download(toWallaTxt(questions), surveyFileName(draft.companyName, "txt"), "text/plain;charset=utf-8") },
+            { label: "WALLA 설정 목록", hint: "가져온 뒤 손으로 설정할 것(로직·필수·선형배율·기타 보기)", run: () => download(wallaChecklist(questions), surveyFileName(draft.companyName, "txt", "_WALLA설정목록"), "text/plain;charset=utf-8") },
+          ]}
+        />
+        {/* 기획안은 버튼 묶음 속 내려받기 하나가 아니라 다음 단계다 — 따로 떼어 진하게 둔다(2026-10-20 담당자). */}
+        <div className="ml-auto flex items-center gap-3 border-l border-[#e7ecf3] pl-4">
+          <span className="text-right text-[12px] leading-tight text-[#94a0b2]">설문을 다 고쳤다면<br />다음 단계로</span>
+          {surveyId ? (
+            <Link href={`/plan/new?survey=${surveyId}`} className="flex items-center gap-2 rounded-xl bg-[#356df3] px-5 py-2.5 text-[14px] font-semibold text-white shadow-[0_4px_12px_rgba(53,109,243,0.25)] hover:bg-[#2a5bd6]">
+              다음 단계: 기획안 만들기 <span aria-hidden>→</span>
+            </Link>
+          ) : (
+            <span className="rounded-xl bg-[#c9d6f7] px-5 py-2.5 text-[14px] font-semibold text-white">저장 중…</span>
+          )}
+        </div>
+      </section>
+
+      {parts && (
+        <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-[#c9d8fb] bg-[#f3f7ff] px-5 py-4">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#356df3] text-white" aria-hidden>
+            <svg viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3v6a6 6 0 0 0 6 6h0a6 6 0 0 1 6 6M18 3v6a6 6 0 0 1-6 6" /></svg>
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[15px] font-bold text-[#1d2433]">
+              제품 {parts.length}개를 한 설문에서 분기로 묻고 있어요 <span className="font-normal text-[#4a566b]">— {parts.map((p) => p.productName).join(" / ")}</span>
+            </p>
+            <p className="mt-0.5 text-[13px] text-[#4a566b]">
+              제품마다 WALLA 폼을 따로 돌리려면 나누세요. 지금 설문은 그대로 남고, 기획안은 나누지 않아도 제품별로 정리됩니다.
             </p>
           </div>
-        )}
-        {parts && (
-          <div className="flex w-full flex-wrap items-center gap-3 border-t border-[#eef1f5] pt-3 text-[13px] text-[#4a566b]">
-            <span>
-              제품 <b className="text-[#1d2433]">{parts.length}개</b>({parts.map((p) => p.productName).join(" / ")})를 한 설문에서 분기로 나눠 묻고 있어요.
-            </span>
-            <button
-              type="button"
-              onClick={splitIntoSurveys}
-              disabled={splitting || !surveyId}
-              className="rounded-lg bg-[#eef3fe] px-3 py-1.5 font-semibold text-[#356df3] hover:bg-[#e0eafd] disabled:opacity-50"
-            >
-              {splitting ? "나누는 중…" : "제품별 설문으로 나누기"}
-            </button>
-          </div>
-        )}
-      </section>
+          <button
+            type="button"
+            onClick={splitIntoSurveys}
+            disabled={splitting || !surveyId}
+            className="rounded-xl bg-[#356df3] px-5 py-2.5 text-[14px] font-semibold text-white hover:bg-[#2a5bd6] disabled:opacity-50"
+          >
+            {splitting ? "나누는 중…" : `제품별 설문 ${parts.length}개로 나누기`}
+          </button>
+        </section>
+      )}
 
       <div className="grid grid-cols-[minmax(0,1fr)_380px] items-start gap-4">
         <div className="overflow-clip rounded-2xl border border-[#e7ecf3] bg-white">
-          <div className="flex items-center gap-1 border-b border-[#e3e8ef] px-3 py-2 text-[13px]">
-            {[
-              { on: false, label: "전체", count: questions.length },
-              { on: true, label: "확인 필요", count: flagged.length },
-            ].map((tab) => (
-              <button
-                key={tab.label}
-                type="button"
-                disabled={tab.on && flagged.length === 0}
-                onClick={() => setOnlyFlagged(tab.on)}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold disabled:opacity-40 ${
-                  (onlyFlagged && flagged.length > 0) === tab.on ? "bg-[#1d2433] text-white" : "text-[#4a566b] hover:bg-[#f0f3f8]"
-                }`}
-              >
-                {tab.on && <WarnIcon className="size-3.5" />}
-                {tab.label}
-                <span className="font-normal opacity-70">{tab.count}</span>
-              </button>
-            ))}
+          {/* 문항 거르기 — 탭 글자만 있으면 누르는 것인지 몰랐다(2026-10-20). 테두리 있는 묶음 버튼으로 보이게 한다. */}
+          <div className="flex flex-wrap items-center gap-3 border-b border-[#e3e8ef] px-4 py-3 text-[13px]">
+            <span className="font-semibold text-[#6b778a]">문항 보기</span>
+            <div role="group" aria-label="문항 보기" className="inline-flex rounded-xl border border-[#dfe4ec] bg-[#f6f8fb] p-1">
+              {[
+                { on: false, label: "전체 문항", count: questions.length },
+                { on: true, label: "확인 필요한 문항만", count: flagged.length },
+              ].map((tab) => {
+                const active = (onlyFlagged && flagged.length > 0) === tab.on;
+                return (
+                  <button
+                    key={tab.label}
+                    type="button"
+                    aria-pressed={active}
+                    disabled={tab.on && flagged.length === 0}
+                    onClick={() => setOnlyFlagged(tab.on)}
+                    className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                      active ? "bg-white text-[#1d2433] shadow-[0_1px_4px_rgba(31,48,78,0.15)]" : "cursor-pointer text-[#6b778a] hover:bg-white/70 hover:text-[#1d2433]"
+                    }`}
+                  >
+                    {tab.on && <WarnIcon className="size-3.5 text-[#d97706]" />}
+                    {tab.label}
+                    <span className={`rounded-full px-1.5 text-[11px] ${tab.on ? "bg-[#fff4e0] text-[#b25e00]" : "bg-[#eef1f5] text-[#4a566b]"}`}>{tab.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {flagged.length > 0 && !onlyFlagged && <span className="text-[12px] text-[#94a0b2]">⚠ 표시가 붙은 문항 {flagged.length}개를 먼저 확인해 주세요.</span>}
           </div>
           <table className="w-full table-fixed border-collapse text-left text-[13px] text-[#1d2433]">
             <colgroup>
@@ -830,5 +780,37 @@ function QuestionPanel({ q, number, walla, stages, earlier, numbers, canUp, canD
         )}
       </div>
     </div>
+  );
+}
+
+/** 파일 내려받기 묶음 — 같은 무게의 버튼 네 개를 나열하지 않고 한 메뉴에 이름과 쓰임을 함께 적는다. */
+function DownloadMenu({ items, disabled }: { items: { label: string; hint: string; run: () => void }[]; disabled: boolean }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) ref.current.open = false; };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, []);
+  return (
+    <details ref={ref} className="relative">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-[#dfe4ec] bg-white px-4 py-2 text-sm font-semibold text-[#1d2433] hover:bg-[#f6f8fb] [&::-webkit-details-marker]:hidden">
+        설문 파일 내려받기 <span aria-hidden className="text-[#94a0b2]">▾</span>
+      </summary>
+      <ul className="absolute left-0 z-30 mt-1 w-[320px] overflow-hidden rounded-xl border border-[#e3e7ee] bg-white py-1 shadow-[0_10px_30px_rgba(31,48,78,0.15)]">
+        {items.map((item) => (
+          <li key={item.label}>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => { item.run(); if (ref.current) ref.current.open = false; }}
+              className="block w-full px-4 py-2.5 text-left hover:bg-[#f6f8fb] disabled:opacity-50"
+            >
+              <span className="block text-[14px] font-semibold text-[#1d2433]">{item.label}</span>
+              <span className="block text-[12px] text-[#94a0b2]">{item.hint}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
