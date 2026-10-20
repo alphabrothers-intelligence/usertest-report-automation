@@ -558,10 +558,10 @@ function SurveyEditor({ draft, onChange, surveyId }: { draft: SurveyDraft; onCha
                         rowSpan={span}
                         onClick={(e) => e.stopPropagation()}
                         style={{ background: `#${stageColor(q.stage)}` }}
-                        className="cursor-default border-b border-r border-[#d9dfe8] px-3 py-3 text-center align-top text-[12px] font-semibold leading-[1.45] text-[#3d4757]"
+                        className="cursor-default border-b border-r border-[#d9dfe8] px-3 py-3 text-center align-middle text-[12px] font-semibold leading-[1.45] text-[#3d4757]"
                       >
-                        {/* 긴 단계도 스크롤하는 동안 이름이 화면에 남게 */}
-                        <span className="sticky top-12 block">{q.stage}</span>
+                        {/* 병합 칸 세로 가운데(엑셀 병합 셀과 같은 모양). 2026-10-20 담당자: 맨 위에 붙어 보기 힘들었다. */}
+                        {q.stage}
                       </td>
                     )}
                     <td className={`${cell} whitespace-nowrap font-semibold ${q.followUp ? "text-[#94a0b2]" : "text-[#356df3]"}`}>

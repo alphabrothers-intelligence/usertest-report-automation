@@ -9,7 +9,7 @@ import { registerEditor, setActiveEditor, unregisterEditor } from "@/lib/editor/
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";
 import { Pagination, layoutFlagsKey, type CutLine, type LayoutFlags } from "@/lib/editor/pagination";
-import { mergeOpinionRows, sectionToEditorHtml, upgradeImprovementIdea } from "@/lib/editor/toEditorHtml";
+import { addFeatureImageSlot, mergeOpinionRows, repairBoxGaps, sectionToEditorHtml, upgradeImprovementIdea } from "@/lib/editor/toEditorHtml";
 import { PageFooter } from "@/components/report-web-document/ReportDocumentChrome";
 import { AtomContext, KeepStyle, PageBreak, ReportAtom, ReportDiv } from "./extensions";
 
@@ -43,23 +43,34 @@ export const EDITOR_CSS = `
 .continuous-editor [data-atom-id] { position: relative; }
 /* 화면 전용 안내·버튼은 그림 사이에 끼지 않게 숨기고, 그림에 마우스를 올리면 오른쪽 위에 띄운다. */
 .continuous-editor [data-atom-id] p[data-copy-ignore] { display: none; }
-.continuous-editor [data-atom-id] div[data-copy-ignore] {
+.continuous-editor [data-atom-id] div[data-copy-ignore]:not([data-print-keep]) {
   position: absolute; top: 4px; right: 4px; z-index: 5; margin: 0 !important; opacity: 0; transition: opacity .15s;
   background: rgba(255,255,255,.95); border-radius: 4px; padding: 2px;
 }
-.continuous-editor [data-atom-id] div[data-copy-ignore] span { display: none; }
-.continuous-editor [data-atom-id]:hover div[data-copy-ignore] { opacity: 1; }
+.continuous-editor [data-atom-id] div[data-copy-ignore]:not([data-print-keep]) span { display: none; }
+.continuous-editor [data-atom-id]:hover div[data-copy-ignore]:not([data-print-keep]) { opacity: 1; }
 /* 만족도 분포도는 점수 표와 한 덩어리로 넘어가되 쪽을 덜 차지하게. */
 .continuous-editor [data-atom-id*="scorebox"] svg { max-height: 50mm; width: 100%; }
 /* 사분면 + "영역별 참고 지표"는 원본 28쪽처럼 한 쪽에 붙여서 — 사분면은 크게, 참고 지표는 촘촘하게. */
-.continuous-editor [data-atom-id*="quadrant"] [data-report-export] { width: 150mm; margin: 0 auto; }
+/* 2026-10-19 담당자: 사분면과 참고 지표의 가로를 맞추고 본문 폭(174mm)을 채운다. 사분면은 본문 폭 그대로,
+   참고 지표는 [다이어그램 | 우선순위 표] 두 칸을 같은 폭으로 — 표가 혼자 길게 늘어나 상자가 넓어 보였다. */
+.continuous-editor [data-atom-id*="quadrant"] [data-report-export] { width: 100%; margin: 0; }
+/* 사분면 그림 자체는 정사각형이라 폭을 다 쓰면 너무 길어져 참고 지표가 다음 쪽으로 밀렸다 — 그림 높이만 제한하고
+   상자(제목 띠·테두리)는 본문 폭을 채운다. 두 상자의 가로가 같아진다. */
+.continuous-editor [data-atom-id*="quadrant"] [data-report-export] svg { display: block; max-height: 118mm; width: auto; max-width: 100%; margin: -5.5mm auto 0; }
+/* 그림 안의 제목 띠(SVG)는 그림 폭만큼만 그려진다 — 상자 위에 같은 띠를 상자 폭으로 깔아 이어 보이게 한다. */
+.continuous-editor [data-atom-id*="quadrant"] [data-report-export] { position: relative; padding-top: 29px; background: linear-gradient(#4fc8e8 0 4px, #c0cdef 4px 29px, transparent 29px) no-repeat top / 100% 29px; }
+.continuous-editor [data-atom-id*="quadrant"] [data-report-export] svg > g[data-export-exclude] rect { display: none; }
+.continuous-editor [data-atom-id*="quadrant"] [data-report-export] svg > g[data-export-exclude] text { display: none; }
+.continuous-editor [data-atom-id*="quadrant"] [data-report-export]::before { content: attr(data-report-export-name); position: absolute; top: 4px; left: 0; right: 0; height: 25px; line-height: 25px; text-align: center; font-weight: 700; font-size: 10.5pt; color: #111827; border-bottom: 1px solid #315c9c; }
 .continuous-editor [data-atom-id*="quadrant"] section,
 .continuous-editor [data-atom-id*="priority-reference"] section { margin-bottom: 0; }
-.continuous-editor [data-atom-id*="priority-reference"] [data-report-export] { padding: 2mm 3mm; }
-.continuous-editor [data-atom-id*="priority-reference"] h4 { margin: -2mm -3mm 2mm; padding: 1mm 0; }
-.continuous-editor [data-atom-id*="priority-reference"] .grid { grid-template-columns: 62mm 1fr; gap: 3mm; }
-.continuous-editor [data-atom-id*="priority-reference"] .grid > div:first-child { max-width: 62mm; }
+.continuous-editor [data-atom-id*="priority-reference"] [data-report-export] { width: 100%; padding: 3mm 4mm; box-sizing: border-box; }
+.continuous-editor [data-atom-id*="priority-reference"] h4 { margin: -3mm -4mm 3mm; padding: 1mm 0; }
+.continuous-editor [data-atom-id*="priority-reference"] .grid { grid-template-columns: 1fr 1fr; gap: 4mm; align-items: center; }
+.continuous-editor [data-atom-id*="priority-reference"] .grid > div:first-child { max-width: none; }
 .continuous-editor [data-atom-id*="priority-reference"] .text-xs { font-size: 8pt; line-height: 1.5; }
+.continuous-editor [data-atom-id*="priority-reference"] .grid-cols-\\[88px_1fr\\] { grid-template-columns: 16mm 1fr; }
 .continuous-editor [data-atom-id*="priority-reference"] .space-y-1\\.5 > * + * { margin-top: 1mm; }
 /* ── 인쇄(PDF 저장) ── 화면의 쪽 하나 = PDF 한 쪽. 화면에만 있는 쪽 사이 띄움(40px)을 없애고, 종이·간격을
    그 값으로 다시 놓는다. 옛 블록 화면의 인쇄 규칙([data-section-page]에 여백·쪽 넘김)은 여기서 무력화한다. */
@@ -137,7 +148,7 @@ export function ChapterEditor({ section, sourceFileUrl, firstPage, footerBrand, 
   // 편집기 내용은 **처음 한 번만** 블록에서 만든다 — 이후 글은 편집기가 들고 있다. 그림(차트 등)은
   // 매번 최신 블록으로 그리므로 오른쪽 수정 탭의 변경이 바로 보인다.
   // ponytail: 서버가 블록을 통째로 다시 만들어 주는 경우(극성 재판정 등)는 아직 편집기에 반영 안 된다.
-  const [html] = useState(() => upgradeImprovementIdea(mergeOpinionRows(section.editorHtml || sectionToEditorHtml(section)), serviceName));
+  const [html] = useState(() => upgradeImprovementIdea(addFeatureImageSlot(repairBoxGaps(mergeOpinionRows(section.editorHtml || sectionToEditorHtml(section)))), serviceName));
   const [cutLines, setCutLines] = useState<CutLine[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 오른쪽 패널의 쪽 배치(표 속성·단락 속성). 값이 바뀔 때마다 쪽 넘김 확장에 트랜잭션으로 넘긴다.

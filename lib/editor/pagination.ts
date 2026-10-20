@@ -349,7 +349,10 @@ function cutLines(view: EditorView, geometry: PageGeometry, pages: number): CutL
         const y = row.getBoundingClientRect().top - box.top;
         return y > pageTop && y <= bodyBottom + 1;
       });
-      const end = gapRow ? Math.min(gapRow.getBoundingClientRect().top - box.top, bodyBottom) : bodyBottom;
+      // 행이 통째로 넘어간 자리는 그 행들의 테두리가 이미 표를 닫고 연다 — 선을 또 그으면 겹친다. 인쇄에서
+      // 몇 px만 어긋나도 이중선·글자 위 가로줄이 됐다(2026-10-19 담당자 PDF). 칸 안에서 갈린 행만 선을 긋는다.
+      if (gapRow) continue;
+      const end = bodyBottom;
       const line = { left: rect.left - box.left, width: rect.width, color: style.borderLeftColor, size };
       out.push({ ...line, page, y: end - pageTop - size }, { ...line, page: page + 1, y: 0 });
     }

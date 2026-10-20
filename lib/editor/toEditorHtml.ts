@@ -10,6 +10,8 @@ import { IMPROVEMENT_BANNER_HTML, improvementQuestionText } from "@/lib/report/w
  * 구조가 정해진 블록은 문서 안의 "그림"(`data-report-atom`)으로 넣고 기존 렌더러를 그대로 쓴다.
  */
 export const BANNER_ATOM_ID = "__section-banner__";
+/** 개요 '주요 기능' 칸의 사진 첨부 자리(편집기 그림). 블록 화면 시절 ReportImageUploadSlots를 그대로 쓴다. */
+export const FEATURE_IMAGES_ATOM_ID = "__feature-images__";
 
 /** 문서 안 그림으로 넣을 블록인지. 글·표는 풀어서 편집하게 하고 나머지는 그대로 그린다. */
 export function isAtomBlock(block: ReportBlock): boolean {
@@ -205,6 +207,59 @@ export function mergeOpinionRows(html: string): string {
       cell.style.borderBottomColor = cell.style.borderLeftColor;
       cell.style.paddingBottom = cell.style.paddingTop;
     });
+  });
+  return root.innerHTML;
+}
+
+/**
+ * **상자 중간에 낀 '상자 표시 없는' 문단을 상자로 되돌린다.** 상자 테두리는 문단마다 `data-box`로 그리는데
+ * (flattenBoxes), 옛 편집본은 상자 안 빈 줄이 표시 없이 `<p><br></p>`로 저장돼 있었다. 그 줄에서 상자가
+ * 끊겨 아래쪽이 윗선 없는 상자로 보였다(2026-10-19 담당자 지적, 리바랩스 Ⅲ장 2절 '차우선 개발 기능').
+ * 앞뒤가 모두 상자 문단인 구간의 문단만 고친다 — 상자 밖 문단은 건드리지 않는다.
+ * 블록이 빈 줄에서 쪼개져 저장된 편집본(같은 블록 id가 둘)도 여기서 다시 합친다.
+ */
+export function repairBoxGaps(html: string): string {
+  if (!html.includes("data-report-block-id")) return html;
+  const root = document.createElement("div");
+  root.innerHTML = html;
+  // 빈 줄에서 Enter를 쳐서 블록이 둘로 쪼개진 채 저장된 경우: 같은 블록 id의 두 조각(사이에 빈 줄만 있음)을 합친다.
+  root.querySelectorAll<HTMLElement>("div[data-report-block-id]").forEach((first) => {
+    if (!first.isConnected) return;
+    for (;;) {
+      const between: Element[] = [];
+      let next = first.nextElementSibling;
+      while (next && next.tagName === "P" && !next.textContent?.trim()) { between.push(next); next = next.nextElementSibling; }
+      if (!next || next.tagName !== "DIV" || next.getAttribute("data-report-block-id") !== first.getAttribute("data-report-block-id")) break;
+      first.append(...between, ...next.childNodes);
+      next.remove();
+    }
+  });
+  const boxed = (element: Element | null) => element?.tagName === "P" && element.hasAttribute("data-box");
+  root.querySelectorAll("p[data-box]").forEach((start) => {
+    const gap: Element[] = [];
+    let next = start.nextElementSibling;
+    while (next && next.tagName === "P" && !boxed(next)) { gap.push(next); next = next.nextElementSibling; }
+    if (gap.length > 0 && boxed(next)) gap.forEach((paragraph) => paragraph.setAttribute("data-box", "panel"));
+  });
+  return root.innerHTML;
+}
+
+/**
+ * **개요 '주요 기능' 칸에 사진 첨부 자리를 넣는다.** 블록 화면에는 이 칸에 사진을 원하는 만큼(최대 6장)
+ * 붙이는 칸이 있었는데, 이어진 편집기로 옮기며 빠졌다(2026-10-19 담당자 지적). 새 보고서·옛 편집본 모두
+ * 열 때 넣는다. 이미 있으면 그대로 둔다.
+ */
+export function addFeatureImageSlot(html: string): string {
+  if (!html.includes("주요 기능") || html.includes(FEATURE_IMAGES_ATOM_ID)) return html;
+  const root = document.createElement("div");
+  root.innerHTML = html;
+  const label = [...root.querySelectorAll("td, th")].find((cell) => cell.textContent?.trim() === "주요 기능");
+  const value = label?.nextElementSibling;
+  if (!value) return html;
+  value.insertAdjacentHTML("afterbegin", `<div data-report-atom="${FEATURE_IMAGES_ATOM_ID}"></div>`);
+  // 칸 안 글자는 문단이어야 그림(블록) 옆에 함께 놓인다.
+  [...value.childNodes].forEach((node) => {
+    if (node.nodeType === 3 && node.textContent?.trim()) { const p = document.createElement("p"); node.replaceWith(p); p.append(node); }
   });
   return root.innerHTML;
 }

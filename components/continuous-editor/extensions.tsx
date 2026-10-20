@@ -8,7 +8,8 @@ import { createContext, useContext } from "react";
 import type { ReportBlock } from "@/lib/report/sections";
 import { BlockView } from "@/components/report-web-document/ReportBlockView";
 import { SectionBanner } from "@/components/report-web-document/ReportDocumentChrome";
-import { BANNER_ATOM_ID } from "@/lib/editor/toEditorHtml";
+import { BANNER_ATOM_ID, FEATURE_IMAGES_ATOM_ID } from "@/lib/editor/toEditorHtml";
+import { ReportImageUploadSlots } from "@/components/report/ReportImageUploadSlots";
 
 /**
  * 보고서 HTML의 **인라인 서식(배경색·여백·글자 크기)을 그대로 지닌다.** TipTap 기본 문단은
@@ -22,8 +23,17 @@ export const KeepStyle = Extension.create({
       // 기본 동작은 문단을 둘로 갈라 앞쪽에 빈 색 띠를 남겼다.
       Enter: ({ editor }) => {
         const { $from, empty } = editor.state.selection;
+        // 블록(reportDiv) 안 **빈 줄**에서 Enter → 줄만 하나 더 넣는다. 기본 동작(liftEmptyBlock)은 빈 줄을
+        // 블록 밖으로 빼며 블록을 둘로 쪼개, 종합 해석 상자가 그 자리에서 끊겼다(2026-10-19 담당자 지적).
+        if (empty && $from.parent.type.name === "paragraph" && $from.parent.content.size === 0
+          && $from.depth > 1 && $from.node($from.depth - 1).type.name === "reportDiv") {
+          return editor.commands.splitBlock();
+        }
         if (!empty || $from.parentOffset !== 0 || !$from.parent.attrs.style || $from.parent.content.size === 0) return false;
-        return editor.chain().insertContentAt($from.before(), { type: "paragraph" }).run();
+        // 상자 안 문단이면 새 빈 줄도 상자에 넣는다 — 표시 없이 넣었더니 상자가 그 줄에서 끊겨 아래쪽이
+        // 윗선 없는 상자로 보였다(2026-10-19 담당자 지적). 옛 저장본은 열 때 repairBoxGaps가 고친다.
+        const box = $from.parent.attrs.box;
+        return editor.chain().insertContentAt($from.before(), { type: "paragraph", attrs: box ? { box: "panel" } : {} }).run();
       },
     };
   },
@@ -82,6 +92,15 @@ function AtomView({ node }: ReactNodeViewProps) {
   if (!context) return <NodeViewWrapper />;
   if (id === BANNER_ATOM_ID) {
     return <NodeViewWrapper contentEditable={false}><SectionBanner numeral={context.numeral} title={context.title} /></NodeViewWrapper>;
+  }
+  if (id === FEATURE_IMAGES_ATOM_ID) {
+    // 저장 키는 블록 화면과 같다 — 예전에 붙인 사진이 그대로 보인다.
+    // ponytail: 사진은 이 브라우저(localStorage)에만 저장된다(블록 화면과 같은 한계). 다른 PC에서도 보여야 하면 Blob 업로드로.
+    return (
+      <NodeViewWrapper contentEditable={false} data-atom-id={id}>
+        <ReportImageUploadSlots storageKey={`viewer:image:${context.sourceFileUrl ?? "demo"}:overview-service`} emptyLabel="제품·서비스 이미지 첨부" />
+      </NodeViewWrapper>
+    );
   }
   const block = context.blocks.get(id);
   return (
