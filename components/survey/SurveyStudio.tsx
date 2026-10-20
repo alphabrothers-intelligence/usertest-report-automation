@@ -429,7 +429,6 @@ function SurveyEditor({ draft, onChange, surveyId }: { draft: SurveyDraft; onCha
         />
         {/* 기획안은 버튼 묶음 속 내려받기 하나가 아니라 다음 단계다 — 따로 떼어 진하게 둔다(2026-10-20 담당자). */}
         <div className="ml-auto flex items-center gap-3 border-l border-[#e7ecf3] pl-4">
-          <span className="text-right text-[12px] leading-tight text-[#94a0b2]">설문을 다 고쳤다면<br />다음 단계로</span>
           {surveyId ? (
             <Link href={`/plan/new?survey=${surveyId}`} className="flex items-center gap-2 rounded-xl bg-[#356df3] px-5 py-2.5 text-[14px] font-semibold text-white shadow-[0_4px_12px_rgba(53,109,243,0.25)] hover:bg-[#2a5bd6]">
               다음 단계: 기획안 만들기 <span aria-hidden>→</span>
@@ -442,12 +441,9 @@ function SurveyEditor({ draft, onChange, surveyId }: { draft: SurveyDraft; onCha
 
       {parts && (
         <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-[#c9d8fb] bg-[#f3f7ff] px-5 py-4">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#356df3] text-white" aria-hidden>
-            <svg viewBox="0 0 24 24" className="size-5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3v6a6 6 0 0 0 6 6h0a6 6 0 0 1 6 6M18 3v6a6 6 0 0 1-6 6" /></svg>
-          </span>
           <div className="min-w-0 flex-1">
             <p className="text-[15px] font-bold text-[#1d2433]">
-              제품 {parts.length}개를 한 설문에서 분기로 묻고 있어요 <span className="font-normal text-[#4a566b]">— {parts.map((p) => p.productName).join(" / ")}</span>
+              제품 {parts.length}개를 한 설문에서 분기로 묻고 있어요 <span className="font-normal text-[#4a566b]">→ {parts.map((p) => p.productName).join(" / ")}</span>
             </p>
             <p className="mt-0.5 text-[13px] text-[#4a566b]">
               제품마다 WALLA 폼을 따로 돌리려면 나누세요. 지금 설문은 그대로 남고, 기획안은 나누지 않아도 제품별로 정리됩니다.
@@ -457,7 +453,7 @@ function SurveyEditor({ draft, onChange, surveyId }: { draft: SurveyDraft; onCha
             type="button"
             onClick={splitIntoSurveys}
             disabled={splitting || !surveyId}
-            className="rounded-xl bg-[#356df3] px-5 py-2.5 text-[14px] font-semibold text-white hover:bg-[#2a5bd6] disabled:opacity-50"
+            className="rounded-xl border border-[#356df3] bg-white px-5 py-2.5 text-[14px] font-semibold text-[#356df3] hover:bg-[#eef3fe] disabled:opacity-50"
           >
             {splitting ? "나누는 중…" : `제품별 설문 ${parts.length}개로 나누기`}
           </button>
