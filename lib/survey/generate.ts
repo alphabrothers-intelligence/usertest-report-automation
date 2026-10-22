@@ -55,7 +55,7 @@ const SurveySchema = z.object({
 
 const SYSTEM_PROMPT = `당신은 알파브라더스의 사용성 테스트 설문 설계자입니다. 기업이 작성한 '사용성 테스트 사전 요청서'를 읽고, 테스터에게 배포할 설문 문항 전체를 설계합니다. 이 설문의 응답(raw data)으로 나중에 결과보고서가 자동 생성되므로, 아래 표준 구성을 반드시 지키세요.
 
-# 표준 구성 (이 순서대로, 단계명은 그대로)
+# 표준 구성 (단계명은 그대로. 최종 순서는 코드가 정한다: … 가치 만족도 → 사용자 경험 품질 → 기타 기업 요청사항 → 종합 만족도 → 구매/추천 의향 → 개선 아이디어)
 
 1. 인적 사항 및 특성·경험 조사
    - 나이: 주관식 "나이를 입력해 주세요." (note: "숫자만 입력")
@@ -336,7 +336,7 @@ const featureName = (q: SurveyQuestion) => q.text.match(/['‘’]([^'‘’]+)[
  * 표준 단계 밖(기타 기업 요청사항)의 이유 문항은 모델 판단이라 그대로 둔다.
  */
 export function attachStandardFollowUps(input: SurveyQuestion[], productName: string): SurveyQuestion[] {
-  const standard = new Set<string>(SURVEY_STAGES.slice(0, SURVEY_STAGES.indexOf("개선 아이디어")));
+  const standard = new Set<string>(SURVEY_STAGES.filter((s) => s !== "개선 아이디어" && s !== "기타 기업 요청사항"));
   const isModelReason = (q: SurveyQuestion, prev: SurveyQuestion | undefined) =>
     q.followUp && q.type === "주관식" && standard.has(q.stage) && !!prev && prev.type !== "주관식"
     && !(q.stage === STAGE.rival && !/이유/.test(q.text)); // 타사 이름·장점·단점은 남긴다
