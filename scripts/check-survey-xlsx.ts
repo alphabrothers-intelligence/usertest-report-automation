@@ -135,7 +135,7 @@ const ranked = normalizeSurvey({
   ],
 } as unknown as RawSurvey);
 assert.deepStrictEqual(ranked.questions.map((x) => x.id),
-  ["f1", "f1_reason", "f2", "f2_reason", "f2_rank1", "f2_rank2", "v1", "v1_reason", "v2", "v2_reason", "o", "n1", "n2", "n2_reason", "e", "er"]);
+  ["f1", "f1_reason", "f2", "f2_reason", "f2_rank1", "f2_rank2", "v1", "v1_reason", "v2", "v2_reason", "o", "o_reason", "n1", "n2", "n2_reason", "e", "er"]);
 const r1 = ranked.questions.find((x) => x.id === "f2_rank1")!;
 assert.strictEqual(r1.text, "앱의 기능 중 가장 중요하다고 생각하는 기능은 무엇인가요? (1순위)");
 assert.deepStrictEqual(r1.options, ["기능 A", "기능 B"]);
@@ -194,14 +194,14 @@ assert.ok(lintSurvey({ ...fixed, questions: [q("x", { text: "사용하실 의향
 assert.strictEqual(rankOf({ type: "객관식-단일", text: "두 번째로 중요하다고 생각하는 기능은 무엇인가요? (2순위)" }), 2);
 assert.strictEqual(rankOf({ type: "객관식-단일", text: "3위" }), 3);
 assert.strictEqual(rankOf({ type: "주관식", text: "1위" }), null);
-// 핵심구매요인 뒤에는 이유 주관식이 하나 붙는다(리바랩스 설문과 구성 맞춤, 보고서는 읽지 않는다). 종합 만족도엔 안 붙는다.
+// 핵심구매요인·종합 만족도 뒤에는 이유 주관식이 붙는다(원본 설문과 구성 맞춤, 보고서에는 싣지 않는다).
 const withReasons = attachStandardFollowUps([
   q("kbf", { stage: "핵심구매요인 파악", type: "객관식-단일", options: ["A", "B"] }),
   q("kbf_model_reason", { stage: "핵심구매요인 파악", followUp: true, text: "왜 그렇게 생각하시나요?" }),
   q("tot", { stage: "종합 만족도", type: "척도(0-10)" }),
 ], "앱");
 assert.deepStrictEqual(withReasons.map((x) => `${x.id}:${x.text}`),
-  ["kbf:kbf", "kbf_reason:위와 같이 평가한 이유는 무엇인가요?", "tot:tot"], "핵심구매요인 이유 문항");
+  ["kbf:kbf", "kbf_reason:위와 같이 평가한 이유는 무엇인가요?", "tot:tot", "tot_reason:위와 같이 평가한 이유는 무엇인가요?"], "핵심구매요인·종합 만족도 이유 문항");
 // 사용자 경험 품질: 접두 번호는 계열별 1부터 다시 매기고, 이유 문항은 붙지 않는다. 3개 미만 계열과 접두 없는 문항엔 경고.
 const ux = [
   q("u1", { stage: "사용자 경험 품질 평가", type: "척도(0-10)", text: "실용성3) 앱 조작은 [불편하다 / 편하다]" }),
