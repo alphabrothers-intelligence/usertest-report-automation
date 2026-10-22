@@ -73,6 +73,10 @@ const GROUP_PREFIX = /^([가-힣A-Za-z]+)\s*\d+\s*\)/;
  * (응답자에게 보일 필요가 없다) raw data를 받은 뒤 담당자가 붙여야 한다 — 빠뜨리면 사용자 경험 품질 장이 조용히 사라진다.
  * 보고서 업로드 화면이 이 목록으로 경고한다.
  */
+/** 헤더 중 기업 요청 접두(`기업 요청 질문 -` 등)가 붙은 것이 하나라도 있는지 — 없으면 업로드 화면이 확인을 권한다. */
+export const hasEnterprisePrefix = (headerRow: unknown[]) =>
+  headerRow.some((h) => /^\s*(기타\s*)?기업\s*요청\s*(질문|사항)\s*[-–—]/.test(String(h ?? "")));
+
 export function uxHeadersMissingPrefix(headerRow: unknown[]): string[] {
   return headerRow.map((h) => String(h ?? "").replace(/\s+/g, " ").trim())
     .filter((h) => /\[[^\]/]+\/[^\]]+\]/.test(h) && !GROUP_PREFIX.test(h));

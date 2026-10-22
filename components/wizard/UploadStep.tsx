@@ -129,6 +129,13 @@ export function UploadStep({
         </div>
       )}
 
+      {validation?.valid && validation.hasEnterprisePrefix === false && (
+        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">기업 요청 문항이 있었다면, 문항 제목 앞에 ‘기업 요청 질문 - ’이 붙어 있는지 확인해 주세요.</p>
+          <p className="mt-1">이 표시가 없으면 기업 요청 문항이 기능 만족도로 분류돼 기능별 그래프·사분면에 섞일 수 있습니다. 설문 생성 때 받은 ‘WALLA 설정 목록’ 7번에 붙일 문항이 적혀 있습니다. 기업 요청 문항이 없던 설문이면 넘어가셔도 됩니다.</p>
+        </div>
+      )}
+
       {validation?.valid && !productInfoDone && (
         <div className="mt-4">
           {companyFile && !extracted && (

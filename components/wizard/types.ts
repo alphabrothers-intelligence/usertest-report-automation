@@ -15,6 +15,8 @@ export interface ValidateResult {
   errors?: { index: number; expected: string; actual: string }[];
   /** 계열 표시(`실용성1)`) 없이 들어온 의미분별 척도 헤더 — 이대로면 사용자 경험 품질 장이 안 나온다. */
   uxMissingPrefix?: string[];
+  /** 헤더에 '기업 요청 질문 -' 접두가 하나라도 있는지. 없으면 기업 요청 문항이 기능으로 섞일 수 있어 확인을 권한다. */
+  hasEnterprisePrefix?: boolean;
 }
 
 export interface WizardState {

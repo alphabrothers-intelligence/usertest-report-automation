@@ -129,6 +129,13 @@ export const UX_PREFIX = /^\s*(실용성|즐거움)\s*\d*\s*\)\s*/;
 export const uxLabel = (text: string) => text.match(UX_PREFIX)?.[0].trim();
 export const withoutUxPrefix = (text: string) => text.replace(UX_PREFIX, "");
 
+/**
+ * 기업 요청 문항은 문구가 기능 만족도와 똑같이 생겨 보고서 분류가 기능으로 오인한다(투블럭 6문항 실측). raw data 헤더가
+ * 이 말로 시작해야 확실히 기업 요청으로 본다(lib/agent/classify.ts ENTERPRISE_HEADER) — 응답을 받은 뒤 붙이도록 안내한다.
+ */
+export const ENTERPRISE_STAGE = "기타 기업 요청사항";
+export const ENTERPRISE_PREFIX = "기업 요청 질문 - ";
+
 /** 기능 중요도 순위 문항의 순위 — 새 문구는 "…무엇인가요? (2순위)", 옛 저장본은 "2위". 순위 문항이 아니면 null. */
 export function rankOf(q: Pick<SurveyQuestion, "text" | "type">): number | null {
   if (!isChoice(q.type)) return null;
@@ -246,6 +253,7 @@ export function wallaTodos(q: SurveyQuestion, layout: WallaSlot[]): string[] {
     todos.push(`문항 유형을 선형배율(0~10)로 바꾸고 양 끝 라벨 0='${low}', 10='${high}' 입력`);
   }
   if (isChoice(q.type) && q.options.some(isOther)) todos.push("'기타(직접 입력)' 보기를 지우고 '기타' 옵션 추가");
+  if (q.stage === ENTERPRISE_STAGE) todos.push(`응답 수집 후 raw data의 이 문항 제목 앞에 '${ENTERPRISE_PREFIX}'를 붙여야 보고서가 기업 요청 문항으로 분류합니다(안 붙이면 기능 만족도로 섞일 수 있음)`);
   const ux = uxLabel(q.text);
   if (ux) todos.push(`응답 수집 후 raw data의 이 문항 제목 앞에 '${ux}'를 붙여야 보고서에 사용자 경험 품질 그래프가 나옵니다(설문에는 표시하지 않음)`);
   return todos;
@@ -295,6 +303,13 @@ export function wallaChecklist(questions: SurveyQuestion[]): string {
       "  설문 화면에는 '실용성1)' 같은 표시를 넣지 않았습니다. 응답을 받은 뒤 raw data 파일의 문항 제목(1행)을",
       "  아래처럼 고쳐서 올려야 보고서에 사용자 경험 품질 그래프(실용성·즐거움)가 나옵니다.");
     for (const s of ux) lines.push(`  · ${s.label} ${snippet(withoutUxPrefix(s.q.text))} → 제목 앞에 '${uxLabel(s.q.text)}'`);
+  }
+  const enterprise = layout.filter((s) => s.q.stage === ENTERPRISE_STAGE);
+  if (enterprise.length) {
+    lines.push("", `■ 7. [보고서 만들 때 꼭] 기업 요청 문항 제목 앞에 '${ENTERPRISE_PREFIX}' 붙이기 (${enterprise.length}개)`,
+      "  기업 요청 문항은 기능 만족도 문항과 생김새가 같아, 표시가 없으면 보고서가 기능 평가로 섞을 수 있습니다.",
+      "  응답을 받은 뒤 raw data 파일의 문항 제목(1행) 앞에 붙여서 올려 주세요(이유 문항 포함).");
+    for (const s of enterprise) lines.push(`  · ${s.label} ${snippet(s.q.text)} → 제목 앞에 '${ENTERPRISE_PREFIX}'`);
   }
   return lines.join("\r\n") + "\r\n";
 }

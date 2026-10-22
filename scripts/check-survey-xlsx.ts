@@ -10,7 +10,7 @@ import { numberQuestions, rankOf, scaleAnchors, toCsv, toSheetRows, toWallaTxt, 
 import { buildSurveyXlsx } from "../lib/survey/xlsx";
 import { addUpcomingFeatureQuestions, attachStandardFollowUps, fixParticles, numberUxQuality, normalizeSurvey, RANK_CAUTION, UPCOMING_CAUTION, type RawSurvey } from "../lib/survey/generate";
 import { lintSurvey } from "../lib/survey/lint";
-import { uxHeadersMissingPrefix } from "../lib/agent/profile";
+import { hasEnterprisePrefix, uxHeadersMissingPrefix } from "../lib/agent/profile";
 
 const q = (id: string, patch: Partial<SurveyQuestion> = {}): SurveyQuestion => ({
   id, stage: "인적 사항 및 특성·경험 조사", text: id, type: "주관식", options: [], required: true,
@@ -223,6 +223,11 @@ const uxList = wallaChecklist(ux);
 assert.ok(uxList.includes("■ 6. [보고서 만들 때 꼭]") && uxList.includes("→ 제목 앞에 '실용성1)'") && uxList.includes("→ 제목 앞에 '즐거움1)'"), "설정 목록 6번");
 assert.ok(wallaTodos(ux[0], wallaLayout(ux)).some((t) => t.includes("'실용성1)'를 붙여야")), "문항 할 일");
 assert.ok(ux[0].caution?.includes("WALLA에는 '실용성1)' 없이"), "문항 경고");
+const ent = [q("e1", { stage: "기타 기업 요청사항", type: "척도(0-10)", text: "'리포트' 화면을 이해하기 쉬웠나요?" })];
+assert.ok(wallaChecklist(ent).includes("■ 7. [보고서 만들 때 꼭] 기업 요청 문항") && wallaChecklist(ent).includes("→ 제목 앞에 '기업 요청 질문 - '"), "설정 목록 7번");
+assert.ok(wallaTodos(ent[0], wallaLayout(ent)).some((t) => t.includes("'기업 요청 질문 - '")), "기업 요청 문항 할 일");
+assert.ok(!wallaChecklist([q("n", {})]).includes("■ 7."), "기업 요청 문항이 없으면 7번 없음");
+assert.deepStrictEqual([hasEnterprisePrefix(["나이", "기업 요청 질문 - Q23. x"]), hasEnterprisePrefix(["기타 기업 요청사항 - x"]), hasEnterprisePrefix(["나이"])], [true, true, false]);
 assert.deepStrictEqual(uxHeadersMissingPrefix(["실용성1) 조작은 [불편하다 / 편하다]", "앱 조작은 [불편하다 / 편하다]", "나이", "실용성1)\r\n조작 편의성"]),
   ["앱 조작은 [불편하다 / 편하다]"], "업로드 경고는 표시 없는 의미분별 척도만");
 

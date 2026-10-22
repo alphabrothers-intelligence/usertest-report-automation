@@ -3,7 +3,7 @@ import { z } from "zod";
 import { loadWallaFromUrl } from "@/lib/walla/loadFromUrl";
 import { extractFeatureNames } from "@/lib/walla/schema";
 import { filterWallaResponseRows } from "@/lib/walla/normalize";
-import { uxHeadersMissingPrefix } from "@/lib/agent/profile";
+import { hasEnterprisePrefix, uxHeadersMissingPrefix } from "@/lib/agent/profile";
 
 // app/api/chat/route.ts의 validateInput 도구 본문을 그대로 옮긴 것 — LLM 없이 raw data
 // 구조만 검증하는 결정론적 로직이라 채팅 없이도 그대로 재사용 가능하다.
@@ -37,5 +37,6 @@ export async function POST(request: Request) {
     featureNames,
     errors: loaded.validation.errors,
     uxMissingPrefix: uxHeadersMissingPrefix(loaded.parsed.headerRow),
+    hasEnterprisePrefix: hasEnterprisePrefix(loaded.parsed.headerRow),
   });
 }
