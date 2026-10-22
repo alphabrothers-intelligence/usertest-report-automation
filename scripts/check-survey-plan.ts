@@ -16,7 +16,7 @@ const q = (id: string, stage: string, patch: Partial<SurveyQuestion> = {}): Surv
 });
 const S = {
   p: "인적 사항 및 특성·경험 조사", f: "기능별 고객 경험 평가 - 자사 제품 평가", c: "기능별 고객 경험 평가 - 타사 제품 평가", k: "핵심구매요인 파악",
-  v: "가치 만족도 평가", r: "구매/추천 의향 조사", t: "종합 만족도", i: "개선 아이디어", e: "기타 기업 요청사항",
+  v: "가치 만족도 평가", u: "사용자 경험 품질 평가", r: "구매/추천 의향 조사", t: "종합 만족도", i: "개선 아이디어", e: "기타 기업 요청사항",
 };
 const perProduct = (p: string, tag: string): SurveyQuestion[] => {
   const b = { branchOn: "track", branchValue: p };
@@ -27,6 +27,7 @@ const perProduct = (p: string, tag: string): SurveyQuestion[] => {
     q(`${tag}f2`, S.f, { ...b, type: "척도(0-10)", text: "'기능 B' 기능에 대해 얼마나 만족하시나요?" }),
     q(`${tag}k`, S.k, { ...b, type: "객관식-단일", options: ["가격", "편의성", "기타(직접 입력)"], text: "가장 크게 영향을 미치는 요인은 무엇인가요?" }),
     q(`${tag}v`, S.v, { ...b, type: "척도(0-10)", text: "가격에 대해 얼마나 만족하시나요?", note: "0=매우 비싸다, 10=매우 싸다" }),
+    q(`${tag}ux`, S.u, { ...b, type: "척도(0-10)", text: "실용성1) 조작은 [불편하다 / 편하다]", note: "0=불편하다, 10=편하다" }),
     q(`${tag}rec`, S.r, { ...b, type: "척도(0-10)", text: "추천할 의향이 얼마나 있나요?" }),
     q(`${tag}tot`, S.t, { ...b, type: "척도(0-10)" }),
     q(`${tag}idea`, S.i, { ...b, required: false }),
@@ -102,7 +103,7 @@ async function main() {
   const body = await zip.file("Contents/section1.xml")!.async("string");
   const text = [...body.matchAll(/<hp:t>([^<]*)/g)].map((m) => m[1]).join("\n");
   for (const want of ["테스트기업", "(입력 필요)", "2026년 10월 20일", "■ 앱 A", "■ 서비스 B", "1. 앱 A 설문", "2. 서비스 B 설문", "의 기능 중 가장 중요하다고 생각하는 기능은 무엇인가요? (1~2순위)",
-    "매우 비싸다", "매우 불만족", "복수 선택", "2026 by Alphabrothers", "4대 가치별 만족도 평가", "1-2) 기능별 고객경험 평가 _ 자사 제품 평가", "2-3) 기능별 고객경험 평가 _ 타사 제품 평가"]) {
+    "매우 비싸다", "매우 불만족", "복수 선택", "2026 by Alphabrothers", "4대 가치별 만족도 평가", "사용자 경험 품질 평가", "실용성1) 조작은 [불편하다 / 편하다]", "불편하다", "1-2) 기능별 고객경험 평가 _ 자사 제품 평가", "2-3) 기능별 고객경험 평가 _ 타사 제품 평가"]) {
     assert.ok(text.includes(want), `본문에 '${want}' 없음`);
   }
   assert.match(text, /\(Q\d+ '네, 있어요' 응답 시\)/, "분기 문항에 조건 표기 없음");

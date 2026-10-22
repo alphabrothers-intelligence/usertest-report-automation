@@ -8,7 +8,7 @@ import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { numberQuestions, rankOf, scaleAnchors, toCsv, toSheetRows, toWallaTxt, wallaChecklist, wallaLayout, wallaTodos, splitByProduct, type SurveyQuestion } from "../lib/survey/types";
 import { buildSurveyXlsx } from "../lib/survey/xlsx";
-import { addUpcomingFeatureQuestions, attachStandardFollowUps, fixParticles, normalizeSurvey, RANK_CAUTION, UPCOMING_CAUTION, type RawSurvey } from "../lib/survey/generate";
+import { addUpcomingFeatureQuestions, attachStandardFollowUps, fixParticles, numberUxQuality, normalizeSurvey, RANK_CAUTION, UPCOMING_CAUTION, type RawSurvey } from "../lib/survey/generate";
 import { lintSurvey } from "../lib/survey/lint";
 
 const q = (id: string, patch: Partial<SurveyQuestion> = {}): SurveyQuestion => ({
@@ -201,6 +201,20 @@ const withReasons = attachStandardFollowUps([
 ], "앱");
 assert.deepStrictEqual(withReasons.map((x) => `${x.id}:${x.text}`),
   ["kbf:kbf", "kbf_reason:위와 같이 평가한 이유는 무엇인가요?", "tot:tot"], "핵심구매요인 이유 문항");
+// 사용자 경험 품질: 접두 번호는 계열별 1부터 다시 매기고, 이유 문항은 붙지 않는다. 3개 미만 계열과 접두 없는 문항엔 경고.
+const ux = [
+  q("u1", { stage: "사용자 경험 품질 평가", type: "척도(0-10)", text: "실용성3) 앱 조작은 [불편하다 / 편하다]" }),
+  q("u2", { stage: "사용자 경험 품질 평가", type: "척도(0-10)", text: "즐거움 1) 이용 경험은 [지루하다 / 재미있다]" }),
+  q("u3", { stage: "사용자 경험 품질 평가", type: "척도(0-10)", text: "실용성) 흐름은 [혼란스럽다 / 자연스럽다]" }),
+  q("u4", { stage: "사용자 경험 품질 평가", type: "척도(0-10)", text: "실용성9) 화면 구성은 [복잡하다 / 직관적이다]" }),
+  q("u5", { stage: "사용자 경험 품질 평가", type: "척도(0-10)", text: "메뉴는 [어렵다 / 쉽다]" }),
+];
+numberUxQuality(ux);
+assert.deepStrictEqual(ux.map((x) => x.text.split(")")[0]), ["실용성1", "즐거움1", "실용성2", "실용성3", "메뉴는 [어렵다 / 쉽다]"]);
+assert.ok(ux[1].caution?.includes("1개뿐"), "즐거움 1개 경고");
+assert.ok(!ux[0].caution, "실용성은 3개라 경고 없음");
+assert.ok(ux[4].caution?.includes("계열이 정해지지"), "접두 없는 문항 경고");
+assert.ok(!attachStandardFollowUps(ux, "앱").some((x) => x.id.endsWith("_reason")), "UX 품질엔 이유 문항이 붙지 않는다");
 // 조사: 받침으로 고르고, 한글 아닌 글자 뒤는 중복만 합친다.
 assert.strictEqual(fixParticles("필톡을(를) 지인에게"), "필톡을 지인에게");
 assert.strictEqual(fixParticles("케어로그을(를) 쓰고 앱이(가) 좋은(는)"), "케어로그를 쓰고 앱이 좋은");

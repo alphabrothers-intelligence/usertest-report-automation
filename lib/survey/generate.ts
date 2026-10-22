@@ -111,6 +111,16 @@ const SYSTEM_PROMPT = `당신은 알파브라더스의 사용성 테스트 설�
      "{제품명}의 사회적 가치 영역에 대한 만족도는 몇 점인가요?"        (note: "사회·공공적 이슈에 기여할 수 있는 가치")
    이유 문항은 코드가 붙입니다. 만들지 마세요.
    '디자인·UI는 얼마나 만족스러웠나요?' 같은 다른 문항을 이 단계에 넣지 마세요. 기업이 따로 요청한 것이면 기타 기업 요청사항에 둡니다.
+6-1. 사용자 경험 품질 평가 — **조건부.** 아래 둘 중 하나일 때만 만들고, 아니면 이 단계를 통째로 빼세요(2026-10-22 담당자):
+   ① 사전요청서가 UX·사용 경험·사용성 자체의 평가를 요청함(조작감, 재미, 몰입, 화면 구성의 직관성 등)
+   ② 게임·엔터테인먼트처럼 쓰는 경험 자체가 핵심인 앱
+   의료·업무용 도구, 기관용(B2B) 서비스, 실물 기기는 ①이 없으면 만들지 않습니다.
+   형식(리바랩스 원본): 의미분별 척도(0-10)를 **실용성**과 **즐거움** 두 계열로 각 3~4개, 실용성1·즐거움1·실용성2·… 번갈아.
+     text: "실용성1) {제품명}의 조작은 [불편하다 / 편하다]"     note: "0=불편하다, 10=편하다"
+     text: "즐거움1) {제품명} 이용 경험은 [지루하다 / 재미있다]"  note: "0=지루하다, 10=재미있다"
+   실용성 = 조작 편의·흐름의 자연스러움·화면 구성의 직관성·규칙 이해 용이성, 즐거움 = 재미·몰입·재이용 의향·흥미.
+   **"실용성N)"·"즐거움N)" 접두를 반드시 붙이세요** — 보고서가 이 접두로 이 장을 알아봅니다. 대괄호 안 두 말은 부정 / 긍정 순서.
+   이유 문항은 만들지 마세요(보고서가 쓰지 않습니다).
 7. 구매/추천 의향 조사 — 두 척도(0-10), 문구와 순서는 이대로(2026-10-19 담당자 지정, '~요' 통일):
      "본 제품을 체험해 보았을 때, {제품명}을(를) 사용할 의향이 있나요?"          (note "0=전혀 없음, 10=매우 있음")
      "본 제품을 체험해 보았을 때, {제품명}을(를) 지인에게 추천할 의향이 얼마나 있나요?" (note 같음)
@@ -230,6 +240,36 @@ export async function generateSurvey(source: SurveySource): Promise<SurveyDraft>
   // PDF를 그대로 넘기면 쪽마다 그림 토큰이 붙는다 — 입력 토큰을 남겨 비용을 볼 수 있게 한다(PRD 11장 21번).
   console.info(`[survey-generate] ${"pdf" in source ? "pdf" : "text"} usage`, JSON.stringify(usage));
   return normalizeSurvey(output);
+}
+
+const UX_STAGE = "사용자 경험 품질 평가";
+const UX_SERIES = /^\s*(실용성|즐거움)\s*\d*\s*\)\s*/;
+
+/**
+ * 사용자 경험 품질 문항의 `실용성N)`·`즐거움N)` 접두를 코드가 다시 매긴다(제품별·계열별 1부터). 보고서는 raw data
+ * 헤더의 이 접두로만 이 장을 알아보므로(lib/agent/classify.ts) 모델이 번호를 틀리거나 빠뜨리면 장이 통째로 사라진다.
+ * 계열을 알 수 없는 문항(접두 없음)과 3개 미만 계열에는 경고를 단다 — 3개 미만이면 방사형 차트가 성립하지 않는다.
+ */
+export function numberUxQuality(questions: SurveyQuestion[]): void {
+  const counts = new Map<string, number>();
+  const ux = questions.filter((q) => q.stage === UX_STAGE && q.type === "척도(0-10)");
+  for (const q of ux) {
+    const series = q.text.match(UX_SERIES)?.[1];
+    if (!series) {
+      q.caution = ["'실용성' 또는 '즐거움' 계열이 정해지지 않았습니다. 문구 앞에 '실용성N)' 또는 '즐거움N)'을 붙여야 보고서에 나옵니다.", q.caution].filter(Boolean).join(" ");
+      continue;
+    }
+    const key = `${q.branchOn}|${q.branchValue}|${series}`;
+    const n = (counts.get(key) ?? 0) + 1;
+    counts.set(key, n);
+    q.text = `${series}${n}) ${q.text.replace(UX_SERIES, "")}`;
+  }
+  for (const [key, n] of counts) {
+    if (n >= 3) continue;
+    const series = key.split("|")[2];
+    const first = ux.find((q) => q.text.startsWith(`${series}1)`) && `${q.branchOn}|${q.branchValue}|${series}` === key);
+    if (first) first.caution = [`'${series}' 문항이 ${n}개뿐입니다. 3개 이상이어야 보고서에 방사형 차트가 나옵니다.`, first.caution].filter(Boolean).join(" ");
+  }
 }
 
 /** PRD 6.8.1 미해결 — 설문 도구가 막지 않으면 같은 기능을 여러 순위에 고를 수 있고 순위·사분면 분석이 틀어진다. */
@@ -395,6 +435,7 @@ export function normalizeSurvey(raw: RawSurvey): SurveyDraft {
   questions.splice(0, questions.length, ...order.map((i) => questions[i]));
   questions.splice(0, questions.length, ...attachStandardFollowUps(questions, raw.productName.trim()));
   questions.splice(0, questions.length, ...addUpcomingFeatureQuestions(questions, raw.excludedFeatures));
+  numberUxQuality(questions);
   for (const [i, q] of questions.entries()) {
     // 매뉴얼 2-5: 복수 선택은 문구에서 알 수 있어야 한다. 실측(피매치): 복수 선택 3문항 모두 표기가 없었다.
     if (q.type === "객관식-복수" && !/모두|중복/.test(q.text)) q.text = `${q.text.trim()} (중복 선택 가능)`;

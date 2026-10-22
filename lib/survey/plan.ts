@@ -121,6 +121,7 @@ const STAGE_TITLE: Record<string, { toc: string; heading: string; process: strin
   "고객 여정 기반 경험 평가": { toc: "고객 여정 기반 경험 평가", heading: "고객 여정 기반 경험 평가", process: ["고객 여정 기반", "경험 평가"] },
   "핵심구매요인 파악": { toc: "핵심구매요인(KBF) 파악", heading: "핵심구매요인(KBF) 파악", process: ["핵심구매요인 파악"] },
   "가치 만족도 평가": { toc: "4대 가치별 만족도 평가", heading: "4대 가치별 만족도 평가", process: ["가치 만족도 평가"] },
+  "사용자 경험 품질 평가": { toc: "사용자 경험 품질 평가", heading: "사용자 경험 품질 평가", process: ["사용자 경험", "품질 평가"] },
   "구매/추천 의향 조사": { toc: "구매/추천 의향 조사", heading: "구매/추천 의향 조사", process: ["구매/추천 의향 조사"] },
   "종합 만족도": { toc: "종합적 만족도 조사", heading: "종합 만족도 (전반적 만족도)", process: ["종합 만족도"] },
   "개선 아이디어": { toc: "개선아이디어 조사", heading: "개선 아이디어 제안", process: ["개선 아이디어"] },
