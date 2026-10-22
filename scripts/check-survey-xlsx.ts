@@ -10,6 +10,7 @@ import { numberQuestions, rankOf, scaleAnchors, toCsv, toSheetRows, toWallaTxt, 
 import { buildSurveyXlsx } from "../lib/survey/xlsx";
 import { addUpcomingFeatureQuestions, attachStandardFollowUps, fixParticles, numberUxQuality, normalizeSurvey, RANK_CAUTION, UPCOMING_CAUTION, type RawSurvey } from "../lib/survey/generate";
 import { lintSurvey } from "../lib/survey/lint";
+import { uxHeadersMissingPrefix } from "../lib/agent/profile";
 
 const q = (id: string, patch: Partial<SurveyQuestion> = {}): SurveyQuestion => ({
   id, stage: "인적 사항 및 특성·경험 조사", text: id, type: "주관식", options: [], required: true,
@@ -212,9 +213,19 @@ const ux = [
 numberUxQuality(ux);
 assert.deepStrictEqual(ux.map((x) => x.text.split(")")[0]), ["실용성1", "즐거움1", "실용성2", "실용성3", "메뉴는 [어렵다 / 쉽다]"]);
 assert.ok(ux[1].caution?.includes("1개뿐"), "즐거움 1개 경고");
-assert.ok(!ux[0].caution, "실용성은 3개라 경고 없음");
+assert.ok(!ux[0].caution?.includes("개뿐"), "실용성은 3개라 개수 경고 없음");
 assert.ok(ux[4].caution?.includes("계열이 정해지지"), "접두 없는 문항 경고");
 assert.ok(!attachStandardFollowUps(ux, "앱").some((x) => x.id.endsWith("_reason")), "UX 품질엔 이유 문항이 붙지 않는다");
+// 계열 표시는 응답자에게 안 보이게 WALLA txt에서 빼고, 설정 목록·문항 할 일·경고로 "raw data 제목에 붙이라"고 알린다.
+const uxTxt = toWallaTxt(ux);
+assert.ok(uxTxt.includes("앱 조작은 [불편하다 / 편하다]") && !/실용성\d\)|즐거움\d\)/.test(uxTxt), "WALLA txt에 계열 표시가 남음");
+const uxList = wallaChecklist(ux);
+assert.ok(uxList.includes("■ 6. [보고서 만들 때 꼭]") && uxList.includes("→ 제목 앞에 '실용성1)'") && uxList.includes("→ 제목 앞에 '즐거움1)'"), "설정 목록 6번");
+assert.ok(wallaTodos(ux[0], wallaLayout(ux)).some((t) => t.includes("'실용성1)'를 붙여야")), "문항 할 일");
+assert.ok(ux[0].caution?.includes("WALLA에는 '실용성1)' 없이"), "문항 경고");
+assert.deepStrictEqual(uxHeadersMissingPrefix(["실용성1) 조작은 [불편하다 / 편하다]", "앱 조작은 [불편하다 / 편하다]", "나이", "실용성1)\r\n조작 편의성"]),
+  ["앱 조작은 [불편하다 / 편하다]"], "업로드 경고는 표시 없는 의미분별 척도만");
+
 // 조사: 받침으로 고르고, 한글 아닌 글자 뒤는 중복만 합친다.
 assert.strictEqual(fixParticles("필톡을(를) 지인에게"), "필톡을 지인에게");
 assert.strictEqual(fixParticles("케어로그을(를) 쓰고 앱이(가) 좋은(는)"), "케어로그를 쓰고 앱이 좋은");

@@ -13,6 +13,8 @@ export interface ValidateResult {
   respondentCount?: number;
   featureNames?: string[];
   errors?: { index: number; expected: string; actual: string }[];
+  /** 계열 표시(`실용성1)`) 없이 들어온 의미분별 척도 헤더 — 이대로면 사용자 경험 품질 장이 안 나온다. */
+  uxMissingPrefix?: string[];
 }
 
 export interface WizardState {

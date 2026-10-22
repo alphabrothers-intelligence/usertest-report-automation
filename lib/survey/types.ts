@@ -115,6 +115,15 @@ export function keepFoundSources(plan: PlanInfo | undefined, documentText: strin
 
 export const isChoice = (type: string) => type.startsWith("객관식");
 
+/**
+ * 사용자 경험 품질 문항의 계열 표시(`실용성1)`·`즐거움2)`). 보고서는 raw data 헤더의 이 표시로만 그 장을 알아보는데
+ * (lib/agent/profile.ts GROUP_PREFIX), 응답자에게 보일 필요는 없다 — WALLA txt에서는 빼고, raw data를 받은 뒤
+ * 헤더에 다시 붙이도록 설정 목록·보고서 업로드 화면에서 안내한다(2026-10-22 담당자).
+ */
+export const UX_PREFIX = /^\s*(실용성|즐거움)\s*\d*\s*\)\s*/;
+export const uxLabel = (text: string) => text.match(UX_PREFIX)?.[0].trim();
+export const withoutUxPrefix = (text: string) => text.replace(UX_PREFIX, "");
+
 /** 기능 중요도 순위 문항의 순위 — 새 문구는 "…무엇인가요? (2순위)", 옛 저장본은 "2위". 순위 문항이 아니면 null. */
 export function rankOf(q: Pick<SurveyQuestion, "text" | "type">): number | null {
   if (!isChoice(q.type)) return null;
@@ -232,6 +241,8 @@ export function wallaTodos(q: SurveyQuestion, layout: WallaSlot[]): string[] {
     todos.push(`문항 유형을 선형배율(0~10)로 바꾸고 양 끝 라벨 0='${low}', 10='${high}' 입력`);
   }
   if (isChoice(q.type) && q.options.some(isOther)) todos.push("'기타(직접 입력)' 보기를 지우고 '기타' 옵션 추가");
+  const ux = uxLabel(q.text);
+  if (ux) todos.push(`응답 수집 후 raw data의 이 문항 제목 앞에 '${ux}'를 붙여야 보고서에 사용자 경험 품질 그래프가 나옵니다(설문에는 표시하지 않음)`);
   return todos;
 }
 
@@ -273,6 +284,13 @@ export function wallaChecklist(questions: SurveyQuestion[]): string {
   lines.push(...(scales.length ? scales.map((s) => `  · ${ref(s)} — 0='${scaleAnchors(s.q.note)[0]}', 10='${scaleAnchors(s.q.note)[1]}'`) : ["  없음"]));
   section("■ 4. '기타(직접 입력)' 보기를 지우고 '기타' 옵션 추가", layout.filter((s) => isChoice(s.q.type) && s.q.options.some(isOther)));
   section("■ 5. 순위 문항 — '중복 선택 방지' 설정(같은 항목을 두 순위에 못 고르게)", layout.filter((s) => rankOf(s.q) !== null));
+  const ux = layout.filter((s) => uxLabel(s.q.text));
+  if (ux.length) {
+    lines.push("", `■ 6. [보고서 만들 때 꼭] raw data 문항 제목 앞에 계열 표시 붙이기 (${ux.length}개)`,
+      "  설문 화면에는 '실용성1)' 같은 표시를 넣지 않았습니다. 응답을 받은 뒤 raw data 파일의 문항 제목(1행)을",
+      "  아래처럼 고쳐서 올려야 보고서에 사용자 경험 품질 그래프(실용성·즐거움)가 나옵니다.");
+    for (const s of ux) lines.push(`  · ${s.label} ${snippet(withoutUxPrefix(s.q.text))} → 제목 앞에 '${uxLabel(s.q.text)}'`);
+  }
   return lines.join("\r\n") + "\r\n";
 }
 
@@ -303,7 +321,7 @@ export function toWallaTxt(questions: SurveyQuestion[]): string {
       q.type === "주관식" && !shortText ? "[[Question:TE:Essay]]" :
       "[[Question:TE:SingleLine]]"; // 이미지업로드·날짜도 — 텍스트 형식에 대응 타입이 없다
     // 문구 안의 줄바꿈은 새 태그로 오인될 수 있어 한 줄로 편다.
-    const text = [q.text, q.note && `(${q.note})`, q.type === "이미지업로드" && "[이미지 업로드 문항]", q.type === "날짜" && "[날짜 문항]"]
+    const text = [withoutUxPrefix(q.text), q.note && `(${q.note})`, q.type === "이미지업로드" && "[이미지 업로드 문항]", q.type === "날짜" && "[날짜 문항]"]
       .filter(Boolean).join(" ").replace(/\s*\n\s*/g, " ");
     out.push("", tag, text);
     if (q.type === "척도(0-10)") {

@@ -16,7 +16,7 @@ import { Output } from "ai";
 import { z } from "zod";
 import { anthropic } from "@/lib/anthropic";
 import { streamStructured, withClaudeGuard } from "@/lib/pipeline/claudeGuard";
-import { SURVEY_STAGES, SURVEY_TYPES, isChoice, productTrack, rankOf, type SurveyDraft, type SurveyQuestion } from "./types";
+import { SURVEY_STAGES, SURVEY_TYPES, isChoice, productTrack, rankOf, type SurveyDraft, type SurveyQuestion, UX_PREFIX, withoutUxPrefix } from "./types";
 
 const MODEL = process.env.ANTHROPIC_CHAT_MODEL ?? "claude-sonnet-5";
 
@@ -243,7 +243,6 @@ export async function generateSurvey(source: SurveySource): Promise<SurveyDraft>
 }
 
 const UX_STAGE = "사용자 경험 품질 평가";
-const UX_SERIES = /^\s*(실용성|즐거움)\s*\d*\s*\)\s*/;
 
 /**
  * 사용자 경험 품질 문항의 `실용성N)`·`즐거움N)` 접두를 코드가 다시 매긴다(제품별·계열별 1부터). 보고서는 raw data
@@ -254,7 +253,7 @@ export function numberUxQuality(questions: SurveyQuestion[]): void {
   const counts = new Map<string, number>();
   const ux = questions.filter((q) => q.stage === UX_STAGE && q.type === "척도(0-10)");
   for (const q of ux) {
-    const series = q.text.match(UX_SERIES)?.[1];
+    const series = q.text.match(UX_PREFIX)?.[1];
     if (!series) {
       q.caution = ["'실용성' 또는 '즐거움' 계열이 정해지지 않았습니다. 문구 앞에 '실용성N)' 또는 '즐거움N)'을 붙여야 보고서에 나옵니다.", q.caution].filter(Boolean).join(" ");
       continue;
@@ -262,7 +261,8 @@ export function numberUxQuality(questions: SurveyQuestion[]): void {
     const key = `${q.branchOn}|${q.branchValue}|${series}`;
     const n = (counts.get(key) ?? 0) + 1;
     counts.set(key, n);
-    q.text = `${series}${n}) ${q.text.replace(UX_SERIES, "")}`;
+    q.text = `${series}${n}) ${withoutUxPrefix(q.text)}`;
+    q.caution = [`WALLA에는 '${series}${n})' 없이 들어갑니다. 응답을 받은 뒤 raw data의 이 문항 제목 앞에 '${series}${n})'를 꼭 붙여야 보고서에 그래프가 나옵니다.`, q.caution].filter(Boolean).join(" ");
   }
   for (const [key, n] of counts) {
     if (n >= 3) continue;

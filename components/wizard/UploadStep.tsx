@@ -119,6 +119,16 @@ export function UploadStep({
         </div>
       )}
 
+      {!!validation?.uxMissingPrefix?.length && (
+        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">사용자 경험 품질 문항 {validation.uxMissingPrefix.length}개에 계열 표시가 없어요 — 이대로면 실용성·즐거움 그래프가 보고서에 나오지 않습니다.</p>
+          <p className="mt-1">raw data 파일의 문항 제목(1행) 앞에 <b>실용성1)</b>, <b>즐거움1)</b>처럼 계열과 번호를 붙인 뒤 다시 올려 주세요. 설문 생성 때 받은 ‘WALLA 설정 목록’ 6번에 어느 문항에 무엇을 붙일지 적혀 있습니다.</p>
+          <ul className="mt-2 list-disc pl-5 text-[13px] text-amber-800">
+            {validation.uxMissingPrefix.slice(0, 8).map((h) => <li key={h}>{h.length > 70 ? `${h.slice(0, 70)}…` : h}</li>)}
+          </ul>
+        </div>
+      )}
+
       {validation?.valid && !productInfoDone && (
         <div className="mt-4">
           {companyFile && !extracted && (

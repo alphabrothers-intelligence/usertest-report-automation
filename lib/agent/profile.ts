@@ -67,6 +67,16 @@ function sharedPrefixLength(a: string, b: string): number {
 const RANK_HEADER = /순위|순서대로|^\s*\d+\s*위\s*$/;
 /** `실용성1)`, `즐거움2)` 같은 행렬형 접두 — 뒤에 붙는 숫자까지 하나의 그룹 신호다. */
 const GROUP_PREFIX = /^([가-힣A-Za-z]+)\s*\d+\s*\)/;
+
+/**
+ * `[불편하다 / 편하다]` 같은 의미분별 척도인데 계열 표시(`실용성1)`)가 없는 헤더. 설문 생성기는 WALLA에 이 표시를 안 넣으므로
+ * (응답자에게 보일 필요가 없다) raw data를 받은 뒤 담당자가 붙여야 한다 — 빠뜨리면 사용자 경험 품질 장이 조용히 사라진다.
+ * 보고서 업로드 화면이 이 목록으로 경고한다.
+ */
+export function uxHeadersMissingPrefix(headerRow: unknown[]): string[] {
+  return headerRow.map((h) => String(h ?? "").replace(/\s+/g, " ").trim())
+    .filter((h) => /\[[^\]/]+\/[^\]]+\]/.test(h) && !GROUP_PREFIX.test(h));
+}
 const QUOTED_NAME = /['‘"“]([^'’"”]{2,40})['’"”]/;
 
 function cellText(value: unknown): string {
