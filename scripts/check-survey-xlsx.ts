@@ -135,7 +135,7 @@ const ranked = normalizeSurvey({
   ],
 } as unknown as RawSurvey);
 assert.deepStrictEqual(ranked.questions.map((x) => x.id),
-  ["f1", "f1_reason", "f2", "f2_reason", "f2_rank1", "f2_rank2", "v1", "v1_reason", "v2", "v2_reason", "n1", "n2", "n2_reason", "o", "e", "er"]);
+  ["f1", "f1_reason", "f2", "f2_reason", "f2_rank1", "f2_rank2", "v1", "v1_reason", "v2", "v2_reason", "o", "n1", "n2", "n2_reason", "e", "er"]);
 const r1 = ranked.questions.find((x) => x.id === "f2_rank1")!;
 assert.strictEqual(r1.text, "앱의 기능 중 가장 중요하다고 생각하는 기능은 무엇인가요? (1순위)");
 assert.deepStrictEqual(r1.options, ["기능 A", "기능 B"]);
