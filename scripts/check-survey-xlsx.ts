@@ -8,7 +8,7 @@ import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { numberQuestions, rankOf, scaleAnchors, toCsv, toSheetRows, toWallaTxt, wallaChecklist, wallaLayout, wallaTodos, splitByProduct, type SurveyQuestion } from "../lib/survey/types";
 import { buildSurveyXlsx } from "../lib/survey/xlsx";
-import { addUpcomingFeatureQuestions, fixParticles, normalizeSurvey, RANK_CAUTION, UPCOMING_CAUTION, type RawSurvey } from "../lib/survey/generate";
+import { addUpcomingFeatureQuestions, attachStandardFollowUps, fixParticles, normalizeSurvey, RANK_CAUTION, UPCOMING_CAUTION, type RawSurvey } from "../lib/survey/generate";
 import { lintSurvey } from "../lib/survey/lint";
 
 const q = (id: string, patch: Partial<SurveyQuestion> = {}): SurveyQuestion => ({
@@ -193,6 +193,14 @@ assert.ok(lintSurvey({ ...fixed, questions: [q("x", { text: "사용하실 의향
 assert.strictEqual(rankOf({ type: "객관식-단일", text: "두 번째로 중요하다고 생각하는 기능은 무엇인가요? (2순위)" }), 2);
 assert.strictEqual(rankOf({ type: "객관식-단일", text: "3위" }), 3);
 assert.strictEqual(rankOf({ type: "주관식", text: "1위" }), null);
+// 핵심구매요인 뒤에는 이유 주관식이 하나 붙는다(리바랩스 설문과 구성 맞춤, 보고서는 읽지 않는다). 종합 만족도엔 안 붙는다.
+const withReasons = attachStandardFollowUps([
+  q("kbf", { stage: "핵심구매요인 파악", type: "객관식-단일", options: ["A", "B"] }),
+  q("kbf_model_reason", { stage: "핵심구매요인 파악", followUp: true, text: "왜 그렇게 생각하시나요?" }),
+  q("tot", { stage: "종합 만족도", type: "척도(0-10)" }),
+], "앱");
+assert.deepStrictEqual(withReasons.map((x) => `${x.id}:${x.text}`),
+  ["kbf:kbf", "kbf_reason:위와 같이 평가한 이유는 무엇인가요?", "tot:tot"], "핵심구매요인 이유 문항");
 // 조사: 받침으로 고르고, 한글 아닌 글자 뒤는 중복만 합친다.
 assert.strictEqual(fixParticles("필톡을(를) 지인에게"), "필톡을 지인에게");
 assert.strictEqual(fixParticles("케어로그을(를) 쓰고 앱이(가) 좋은(는)"), "케어로그를 쓰고 앱이 좋은");
