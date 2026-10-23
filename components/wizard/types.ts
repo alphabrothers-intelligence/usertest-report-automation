@@ -12,6 +12,9 @@ export interface ValidateResult {
   actualColumnCount?: number;
   respondentCount?: number;
   featureNames?: string[];
+  /** 리바랩스 형식(WALLA 59열)이면 true. 아니면 정량·정성을 역할 분류로 계산한다. */
+  fixedFormat?: boolean;
+  questionColumnCount?: number;
   errors?: { index: number; expected: string; actual: string }[];
   /** 계열 표시(`실용성1)`) 없이 들어온 의미분별 척도 헤더 — 이대로면 사용자 경험 품질 장이 안 나온다. */
   uxMissingPrefix?: string[];

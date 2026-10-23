@@ -180,8 +180,8 @@ export function UploadStep({
 
       {validation?.valid && productInfoDone && (
         <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
-          기업/제품 정보 단계를 마쳤습니다 · 응답 {validation.respondentCount}명 · 기능{" "}
-          {validation.featureNames?.length ?? 0}개 확인
+          기업/제품 정보 단계를 마쳤습니다 · 응답 {validation.respondentCount}명 ·{" "}
+          {validation.fixedFormat ? `기능 ${validation.featureNames?.length ?? 0}개 확인` : `문항 열 ${validation.questionColumnCount ?? 0}개 — 다음 단계에서 문항 구성을 판정합니다`}
         </div>
       )}
 

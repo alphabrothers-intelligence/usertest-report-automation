@@ -24,16 +24,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ valid: false, error: loaded.fetchError });
   }
 
-  const featureNames = loaded.validation.valid
-    ? extractFeatureNames(loaded.parsed.headerRow)
-    : [];
+  const fixedFormat = loaded.validation.valid;
+  const featureNames = fixedFormat ? extractFeatureNames(loaded.parsed.headerRow) : [];
+  const respondentCount = filterWallaResponseRows(loaded.parsed.dataRows).length;
+  // 리바랩스 형식(WALLA 59열)이 아니어도 받는다 — 정량·정성 단계는 역할 분류(범용 경로)로 계산한다
+  // (wizard/quant-stats, questionSource). 예전엔 여기서 59열 검증 실패를 그대로 돌려줘 '다음'이 잠겼고,
+  // WALLA에서 받은 다른 설문의 raw data는 업로드 화면에서 막혔다(2026-10-23 피매치 테스트 CSV 실측).
+  // 막는 것은 읽을 응답이 아예 없을 때뿐이다.
+  const valid = respondentCount > 0 && loaded.parsed.headerRow.length > 1;
 
   return NextResponse.json({
     fileName: fileName ?? null,
-    valid: loaded.validation.valid,
+    valid,
+    error: valid ? undefined : "응답이 들어 있는 행을 찾지 못했습니다. WALLA에서 받은 원본 파일(csv/xlsx)인지 확인해 주세요.",
+    fixedFormat,
+    questionColumnCount: loaded.parsed.headerRow.length,
     expectedColumnCount: loaded.validation.expectedColumnCount,
     actualColumnCount: loaded.validation.columnCount,
-    respondentCount: filterWallaResponseRows(loaded.parsed.dataRows).length,
+    respondentCount,
     featureNames,
     errors: loaded.validation.errors,
     uxMissingPrefix: uxHeadersMissingPrefix(loaded.parsed.headerRow),

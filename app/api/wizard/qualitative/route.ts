@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { loadWallaFromUrl } from "@/lib/walla/loadFromUrl";
-import { normalizeWallaRows } from "@/lib/walla/normalize";
-import { buildQuestionSpecs } from "@/lib/pipeline/questions";
+import { loadQuestionSpecs } from "@/lib/pipeline/questionSource";
 import { estimateQualitativeCallPlan } from "@/lib/pipeline/orchestrate";
 import { getReportByFileUrl } from "@/lib/db/reports";
 import { createQualitativeJob, getLatestQualitativeJobForReport } from "@/lib/db/qualitativeJobs";
@@ -35,19 +33,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, queued: true, jobId: existingJob.id, resumed: true });
   }
 
-  const loaded = await loadWallaFromUrl(fileUrl);
-  if (!loaded.ok || !loaded.parsed || !loaded.validation) {
-    return NextResponse.json({ ok: false, error: loaded.fetchError });
-  }
-  if (!loaded.validation.valid) {
-    return NextResponse.json({
-      ok: false,
-      error: "보고서에 필요한 응답 구조를 찾지 못했습니다. 원본 파일의 질문과 응답 열을 다시 확인해주세요.",
-    });
-  }
-
-  const records = normalizeWallaRows(loaded.parsed.headerRow, loaded.parsed.dataRows);
-  const specs = buildQuestionSpecs(records);
+  // 문항은 작업 실행(run-next)과 같은 한 곳에서 뽑는다 — 리바랩스 형식이 아니면 역할 분류로(2026-10-23:
+  // 이 경로만 고정 59열 검증을 남겨 둬서 WALLA에서 받은 다른 형식의 raw data가 여기서 막혔다).
+  const source = await loadQuestionSpecs(fileUrl, report.file_name);
+  if (!source.ok) return NextResponse.json({ ok: false, error: source.error });
+  const specs = source.specs;
   const callPlan = estimateQualitativeCallPlan(specs);
   const job = await createQualitativeJob({ reportId: report.id, specs, callPlan });
   return NextResponse.json({
