@@ -8,7 +8,7 @@ import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { numberQuestions, rankOf, scaleAnchors, toCsv, toSheetRows, toWallaTxt, wallaChecklist, wallaLayout, wallaTodos, splitByProduct, type SurveyQuestion } from "../lib/survey/types";
 import { buildSurveyXlsx } from "../lib/survey/xlsx";
-import { addUpcomingFeatureQuestions, attachStandardFollowUps, fixParticles, numberUxQuality, normalizeSurvey, RANK_CAUTION, UPCOMING_CAUTION, type RawSurvey } from "../lib/survey/generate";
+import { attachStandardFollowUps, fixParticles, numberUxQuality, normalizeSurvey, RANK_CAUTION, type RawSurvey } from "../lib/survey/generate";
 import { lintSurvey } from "../lib/survey/lint";
 import { hasEnterprisePrefix, uxHeadersMissingPrefix } from "../lib/agent/profile";
 
@@ -142,15 +142,6 @@ assert.deepStrictEqual(r1.options, ["기능 A", "기능 B"]);
 assert.strictEqual(ranked.questions.find((x) => x.id === "f2_rank2")!.text, "두 번째로 중요하다고 생각하는 기능은 무엇인가요? (2순위)");
 assert.ok(r1.caution?.startsWith(RANK_CAUTION) && !ranked.questions.find((x) => x.id === "f2_rank2")!.caution);
 assert.ok(wallaChecklist(ranked.questions).includes("■ 5. 순위 문항 — '중복 선택 방지' 설정"));
-// 출시 예정이라 뺀 기능은 기타 기업 요청사항에 수요 문항이 생긴다(제품 태그 → 그 제품 분기). 이미 있으면 안 만든다.
-const trackQ = q("track", { type: "객관식-단일", options: ["앱 A", "앱 B"] });
-const perB = Array.from({ length: 6 }, (_, k) => q(`b${k}`, { stage: "기타 기업 요청사항", branchOn: "track", branchValue: k % 2 ? "앱 B" : "앱 A" }));
-const upcoming = addUpcomingFeatureQuestions([trackQ, ...perB], [{ name: "[앱 A] 약봉투 촬영 등록", reason: "출시 예정" }, { name: "코드 입력", reason: "결제 필요" }]);
-const demand = upcoming.filter((x) => x.id.startsWith("upcoming"));
-assert.strictEqual(demand.length, 1);
-assert.strictEqual(demand[0].text, "'약봉투 촬영 등록' 기능이 추가된다면 얼마나 유용할 것 같나요?");
-assert.deepStrictEqual([demand[0].branchOn, demand[0].branchValue, demand[0].caution], ["track", "앱 A", UPCOMING_CAUTION]);
-assert.strictEqual(addUpcomingFeatureQuestions(upcoming, [{ name: "[앱 A] 약봉투 촬영 등록", reason: "출시 예정" }]).length, upcoming.length, "이미 있으면 안 만든다");
 // 척도 양 끝 라벨: 빠지면 코드가 만족도 기본값을 붙이고, 모델이 다른 라벨을 적었으면 그대로 둔다.
 const scaled = normalizeSurvey({
   companyName: "회사", productName: "앱", excludedFeatures: [], reviewNotes: [],

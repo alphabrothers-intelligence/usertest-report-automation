@@ -125,12 +125,12 @@ const SYSTEM_PROMPT = `당신은 알파브라더스의 사용성 테스트 설�
    이유 문항은 만들지 마세요(보고서가 쓰지 않습니다).
 7. 종합 만족도 — 척도 "{제품명}의 전반적인 만족도(종합 점수)는 몇 점인가요?" (note: "기능·디자인·가격 등을 모두 고려해 주세요.")
    이유 문항은 만들지 마세요(코드가 붙입니다).
-8. 구매/추천 의향 조사 — 두 척도(0-10), 문구와 순서는 이대로(2026-10-19 담당자 지정, '~요' 통일):
-     "본 제품을 체험해 보았을 때, {제품명}을(를) 사용할 의향이 있나요?"          (note "0=전혀 없음, 10=매우 있음")
-     "본 제품을 체험해 보았을 때, {제품명}을(를) 지인에게 추천할 의향이 얼마나 있나요?" (note 같음)
+8. 구매/추천 의향 조사 — **추천 의향 척도(0-10) 한 문항만** 둡니다. 문구는 이대로('~요' 통일):
+     "본 제품을 체험해 보았을 때, {제품명}을(를) 지인에게 추천할 의향이 얼마나 있나요?" (note "0=전혀 없음, 10=매우 있음")
+   사용 의향 문항은 만들지 마세요(2026-10-23 담당자 — 보고서의 NPS·평균 구매 의향은 추천 의향만으로 계산한다).
    {제품명}의 조사 '을/를'은 받침에 맞춰 하나만 씁니다("필톡을", "케어로그를").
-   기관·기업이 도입하는 제품(B2B·SaaS)이면 응답자는 실무자입니다. "사용할 의향" 대신 "소속 기관에 도입할 의향",
-   "지인에게" 대신 "같은 일을 하는 동료나 다른 기관에"로 바꾸고 앞머리("본 제품을 체험해 보았을 때,")는 그대로 둡니다.
+   기관·기업이 도입하는 제품(B2B·SaaS)이면 응답자는 실무자입니다. "지인에게" 대신 "같은 일을 하는 동료나 다른 기관에"로
+   바꾸고 앞머리("본 제품을 체험해 보았을 때,")는 그대로 둡니다.
    이유 문항은 만들지 마세요(추천 의향의 이유는 코드가 붙입니다).
 9. 개선 아이디어 — 주관식 "{제품명}을(를) 사용하면서 더 나아졌으면 하는 점이나 추가되었으면 하는 기능이 있다면 자유롭게 작성해 주세요."
 10. 기타 기업 요청사항 — 사전요청서의 '고객에게 확인하고 싶은 질문'·'기타 요청사항'을 응답자가 답할 수 있는
@@ -142,11 +142,8 @@ const SYSTEM_PROMPT = `당신은 알파브라더스의 사용성 테스트 설�
     분석을 요청한 내용(예: "적정 가격대 분석 가능한지")은 그 분석에 필요한 응답을 받는 문항으로 만듭니다
     (예: 적정 가격대를 묻는 객관식 구간 또는 주관식). 이미 위에서 묻는 내용과 겹칠 때만 생략하고, 설문으로
     물을 수 없는 요청(테스터 선정 조건 등)만 reviewNotes로 옮기세요.
-    - 사전요청서가 "출시 예정"·"준비 중"이라고 밝힌 기능(예: 약봉투 촬영)은 평가에서 빼지만, 출시에 대비해 수요를 묻는
-      척도 한 문항을 이 단계에 둡니다: "'{기능명}' 기능이 추가된다면 얼마나 유용할 것 같나요?"
-      (note: 기능 한 문장 설명 + " 0=전혀 유용하지 않다, 10=매우 유용하다"), caution "출시 예정 기능이라 평가 대신 수요를
-      묻는 문항입니다. 문항을 넣을지와 기능 설명이 맞는지 실무자 확인이 필요합니다." '의향'이라는 말은 쓰지 마세요
-      (보고서가 '의향' 문항을 추천 의향으로 오인할 수 있다). 이유 문항은 만들지 않습니다.
+    - 사전요청서가 "출시 예정"·"준비 중"이라고 밝힌 기능은 평가에서 빼고 **수요 문항도 만들지 않습니다**
+      (2026-10-23 담당자 — 기업이 요청하지 않은 문항이다). 기업이 그 기능에 대한 질문을 직접 요청했을 때만 만듭니다.
     - 특정 화면·기능의 UI/UX를 중점 검토해 달라는 요청은 reviewNotes로 넘기지 말고 **화면마다** 문항으로 만듭니다:
       척도 "'{화면명}' 화면에서 원하는 정보를 찾기 쉬웠나요?"(note "0=매우 어려웠다, 10=매우 쉬웠다") /
       척도 "'{화면명}' 화면의 내용을 이해하기 쉬웠나요?"(같은 형식) / followUp 주관식
@@ -379,33 +376,6 @@ export function attachStandardFollowUps(input: SurveyQuestion[], productName: st
   return out;
 }
 
-export const UPCOMING_CAUTION = "출시 예정 기능이라 평가 대신 수요를 묻는 문항입니다. 문항을 넣을지와 기능 설명이 맞는지 실무자 확인이 필요합니다.";
-
-/**
- * "출시 예정"·"준비 중"이라 평가에서 뺀 기능마다 수요 문항이 있게 한다(2026-10-19 담당자 — 약봉투 촬영). 프롬프트로도
- * 지시하지만 실측 2회 중 1회는 표기가 엇갈린다며 모델이 만들지 않았다. 이미 있으면(기능명 + "유용") 그대로 둔다.
- * '의향'이라는 말을 쓰지 않는다 — 보고서가 '의향' 문항을 추천 의향(NPS)으로 오인할 수 있다.
- */
-export function addUpcomingFeatureQuestions(questions: SurveyQuestion[], excluded: { name: string; reason: string }[]): SurveyQuestion[] {
-  const out = [...questions];
-  const track = productTrack(out);
-  excluded.filter((f) => /출시 예정|준비 중|출시 전/.test(`${f.name} ${f.reason}`)).forEach((f, i) => {
-    const product = f.name.match(/^\[([^\]]+)\]/)?.[1] ?? "";
-    const name = f.name.replace(/^\[[^\]]+\]\s*/, "").replace(/\s*\(.*\)$/, "").trim();
-    if (!name || out.some((q) => q.text.includes(name) && /유용/.test(q.text))) return;
-    const branch = track && track.options.includes(product) ? { branchOn: track.id, branchValue: product } : { branchOn: "", branchValue: "" };
-    const at = out.findLastIndex((q) => q.stage === "기타 기업 요청사항" && (!branch.branchOn || q.branchValue === branch.branchValue));
-    const question: SurveyQuestion = {
-      id: `upcoming_${i + 1}`, stage: "기타 기업 요청사항", type: "척도(0-10)", options: [], required: true, followUp: false, ...branch,
-      text: `'${name}' 기능이 추가된다면 얼마나 유용할 것 같나요?`,
-      note: "출시를 준비 중인 기능입니다. 0=전혀 유용하지 않다, 10=매우 유용하다",
-      caution: UPCOMING_CAUTION,
-    };
-    out.splice(at >= 0 ? at + 1 : out.length, 0, question);
-  });
-  return out;
-}
-
 /** 모델 출력에서 형식이 어긋난 부분만 바로잡는다 — 판단은 건드리지 않는다. */
 /** 모델 출력 형식. 검사 스크립트가 손으로 만든 입력도 받도록 `plan`은 생략할 수 있다. */
 export type RawSurvey = Omit<z.infer<typeof SurveySchema>, "plan"> & { plan?: z.infer<typeof SurveySchema>["plan"] };
@@ -440,7 +410,6 @@ export function normalizeSurvey(raw: RawSurvey): SurveyDraft {
   const order = questions.map((_, i) => i).sort((a, b) => rank[a] - rank[b] || a - b);
   questions.splice(0, questions.length, ...order.map((i) => questions[i]));
   questions.splice(0, questions.length, ...attachStandardFollowUps(questions, raw.productName.trim()));
-  questions.splice(0, questions.length, ...addUpcomingFeatureQuestions(questions, raw.excludedFeatures));
   numberUxQuality(questions);
   for (const [i, q] of questions.entries()) {
     // 매뉴얼 2-5: 복수 선택은 문구에서 알 수 있어야 한다. 실측(피매치): 복수 선택 3문항 모두 표기가 없었다.
