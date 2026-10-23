@@ -84,9 +84,13 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
       // 따라서 별도로 격리해 응답 메타데이터에만 남기고, 필요 시 이 단계만 재실행할 수 있게 한다.
       try {
         const report = await getReportById(job.report_id);
-        const requested = report?.quant_stats && (report.product_type ?? detectProductType(report.quant_stats)) === "physical"
+        const base = report?.quant_stats && (report.product_type ?? detectProductType(report.quant_stats)) === "physical"
           ? ["corePurchaseFactor"] as const
           : ["featureExperience", "corePurchaseFactor", "fourValues", "fourValueItems", "uxQuality", "crossAnalysis"] as const;
+        // 경쟁재 표는 유사 서비스 서술 응답이 있을 때만 만든다 — 없으면 '실패'로 세지 않는다.
+        const requested = report?.quant_stats?.demographics.priorServiceDetail?.responses?.length
+          ? [...base, "competitorTable" as const]
+          : [...base];
         const sectionUsages: ClaudeUsageRecord[] = [];
         const sectionRunIds = new Map<string, string>();
         const generated = await runSectionAnalysesForReport(job.report_id, {

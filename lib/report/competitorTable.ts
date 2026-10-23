@@ -55,8 +55,10 @@ export function competitorComparisonBlock(params: {
   rows: CompetitorRow[];
 }): ReportRichStaticBlock {
   const title = params.title ?? "만족 기능 응답 결과";
-  // 제품명 열은 그 값을 가진 raw data에서만 나온다(케어클). 없으면 3열로 그린다.
-  const hasProduct = params.rows.some((row) => row.product?.trim());
+  // 제품명 열은 브랜드 행에 제품명이 있을 때만(케어클). '기타' 행의 묶인 서비스 이름만으로 열을 만들지 않는다 —
+  // 그러면 빈 칸뿐인 열이 생긴다(이젠오토 실측). 3열일 때 '기타'의 이름들은 브랜드 칸에 함께 적는다.
+  const isOther = (row: CompetitorRow) => row.service.trim() === "기타";
+  const hasProduct = params.rows.some((row) => !isOther(row) && row.product?.trim());
   const headers = hasProduct ? ["브랜드명", "제품명", "장점", "단점"] : ["서비스명", "장점", "단점"];
   const widths = hasProduct ? L14.widths4 : L14.widths3;
   const headCell = `background-color:${L14.headerBackground};border:${L14.border};padding:5pt;text-align:center;font-weight:700`;
@@ -70,7 +72,7 @@ export function competitorComparisonBlock(params: {
     : `<p style="margin:0 0 3pt;text-align:right;font-size:${REPORT_TEXT.noteFontSize}pt;color:#111827">* 유효 응답자 ${params.respondentCount}명 (경험 있음 응답자만)</p>`;
 
   const rows = params.rows.map((row) =>
-    `<tr>${labelCell(row.service)}${hasProduct ? labelCell(row.product ?? "") : ""}${bodyCell(bulletCell(row.pros))}${bodyCell(bulletCell(row.cons))}</tr>`,
+    `<tr>${labelCell(!hasProduct && isOther(row) && row.product?.trim() ? `${row.service} (${row.product.trim()})` : row.service)}${hasProduct ? labelCell(row.product ?? "") : ""}${bodyCell(bulletCell(row.pros))}${bodyCell(bulletCell(row.cons))}</tr>`,
   ).join("");
 
   return richStaticBlock({

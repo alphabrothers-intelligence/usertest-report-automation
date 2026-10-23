@@ -169,6 +169,7 @@ export function toQuantStats(
           experienced: role.priorService.experienced,
           notExperienced: role.priorService.notExperienced,
           scoreDistribution: role.priorService.scoreDistribution,
+          responses: role.priorService.responses,
         }
         : undefined,
       genderByAgeBracket: extra.genderByAgeBracket ?? [],

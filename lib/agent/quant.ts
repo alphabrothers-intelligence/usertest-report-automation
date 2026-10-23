@@ -15,6 +15,7 @@
  * 값을 꺼내 어떤 이름으로 담느냐" 하나뿐이라, 리바랩스를 이 경로로 통과시키면 옛 경로와 값이
  * 전부 같아야 한다 — 그게 `npm run check:role-quant`이 확인하는 안전망이다.
  */
+import type { PriorServiceResponse } from "@/lib/quant/compute";
 import type { ColumnProfile } from "./profile";
 import { TIME_MARKER, type RoleClassification } from "./classify";
 import type { QuestionRole } from "./sectionPlan";
@@ -107,6 +108,7 @@ export type RoleQuantStats = {
     experienced: number;
     notExperienced: number;
     scoreDistribution: number[];
+    responses: PriorServiceResponse[];
   } | null;
   overall: ScaleStat | null;
   nps: NpsResult | null;
@@ -418,6 +420,18 @@ export function computeRoleQuantStats(
         experienced: experienced.length,
         notExperienced: priorAnswered - experienced.length,
         scoreDistribution: scoreHistogram(priorScores),
+        // 경쟁재 장단점 표(L14) 재료 — 경험자의 서술 응답(서비스 이름·장점·단점·이유)을 머리글과 함께 모은다.
+        // 어느 열이 이름이고 어느 열이 장점인지는 열 구성이 설문마다 달라 판단하지 않는다(요약 단계의 모델이 머리글을 보고 묶는다).
+        responses: experienced
+          .map((row) => ({
+            score: priorSatisfaction ? asNumber(row, priorSatisfaction.columnIndex) : null,
+            answers: priorQuestions
+              // 서비스 이름 열은 짧은 답이라 `meta`로 프로파일링되기도 한다(이젠오토 27번 실측) — 점수·경험 유무만 뺀다.
+              .filter((question) => question !== gate && question !== priorSatisfaction && !["scale", "single", "multi"].includes(profileOf.get(question.columnIndex)?.type ?? ""))
+              .map((question) => ({ question: profileOf.get(question.columnIndex)!.header.replace(/\s+/g, " ").trim(), text: cell(row, question.columnIndex).trim() }))
+              .filter((answer) => answer.text),
+          }))
+          .filter((response) => response.answers.length > 0),
       }
     : null;
 

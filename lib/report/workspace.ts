@@ -6,7 +6,8 @@ import type { QuantStats } from "@/lib/quant/compute";
 import type { QuestionWithApprovedCategories, CategoryRow, RecommendationRow, SectionAnalyses } from "@/lib/db/reports";
 import { buildReportPlan } from "@/lib/pipeline/reportPlan";
 import { NUMERALS, type SectionPlan } from "@/lib/agent/sectionPlan";
-import { parseFourValueItemTexts } from "@/lib/pipeline/sectionAnalysis";
+import { parseCompetitorTable, parseFourValueItemTexts } from "@/lib/pipeline/sectionAnalysis";
+import { competitorComparisonBlock } from "@/lib/report/competitorTable";
 import { decodeImprovementLabel } from "@/lib/pipeline/stage2";
 import { prepareQuote } from "@/lib/report/quoteEmphasis";
 import { categoryPolarityNeedsReview } from "@/lib/pipeline/confidence";
@@ -923,7 +924,17 @@ export function buildReportWorkspaceSeed(input: {
     I: buildOverviewSection(stats, productInfo, fileName),
     // 유사 서비스 경험의 주관식(만족 이유)은 분석·저장까지 되는데 어느 장에도 배치되지 않았다
     // (2026-09-30 케어클·리바랩스 실측). 원본처럼 "유사 서비스 경험" 표 바로 아래에 싣는다.
-    II: [...buildDemographicsSection(stats), ...qualitativeBlocks("demo-prior-service-qual", questionsByKeys(qual, ["priorService"]))],
+    II: [
+      ...buildDemographicsSection(stats),
+      ...qualitativeBlocks("demo-prior-service-qual", questionsByKeys(qual, ["priorService"])),
+      // 경쟁재 장단점 표(케어클 원본 9쪽) — 섹션 분석이 경험자 서술을 브랜드별로 요약한 결과가 있을 때만.
+      ...(() => {
+        const rows = parseCompetitorTable(sa.competitorTable);
+        return rows.length
+          ? [competitorComparisonBlock({ id: "demo-prior-service-competitors", rows, respondentCount: stats.demographics.priorServiceDetail?.experienced })]
+          : [];
+      })(),
+    ],
     IV: buildJourneySection(stats),
     III: buildFeatureSection(stats, qual, sa.featureExperience, {
       featureQualitativeBlocks,

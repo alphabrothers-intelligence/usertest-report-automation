@@ -25,7 +25,10 @@ import {
 import { detectProductType, type ProductType } from "@/lib/report/productType";
 import { decodeImprovementLabel } from "./stage2";
 import { checkHedgeWording } from "./hedgeCheck";
-import { streamPlainText, withClaudeGuard } from "./claudeGuard";
+import { streamPlainText, streamStructured, withClaudeGuard } from "./claudeGuard";
+import { Output } from "ai";
+import { z } from "zod";
+import type { CompetitorRow } from "@/lib/report/competitorTable";
 import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 import {
   FEATURE_SYSTEM,
@@ -48,6 +51,8 @@ export interface SectionAnalyses {
   /** Ⅶ 교차분석(연령대별/성별) 텍스트 해석. "===GENDER===" 구분자로 두 부분을 이어붙인
    * 원문을 그대로 저장한다 — 렌더링 시 splitCrossAnalysisText()로 나눠 각자의 배너 아래 배치한다. */
   crossAnalysis?: string;
+  /** 경쟁재 장단점 표(L14) — `CompetitorRow[]`의 JSON 문자열. 다른 항목과 같은 저장 칸을 쓰려고 문자열로 둔다. */
+  competitorTable?: string;
 }
 
 export type SectionAnalysisKey = keyof SectionAnalyses;
@@ -320,6 +325,63 @@ export async function runCrossAnalysisText(stats: QuantStats, onUsage?: (usage: 
   }, 2200, onUsage);
 }
 
+const COMPETITOR_SYSTEM = `당신은 사용성 테스트 결과보고서의 '유사 서비스 경험' 표를 만듭니다. 입력은 유사 서비스를 써 본 응답자들의
+서술 응답입니다(질문 머리글과 답). 응답자가 쓴 서비스(브랜드·제품)별로 묶어 장점과 단점을 짧게 요약하세요.
+
+규칙
+- 행 = 응답자가 언급한 브랜드(서비스). 같은 브랜드의 다른 표기(띄어쓰기·영문·약칭)는 하나로 묶습니다.
+- product: 응답에 제품명·모델명이 따로 있으면 쉼표로 이어 적고, 없으면 빈 문자열.
+- 한 응답자가 여러 서비스를 적고 장단점을 한데 썼으면, 어느 서비스 얘기인지 분명한 내용만 그 서비스에 넣습니다.
+  어느 서비스인지 알 수 없는 내용은 버립니다.
+- pros/cons: 응답에 실제로 있는 내용만, 명사형 짧은 개조식(예: "사용법이 단순하고 편리함", "높은 가격대")으로 서비스당 최대 7개.
+  비슷한 말은 하나로 합칩니다. 응답에 없는 장단점을 지어내지 마세요. 해당 내용이 없으면 빈 배열.
+- **표는 최대 7행입니다**(케어클·이젠오토 원본 기준). 2명 이상이 언급한 브랜드만 각자 행을 갖고, 1명만 언급한 브랜드는
+  마지막 행 brand "기타"로 모읍니다. "기타"의 product에는 그 브랜드 이름들을 쉼표로 적고, 장단점도 함께 요약합니다.
+  2명 이상 언급한 브랜드가 6개를 넘으면 언급이 적은 쪽부터 "기타"로 보냅니다.
+- 언급이 많은 브랜드부터 정렬하고, "기타"는 맨 끝에 둡니다.
+- 의미 없는 응답(".", "ㅜ", "없음" 등)은 무시합니다.`;
+
+const CompetitorSchema = z.object({
+  rows: z.array(z.object({
+    brand: z.string(),
+    product: z.string(),
+    pros: z.array(z.string()),
+    cons: z.array(z.string()),
+  })),
+});
+
+/**
+ * 경쟁재 장단점 표(L14, 케어클 원본 9쪽 형식) — 유사 서비스 경험자의 서술 응답을 브랜드별로 묶고 장단점을 요약한다.
+ * 장점·단점을 한 문항(이유)으로 받았든 두 문항으로 받았든 같은 표가 나온다. 응답이 없으면 호출하지 않는다.
+ */
+export async function runCompetitorTable(stats: QuantStats, onUsage?: (usage: ClaudeUsageRecord) => void): Promise<string> {
+  const responses = stats.demographics.priorServiceDetail?.responses ?? [];
+  if (responses.length === 0) return "";
+  const { output } = await withClaudeGuard("section-analysis:competitor", () => streamStructured<z.infer<typeof CompetitorSchema>>({
+    model: anthropic(MODEL),
+    instructions: { role: "system", content: COMPETITOR_SYSTEM },
+    prompt: JSON.stringify(responses.map((r, i) => ({ 응답자: i + 1, 만족도: r.score, 응답: r.answers.map((a) => `${a.question}: ${a.text}`) })), null, 1),
+    output: Output.object({ schema: CompetitorSchema }),
+    maxOutputTokens: 6000,
+    reasoning: "none",
+    hardTimeoutMs: 120_000,
+  }, "section-analysis:competitor"), { onUsage });
+  const rows: CompetitorRow[] = output.rows
+    .filter((row) => row.brand.trim())
+    .map((row) => ({ service: row.brand.trim(), product: row.product.trim(), pros: row.pros.filter(Boolean).slice(0, 7), cons: row.cons.filter(Boolean).slice(0, 7) }));
+  return rows.length ? JSON.stringify(rows) : "";
+}
+
+export function parseCompetitorTable(text: string | undefined): CompetitorRow[] {
+  if (!text) return [];
+  try {
+    const rows = JSON.parse(text);
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
 /** 저장된 crossAnalysis 원문("===GENDER===" 구분자 포함)을 연령대/성별 두 부분으로 나눈다.
  * 각 부분은 기존 "연령대별 차이"/"연령에 따른 차이(성별)" 차트 배너 바로 아래 배치한다. */
 export function splitCrossAnalysisText(text: string | undefined): { age: string; gender: string } {
@@ -453,6 +515,10 @@ export async function runSectionAnalysesForReport(
   const tasks: { key: keyof SectionAnalyses; run: () => Promise<string> }[] = [
     { key: "corePurchaseFactor", run: () => runCorePurchaseFactorAnalysis(stats, qual, productType, options.onUsage) },
   ];
+  // 유사 서비스 경험자의 서술 응답이 있을 때만(제품형 무관).
+  if (stats.demographics.priorServiceDetail?.responses?.length) {
+    tasks.push({ key: "competitorTable", run: () => runCompetitorTable(stats, options.onUsage) });
+  }
   // SW형 전용 섹션(케어클 원본엔 없음).
   if (productType === "sw") {
     tasks.push(

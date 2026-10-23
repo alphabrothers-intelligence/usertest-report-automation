@@ -77,7 +77,11 @@ export type PriorServiceDetail = {
   notExperienced: number;
   /** 경험자 만족도 0~10점 응답자 수. */
   scoreDistribution: number[];
+  /** 경험자별 서술 응답(사용한 서비스 이름·장점·단점·이유) — 경쟁재 장단점 표(L14) 재료. 범용 경로만 채운다. */
+  responses?: PriorServiceResponse[];
 };
+
+export type PriorServiceResponse = { score: number | null; answers: { question: string; text: string }[] };
 
 export function computeQuantStats(records: WallaRecord[], headerRow?: unknown[]): QuantStats {
   const featureNames = records[0]?.featureSatisfaction.map((f) => f.name) ?? [];

@@ -256,7 +256,7 @@ begin
   end if;
   alter table qualitative_section_analysis_runs
     add constraint qualitative_section_analysis_runs_section_key_check
-    check (section_key in ('featureExperience', 'corePurchaseFactor', 'fourValues', 'fourValueItems', 'uxQuality', 'crossAnalysis'));
+    check (section_key in ('featureExperience', 'corePurchaseFactor', 'fourValues', 'fourValueItems', 'uxQuality', 'crossAnalysis', 'competitorTable'));
 end $$;
 
 -- 설문 문항 생성(2026-10-01): 사전요청서로 만든 문항 리스트. 화면에서 고친 내용을 그대로 저장한다.
