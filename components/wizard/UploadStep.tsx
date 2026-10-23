@@ -103,6 +103,8 @@ export function UploadStep({
         raw data(xlsx/csv)는 필수, 기업소개 파일(PDF/워드/텍스트)은 선택입니다.
       </p>
 
+      <RawDataHeaderGuide />
+
       <div className="mt-4 flex items-center gap-3 rounded-lg border border-[#dde5ef] bg-[#f8fafc] px-4 py-3">
         <FileUploadButton
           onUploaded={handleUploaded}
@@ -192,5 +194,52 @@ export function UploadStep({
         다음
       </button>
     </div>
+  );
+}
+
+/**
+ * 올리기 전에 raw data 문항 제목(1행)에 붙여야 하는 표시. WALLA 폼에는 응답자에게 안 보이게 이 표시를 빼고 만들기 때문에
+ * (설문 생성기 WALLA txt), 응답을 받은 뒤 사람이 붙여야 한다. 빠뜨리면 장이 조용히 사라지거나 다른 장에 섞인다
+ * (lib/agent/profile.ts GROUP_PREFIX, lib/agent/classify.ts ENTERPRISE_HEADER). 올린 뒤의 경고는 아래 노란 상자가 따로 띄운다.
+ */
+function RawDataHeaderGuide() {
+  const rules = [
+    {
+      title: "기업 요청 문항",
+      when: "기업이 따로 요청해 넣은 문항이 있을 때",
+      add: "기업 요청 질문 - ",
+      before: "‘약물안전리포트’의 내용을 이해하기 쉬웠나요?",
+      why: "안 붙이면 기능 만족도로 분류돼 기능별 그래프·사분면에 섞입니다. 이유 문항에도 붙여 주세요.",
+    },
+    {
+      title: "사용자 경험 품질 문항",
+      when: "[불편하다 / 편하다] 같은 양끝 말 척도가 있을 때",
+      add: "실용성1) ",
+      before: "필톡의 조작은 [불편하다 / 편하다]",
+      why: "안 붙이면 실용성·즐거움 그래프가 나오지 않습니다. 계열(실용성·즐거움)별로 번호를 1부터 매깁니다.",
+    },
+  ];
+  return (
+    <details className="mt-4 rounded-lg border border-[#c9d8fb] bg-[#f3f7ff] px-4 py-3 text-sm text-[#1d2433]" open>
+      <summary className="cursor-pointer font-semibold">올리기 전에 확인: raw data 문항 제목 앞에 붙여야 하는 표시</summary>
+      <p className="mt-1.5 text-[13px] text-[#4a566b]">
+        WALLA 폼에는 응답자에게 안 보이게 빼 두었던 표시입니다. 엑셀에서 <b>1행(문항 제목)</b> 앞에 붙인 뒤 올려 주세요.
+        어느 문항에 붙일지는 설문 생성 때 받은 ‘WALLA 설정 목록’ 6·7번에 적혀 있습니다. 해당 문항이 없으면 넘어가세요.
+      </p>
+      <div className="mt-3 space-y-3">
+        {rules.map((r) => (
+          <div key={r.title} className="rounded-md border border-[#dfe6f5] bg-white px-3 py-2.5">
+            <p className="font-semibold">{r.title} <span className="font-normal text-[#94a0b2]">— {r.when}</span></p>
+            <div className="mt-1.5 grid grid-cols-[60px_minmax(0,1fr)] gap-y-1 text-[13px]">
+              <span className="text-[#94a0b2]">지금</span>
+              <span className="text-[#6b778a]">{r.before}</span>
+              <span className="font-semibold text-[#356df3]">고친 뒤</span>
+              <span><mark className="rounded bg-[#ffe9a8] px-0.5 font-semibold">{r.add.trim()}</mark> {r.before}</span>
+            </div>
+            <p className="mt-1.5 text-[12px] text-[#6b778a]">{r.why}</p>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
