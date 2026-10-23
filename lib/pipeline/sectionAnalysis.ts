@@ -335,9 +335,10 @@ const COMPETITOR_SYSTEM = `당신은 사용성 테스트 결과보고서의 '유
   어느 서비스인지 알 수 없는 내용은 버립니다.
 - pros/cons: 응답에 실제로 있는 내용만, 명사형 짧은 개조식(예: "사용법이 단순하고 편리함", "높은 가격대")으로 서비스당 최대 7개.
   비슷한 말은 하나로 합칩니다. 응답에 없는 장단점을 지어내지 마세요. 해당 내용이 없으면 빈 배열.
-- **표는 최대 7행입니다**(케어클·이젠오토 원본 기준). 2명 이상이 언급한 브랜드만 각자 행을 갖고, 1명만 언급한 브랜드는
-  마지막 행 brand "기타"로 모읍니다. "기타"의 product에는 그 브랜드 이름들을 쉼표로 적고, 장단점도 함께 요약합니다.
-  2명 이상 언급한 브랜드가 6개를 넘으면 언급이 적은 쪽부터 "기타"로 보냅니다.
+- **표는 최대 7행입니다**(케어클·이젠오토 원본 기준). 장단점을 구체적으로 적은 응답이 있는 브랜드가 각자 행을 갖습니다
+  (언급 수가 많은 순, 1명이어도 됩니다). 장단점 내용이 없는 브랜드와 7행을 넘치는 브랜드는 마지막 행 brand "기타"로 모으고,
+  product에 그 브랜드(제품) 이름들을 쉼표로 적고 장단점도 함께 요약합니다.
+- **응답에 나온 브랜드는 하나도 빠뜨리지 마세요** — 자기 행이 없으면 반드시 "기타"의 product에 이름이 있어야 합니다.
 - 언급이 많은 브랜드부터 정렬하고, "기타"는 맨 끝에 둡니다.
 - 의미 없는 응답(".", "ㅜ", "없음" 등)은 무시합니다.`;
 
@@ -369,7 +370,36 @@ export async function runCompetitorTable(stats: QuantStats, onUsage?: (usage: Cl
   const rows: CompetitorRow[] = output.rows
     .filter((row) => row.brand.trim())
     .map((row) => ({ service: row.brand.trim(), product: row.product.trim(), pros: row.pros.filter(Boolean).slice(0, 7), cons: row.cons.filter(Boolean).slice(0, 7) }));
-  return rows.length ? JSON.stringify(rows) : "";
+  return rows.length ? JSON.stringify(withMissingBrands(rows, responses)) : "";
+}
+
+/**
+ * 응답자가 적은 서비스 이름이 표 어디에도 없으면 '기타' 행의 제품명 칸에 붙인다. 프롬프트로 "빠뜨리지 말라"고 해도
+ * 실행마다 빠지는 브랜드가 있었다(케어클 '셀리턴' — 2회 중 1회 누락 실측). 이름 열은 머리글로 찾는다.
+ * ponytail: 낱말 일치라 표기가 크게 다르면(영문↔한글) 중복으로 붙을 수 있다 — 담당자가 표에서 지우면 된다.
+ */
+export function withMissingBrands(rows: CompetitorRow[], responses: { answers: { question: string; text: string }[] }[]): CompetitorRow[] {
+  const NAME_QUESTION = /이름|서비스명|제품명|브랜드|어떤 .*(사용|경험)/;
+  const squash = (v: string) => v.replace(/\s+/g, "").toLowerCase();
+  const covered = squash(rows.map((r) => `${r.service} ${r.product ?? ""}`).join(" "));
+  const missing = new Set<string>();
+  for (const response of responses) {
+    const name = response.answers.find((a) => NAME_QUESTION.test(a.question) && a.text.length <= 60)?.text;
+    if (!name) continue;
+    for (const part of name.split(/[,，、/\n]|\s및\s/).map((p) => p.replace(/[.!?·]+$/, "").trim()).filter((p) => p.length >= 2)) {
+      // 이름이 아니라 문장인 답("주 1회 마사지샵에서 정기적으로 받음")은 넘긴다.
+      if (/[.!?]|(요|다|음|함|임)$/.test(part) || part.split(/\s+/).length > 3) continue;
+      // 표기 흔들림(엘지프라엘↔LG프라엘, 듀얼소딕↔듀얼소닉)은 3글자 이상 겹치면 같은 브랜드로 본다.
+      const key = squash(part).replace(/[^가-힣a-z0-9]/g, "");
+      const overlaps = key.length < 3 ? covered.includes(key) : Array.from({ length: key.length - 2 }, (_, i) => key.slice(i, i + 3)).some((w) => covered.includes(w));
+      if (!overlaps) missing.add(part);
+    }
+  }
+  if (missing.size === 0) return rows;
+  const out = rows.map((r) => ({ ...r }));
+  const other = out.find((r) => r.service === "기타") ?? (out.push({ service: "기타", product: "", pros: [], cons: [] }), out[out.length - 1]);
+  other.product = [other.product, ...missing].filter(Boolean).join(", ");
+  return out;
 }
 
 export function parseCompetitorTable(text: string | undefined): CompetitorRow[] {

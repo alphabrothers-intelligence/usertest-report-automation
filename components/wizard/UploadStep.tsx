@@ -7,7 +7,7 @@ import { ProductInfoExtractedCard } from "@/components/ProductInfoCard";
 import type { ProductInfo } from "@/lib/productInfo/types";
 import type { ValidateResult } from "./types";
 
-const RAW_DATA_EXTENSIONS = [".xlsx", ".csv"];
+const RAW_DATA_EXTENSIONS = [".xlsx", ".xls", ".csv"];
 
 function isRawDataFile(name: string) {
   return RAW_DATA_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));

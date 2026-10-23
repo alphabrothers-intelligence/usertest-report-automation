@@ -1,6 +1,12 @@
 "use client";
 
 import { upload } from "@vercel/blob/client";
+
+const RAW_TYPES: Record<string, string> = {
+  csv: "text/csv",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  xls: "application/vnd.ms-excel",
+};
 import { useRef, useState } from "react";
 
 export interface UploadedFile {
@@ -44,6 +50,9 @@ export function FileUploadButton({
             // 2026-07-19: "Cannot use public access on a private store").
             access: "private",
             handleUploadUrl: "/api/upload",
+            // 브라우저가 붙이는 형식은 OS마다 다르다(윈도 csv → application/vnd.ms-excel, 비어 있기도 함).
+            // raw data는 확장자로 형식을 정해 업로드 허용 목록에서 거부되지 않게 한다.
+            ...(RAW_TYPES[file.name.split(".").pop()?.toLowerCase() ?? ""] ? { contentType: RAW_TYPES[file.name.split(".").pop()!.toLowerCase()] } : {}),
           });
           onUploaded({ url: blob.url, name: file.name });
         }),
@@ -77,7 +86,7 @@ export function FileUploadButton({
         ref={inputRef}
         type="file"
         multiple
-        accept=".xlsx,.csv,.pdf,.docx,.txt"
+        accept=".xlsx,.xls,.csv,.pdf,.docx,.txt"
         onChange={handleChange}
         className="hidden"
       />

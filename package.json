@@ -62,7 +62,8 @@
     "check:editor-toolbar": "tsx scripts/check-editor-toolbar.ts",
     "check:editor-links": "tsx scripts/check-editor-links.ts",
     "check:editor-table": "tsx scripts/check-editor-table-layout.ts",
-    "check:editor-render": "tsx scripts/check-editor-render.ts"
+    "check:editor-render": "tsx scripts/check-editor-render.ts",
+    "check:competitor-brands": "tsx scripts/check-competitor-brands.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.15",

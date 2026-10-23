@@ -7,6 +7,8 @@ const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
 const ALLOWED_CONTENT_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // xlsx
   "text/csv",
+  "application/vnd.ms-excel", // 윈도 브라우저는 csv를 이 형식으로 보낸다. 옛 xls도 같다.
+  "application/csv",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
   "application/pdf",

@@ -425,10 +425,17 @@ export function computeRoleQuantStats(
         responses: experienced
           .map((row) => ({
             score: priorSatisfaction ? asNumber(row, priorSatisfaction.columnIndex) : null,
-            answers: priorQuestions
+            answers: [...new Set([
               // 서비스 이름 열은 짧은 답이라 `meta`로 프로파일링되기도 한다(이젠오토 27번 실측) — 점수·경험 유무만 뺀다.
-              .filter((question) => question !== gate && question !== priorSatisfaction && !["scale", "single", "multi"].includes(profileOf.get(question.columnIndex)?.type ?? ""))
-              .map((question) => ({ question: profileOf.get(question.columnIndex)!.header.replace(/\s+/g, " ").trim(), text: cell(row, question.columnIndex).trim() }))
+              ...priorQuestions
+                .filter((question) => question !== gate && question !== priorSatisfaction && !["scale", "single", "multi"].includes(profileOf.get(question.columnIndex)?.type ?? ""))
+                .map((question) => question.columnIndex),
+              // "위와 같이 평가한 이유"는 문항이 아니라 점수 문항의 속성(reasonColumn)으로 접혀 있다 — 장단점이 여기에만
+              // 있는 설문이 많다(케어클·피매치: 이름 + 만족도 + 이유). 빠뜨리면 브랜드만 있고 장단점이 빈 표가 된다.
+              ...priorQuestions.flatMap((question) => (question.reasonColumn !== undefined ? [question.reasonColumn] : [])),
+            ])]
+              .sort((a, b) => a - b)
+              .map((index) => ({ question: profileOf.get(index)!.header.replace(/\s+/g, " ").trim(), text: cell(row, index).trim() }))
               .filter((answer) => answer.text),
           }))
           .filter((response) => response.answers.length > 0),
