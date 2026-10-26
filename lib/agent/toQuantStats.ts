@@ -93,7 +93,25 @@ export function surveyQuestionRowsFromRoles(
     .filter((question) => profileOf.get(question.columnIndex)?.reasonFor === undefined)
     .map((question) => ({ stage: STAGE_OF_ROLE[question.role], profile: profileOf.get(question.columnIndex) }))
     .filter((row): row is { stage: string; profile: ColumnProfile } => !!row.stage && !!row.profile)
-    .map((row) => ({ stage: row.stage, question: row.profile.header.replace(/\s+/g, " ").trim() }))
+    .reduce<{ stage: string; question: string; rank?: { base: string; count: number } }[]>((rows, row) => {
+      const header = row.profile.header.replace(/\s+/g, " ").trim();
+      // 순위 열(1위·2위… 또는 WALLA 순위형의 '문항_1'·'문항_2'…)은 설문에서 한 문항이다 — 표에 한 줄로 합친다.
+      // 따로 두면 'Q24 1위 / Q25 2위 / …'처럼 문항 번호만 늘고 무엇을 물었는지 안 보인다(2026-10-26 케어클 8줄).
+      if (row.profile.type === "rank") {
+        // 꼬리 표기 세 가지: '1위'(리바랩스·케어클), '문항_1'(WALLA 순위형), '문항 - 항목명'(투블럭: 항목마다 열).
+        const base = header.replace(/\s*(_\d+|\d+\s*(위|순위)|\s-\s[^-]+)\s*$/, "").trim();
+        const last = rows[rows.length - 1];
+        if (last?.rank && last.stage === row.stage && last.rank.base === base) {
+          last.rank.count += 1;
+          return rows;
+        }
+        return [...rows, { stage: row.stage, question: header, rank: { base, count: 1 } }];
+      }
+      return [...rows, { stage: row.stage, question: header }];
+    }, [])
+    .map((row) => (row.rank && row.rank.count > 1
+      ? { stage: row.stage, question: `${row.rank.base || `${row.stage} 중요 순위`} (1~${row.rank.count}위)` }
+      : { stage: row.stage, question: row.question }))
     .filter((row) => row.question !== "");
 }
 
