@@ -84,11 +84,24 @@ function buildFeatureRowMaterial(stats: QuantStats, qualitative: QuestionWithApp
   });
 }
 
+/**
+ * 가치 문항 찾기 — 고정 경로(리바랩스)는 'values:functional', 범용 경로는 raw data 이름 그대로
+ * 'values:기능적 가치'로 저장된다. 영문 키로만 찾으면 범용 보고서에서 재료가 통째로 비어 모델이
+ * "응답 자료 내 뚜렷한 요지가 확인되지 않음"을 네 번 썼다(2026-10-26 케어클 실측).
+ */
+const VALUE_WORD: Record<string, RegExp> = {
+  "values:functional": /기능/, "values:aesthetic": /심미|디자인/, "values:economic": /경제|가격/, "values:social": /사회|공공/,
+};
+export function findValueQuestion<T extends { question_key: string }>(qualitative: T[], key: string): T | undefined {
+  return qualitative.find((q) => q.question_key === key)
+    ?? qualitative.find((q) => q.question_key.startsWith("values:") && VALUE_WORD[key]?.test(q.question_key));
+}
+
 /** Ⅸ.1 "4대 가치 만족도" 행 재료 — 원본 51쪽처럼 가치마다 [가치명]+긍정/개선 요지로 압축하기
  * 위해 per-value 긍정·개선 요지를 준다(원본 순서: 기능적→심미적→경제적→사회·공공적). */
 function buildFourValuesRowMaterial(stats: QuantStats, qualitative: QuestionWithApprovedCategories[]): Record<string, unknown>[] {
   const requiredInsights = (questionKey: string, polarity: "positive" | "negative", limit: number) =>
-    qualitative.find((q) => q.question_key === questionKey)?.categories
+    findValueQuestion(qualitative, questionKey)?.categories
       .filter((c) => c.polarity === polarity).slice(0, limit)
       .map((c) => (c.insight_final ?? c.insight_draft).trim()).filter(Boolean) ?? [];
   return [
@@ -119,7 +132,14 @@ export function buildResultSummaryInput(
   // 핵심구매요소 행: 원본 51쪽처럼 "N명 중 X%가 상위3(요인명(%))을 선택" 문장을 만들 재료.
   const n = quantStats.respondentCount;
   const sortedFactors = [...quantStats.keyFactorDistribution].sort((a, b) => b.percentage - a.percentage);
-  input["핵심구매요소_재료"] = {
+  // 핵심구매요인을 '하나 고르기'가 아니라 순위로 받은 설문(케어클)은 분포가 비고 상대중요도가 있다.
+  if (sortedFactors.length === 0 && quantStats.relativeImportance.length > 0) {
+    input["핵심구매요소_재료"] = {
+      응답자수: n,
+      방식: "순위 응답 → 상대중요도(+5~-5, 높을수록 중요)",
+      상위3: [...quantStats.relativeImportance].sort((a, b) => b.score - a.score).slice(0, 3).map((r) => ({ 요인명: shortenFactorLabel(r.name), 상대중요도: r.score })),
+    };
+  } else input["핵심구매요소_재료"] = {
     응답자수: n,
     상위3: sortedFactors.slice(0, 3).map((k) => ({ 요인명: shortenFactorLabel(k.label), 명: Math.round((k.percentage / 100) * n), 비율: k.percentage })),
     상위3합계비율: Math.round(sortedFactors.slice(0, 3).reduce((s, k) => s + k.percentage, 0) * 10) / 10,
@@ -192,11 +212,11 @@ function buildFallbackInput(
   productType: ProductType,
 ): Record<string, unknown> {
   const negativeInsights = (questionKey: string, limit = 3) =>
-    qualitative.find((q) => q.question_key === questionKey)?.categories
+    (questionKey.startsWith("values:") ? findValueQuestion(qualitative, questionKey) : qualitative.find((q) => q.question_key === questionKey))?.categories
       .filter((c) => c.polarity === "negative").slice(0, limit)
       .map((c) => c.insight_final ?? c.insight_draft) ?? [];
   const positiveInsights = (questionKey: string, limit = 2) =>
-    qualitative.find((q) => q.question_key === questionKey)?.categories
+    (questionKey.startsWith("values:") ? findValueQuestion(qualitative, questionKey) : qualitative.find((q) => q.question_key === questionKey))?.categories
       .filter((c) => c.polarity === "positive").slice(0, limit)
       .map((c) => c.insight_final ?? c.insight_draft) ?? [];
 

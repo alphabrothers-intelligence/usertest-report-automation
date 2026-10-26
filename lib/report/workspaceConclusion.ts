@@ -99,7 +99,14 @@ function conclusionEvidenceRows(stats: QuantStats, resultSummary: string | null 
   const uxItems = uxGroups.flatMap((group) => group.items);
   const lowestUx = [...uxItems].sort((a, b) => a.mean - b.mean)[0];
   const groupMean = (items: { mean: number }[]) => items.reduce((sum, item) => sum + item.mean, 0) / Math.max(items.length, 1);
-  const coreFallback = `<p style="margin:0">상위 선택 항목은 ${topFactors.map((item) => `<strong>${escapeHtml(item.label)}(${item.percentage}%)</strong>`).join(", ")}로 집계되었습니다.</p>`;
+  // 하나 고르기 분포가 없으면 순위 응답의 상대중요도로, 그것도 없으면 사실만 적는다 — 빈 이름으로
+  // "상위 선택 항목은 로 집계되었습니다."가 나갔다(2026-10-26 케어클: 핵심구매요인을 순위로 받음).
+  const topImportance = [...stats.relativeImportance].sort((a, b) => b.score - a.score).slice(0, 3);
+  const coreFallback = topFactors.length > 0
+    ? `<p style="margin:0">상위 선택 항목은 ${topFactors.map((item) => `<strong>${escapeHtml(item.label)}(${item.percentage}%)</strong>`).join(", ")}로 집계되었습니다.</p>`
+    : topImportance.length > 0
+      ? `<p style="margin:0">중요 순위 상위 항목은 ${topImportance.map((item) => `<strong>${escapeHtml(item.name)}(${item.score > 0 ? "+" : ""}${item.score.toFixed(2)})</strong>`).join(", ")}로 집계되었습니다.</p>`
+      : `<p style="margin:0">핵심구매요인 문항을 수집하지 않아 집계할 값이 없습니다.</p>`;
   // 그 장이 아예 없는 raw data 도 있다(정리습관은 가치 문항 0개, 리바랩스 외 4종은 UX 계열
   // 0개). 근거가 없다는 사실을 그대로 쓴다 — 빈 문장을 만들지 않는다.
   const valuesFallback = valueAxes.length > 0
