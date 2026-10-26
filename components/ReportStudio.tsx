@@ -180,7 +180,8 @@ export function ReportStudio({
   const [workspaceMode, setWorkspaceMode] = useState<"web" | "pdf">("web");
   /** PDF 저장 직전 확인 — 표지·개요의 '입력 필요' 칸이 남아 있으면 바로 채우러 갈 수 있게 한다(2026-10-26 담당자). */
   // DOM 요소는 상태에 담지 않고 개수만 둔다 — 이동할 때 다시 찾는다(편집 중 바뀌었을 수 있다).
-  const [emptyFields, setEmptyFields] = useState<number | null>(null);
+  const [emptyFields, setEmptyFields] = useState<{ count: number; kind: "pdf" | "hwpx" } | null>(null);
+  const [hwpxBusy, setHwpxBusy] = useState(false);
   const findEmptyFields = () => {
     const doc = document.querySelector("article") ?? document.body;
     const found: HTMLElement[] = [];
@@ -191,10 +192,32 @@ export function ReportStudio({
     }
     return found;
   };
-  const savePdf = () => {
+  /** 발행본 양식 HWPX — 화면에 보이는 문서를 브라우저에서 바로 만든다(lib/hwpx/publishedReport.ts). */
+  const saveHwpx = async () => {
+    setHwpxBusy(true);
+    try {
+      const [{ collectReportNodes }, { buildPublishedReportHwpx }] = await Promise.all([import("@/lib/hwpx/domToHwp"), import("@/lib/hwpx/publishedReport")]);
+      const template = await fetch("/hwpx/report-template.hwpx").then((res) => res.arrayBuffer());
+      const { nodes, pxToHwp } = await collectReportNodes(sections);
+      const bytes = await buildPublishedReportHwpx(template, {
+        company: productInfo.companyName?.trim() ?? "", service: productInfo.serviceName?.trim() ?? "", date: new Date(), pxToHwp, nodes,
+      });
+      const anchor = document.createElement("a");
+      anchor.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/hwp+zip" }));
+      anchor.download = `${(reportName.trim() || "사용성테스트").replace(/[\\/:*?"<>|]/g, "_")}_결과보고서.hwpx`;
+      anchor.click();
+      URL.revokeObjectURL(anchor.href);
+    } catch (error) {
+      window.alert(`HWPX를 만들지 못했습니다: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setHwpxBusy(false);
+    }
+  };
+  const runSave = (kind: "pdf" | "hwpx") => (kind === "pdf" ? window.print() : void saveHwpx());
+  const save = (kind: "pdf" | "hwpx") => {
     const found = findEmptyFields();
-    if (found.length === 0) window.print();
-    else setEmptyFields(found.length);
+    if (found.length === 0) runSave(kind);
+    else setEmptyFields({ count: found.length, kind });
   };
   const goToEmptyField = () => {
     const first = findEmptyFields()[0];
@@ -492,14 +515,15 @@ export function ReportStudio({
               {pdfUrl && <button type="button" onClick={() => setWorkspaceMode("pdf")} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${workspaceMode === "pdf" ? "bg-white text-[#1473e6] shadow-sm" : "text-[#667085]"}`}>PDF 미리보기</button>}
             </div>
             <div className="relative">
-              <button type="button" onClick={savePdf} disabled={workspaceStatus !== "ready"} className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-semibold text-[#475467] hover:bg-[#f7f9fc] disabled:opacity-50">PDF 저장</button>
+              <button type="button" onClick={() => save("pdf")} disabled={workspaceStatus !== "ready"} className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-semibold text-[#475467] hover:bg-[#f7f9fc] disabled:opacity-50">PDF 저장</button>
+              <button type="button" onClick={() => save("hwpx")} disabled={workspaceStatus !== "ready" || hwpxBusy || workspaceMode !== "web"} title="발행본 양식의 한글 파일로 저장합니다. 표는 한글에서 고칠 수 있고, 그래프는 그림으로 들어갑니다." className="ml-2 rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-semibold text-[#475467] hover:bg-[#f7f9fc] disabled:opacity-50">{hwpxBusy ? "HWPX 만드는 중..." : "HWPX 저장"}</button>
               {emptyFields !== null && (
                 <div role="dialog" className="absolute right-0 top-full z-50 mt-2 w-[300px] rounded-xl border border-amber-300 bg-white p-4 text-sm shadow-[0_10px_30px_rgba(31,48,78,0.18)]">
-                  <p className="font-semibold text-[#1d2433]">⚠ 비어 있는 칸 {emptyFields}개</p>
-                  <p className="mt-1 text-[13px] text-[#6b778a]">‘입력 필요’로 표시된 칸이 그대로 PDF에 나갑니다.</p>
+                  <p className="font-semibold text-[#1d2433]">⚠ 비어 있는 칸 {emptyFields.count}개</p>
+                  <p className="mt-1 text-[13px] text-[#6b778a]">‘입력 필요’로 표시된 칸이 그대로 {emptyFields.kind === "pdf" ? "PDF" : "HWPX"}에 나갑니다.</p>
                   <div className="mt-3 flex gap-2">
                     <button type="button" onClick={goToEmptyField} className="flex-1 rounded-lg bg-[#356df3] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#2a5bd6]">채우러 가기</button>
-                    <button type="button" onClick={() => { setEmptyFields(null); window.print(); }} className="flex-1 rounded-lg bg-[#f0f0f2] px-3 py-2 text-[13px] font-semibold text-[#4a566b] hover:bg-[#e6e7ea]">그대로 저장</button>
+                    <button type="button" onClick={() => { const kind = emptyFields.kind; setEmptyFields(null); runSave(kind); }} className="flex-1 rounded-lg bg-[#f0f0f2] px-3 py-2 text-[13px] font-semibold text-[#4a566b] hover:bg-[#e6e7ea]">그대로 저장</button>
                   </div>
                 </div>
               )}

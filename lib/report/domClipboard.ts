@@ -62,7 +62,7 @@ let normalizeCanvasCtx: CanvasRenderingContext2D | null | undefined;
  * 반드시 크기를 먼저 고정한 뒤 fillStyle을 설정해야 한다 — 순서를 반대로 하면 검게 나온다
  * (실측으로 이 순서 버그도 확인·수정함).
  */
-function normalizeColor(value: string): string {
+export function normalizeColor(value: string): string {
   if (!value || !/^(lab|lch|oklab|oklch|color)\(/i.test(value)) return value;
   try {
     if (normalizeCanvasCtx === undefined) {
