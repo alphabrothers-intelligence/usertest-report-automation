@@ -203,43 +203,24 @@ export function UploadStep({
  * (lib/agent/profile.ts GROUP_PREFIX, lib/agent/classify.ts ENTERPRISE_HEADER). 올린 뒤의 경고는 아래 노란 상자가 따로 띄운다.
  */
 function RawDataHeaderGuide() {
+  // 한눈에 읽고 바로 고칠 수 있게 — 무엇에 / 무엇을 붙이는지 두 줄만(2026-10-26 담당자: 글이 너무 많다).
   const rules = [
-    {
-      title: "기업 요청 문항",
-      when: "기업이 따로 요청해 넣은 문항이 있을 때",
-      add: "기업 요청 질문 - ",
-      before: "‘약물안전리포트’의 내용을 이해하기 쉬웠나요?",
-      why: "안 붙이면 기능 만족도로 분류돼 기능별 그래프·사분면에 섞입니다. 이유 문항에도 붙여 주세요.",
-    },
-    {
-      title: "사용자 경험 품질 문항",
-      when: "[불편하다 / 편하다] 같은 양끝 말 척도가 있을 때",
-      add: "실용성1) ",
-      before: "필톡의 조작은 [불편하다 / 편하다]",
-      why: "안 붙이면 실용성·즐거움 그래프가 나오지 않습니다. 계열(실용성·즐거움)별로 번호를 1부터 매깁니다.",
-    },
+    { target: "기업 요청 문항", add: "기업 요청 질문 - ", miss: "기능 그래프에 섞임" },
+    { target: "[불편하다 / 편하다] 문항", add: "실용성1)", miss: "그래프 안 나옴" },
   ];
   return (
-    <details className="mt-4 rounded-lg border border-[#c9d8fb] bg-[#f3f7ff] px-4 py-3 text-sm text-[#1d2433]" open>
-      <summary className="cursor-pointer font-semibold">올리기 전에 확인: raw data 문항 제목 앞에 붙여야 하는 표시</summary>
-      <p className="mt-1.5 text-[13px] text-[#4a566b]">
-        WALLA 폼에는 응답자에게 안 보이게 빼 두었던 표시입니다. 엑셀에서 <b>1행(문항 제목)</b> 앞에 붙인 뒤 올려 주세요.
-        어느 문항에 붙일지는 설문 생성 때 받은 ‘WALLA 설정 목록’ 6·7번에 적혀 있습니다. 해당 문항이 없으면 넘어가세요.
-      </p>
-      <div className="mt-3 space-y-3">
+    <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-[#1d2433]">
+      <p className="font-semibold">⚠ 올리기 전, 엑셀 1행 문항 제목 앞에 붙이세요 <span className="font-normal text-[#6b778a]">(해당 문항이 있을 때만)</span></p>
+      <ul className="mt-2 space-y-1.5">
         {rules.map((r) => (
-          <div key={r.title} className="rounded-md border border-[#dfe6f5] bg-white px-3 py-2.5">
-            <p className="font-semibold">{r.title} <span className="font-normal text-[#94a0b2]">— {r.when}</span></p>
-            <div className="mt-1.5 grid grid-cols-[60px_minmax(0,1fr)] gap-y-1 text-[13px]">
-              <span className="text-[#94a0b2]">지금</span>
-              <span className="text-[#6b778a]">{r.before}</span>
-              <span className="font-semibold text-[#356df3]">고친 뒤</span>
-              <span><mark className="rounded bg-[#ffe9a8] px-0.5 font-semibold">{r.add.trim()}</mark> {r.before}</span>
-            </div>
-            <p className="mt-1.5 text-[12px] text-[#6b778a]">{r.why}</p>
-          </div>
+          <li key={r.target} className="flex flex-wrap items-center gap-2">
+            <span className="min-w-[150px] text-[#4a566b]">{r.target}</span>
+            <span aria-hidden className="text-[#94a0b2]">→</span>
+            <span className="whitespace-pre rounded bg-white px-1.5 py-0.5 font-semibold text-[#b25e00] ring-1 ring-amber-200">{r.add}</span>
+            <span className="text-[12px] text-[#94a0b2]">빠뜨리면 {r.miss}</span>
+          </li>
         ))}
-      </div>
-    </details>
+      </ul>
+    </div>
   );
 }
