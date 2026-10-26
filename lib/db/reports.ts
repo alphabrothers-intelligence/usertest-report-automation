@@ -667,7 +667,9 @@ export async function saveQuestionPolaritySummaries(
   questionId: string,
   summaries: Partial<Record<Polarity | "combined", string>>,
 ): Promise<void> {
+  // **덮어쓰지 않고 합친다** — 같은 칸에 NPS 판단문(nps_judgment)이 먼저 저장돼 있다. 통째로 바꾸면
+  // 응답 요약을 만들 때마다 Ⅷ장 NPS 판단 3줄이 사라진다(2026-10-26 자동 생성 배선 중 발견).
   await sql`
-    update questions set polarity_summaries = ${sql.json(summaries)} where id = ${questionId}
+    update questions set polarity_summaries = coalesce(polarity_summaries, '{}'::jsonb) || ${sql.json(summaries)}::jsonb where id = ${questionId}
   `;
 }

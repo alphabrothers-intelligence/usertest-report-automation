@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { runPolaritySummariesForQuestion } from "@/lib/pipeline/generatePolaritySummaries";
 import {
   claimNextQualitativeJobItem,
   completeQualitativeJobItem,
@@ -69,6 +70,14 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
     if (!item.checkpoint) throw new Error("Stage2 실행에 필요한 Stage1 체크포인트가 없습니다.");
     const result = await runQualitativeStage2(item.checkpoint as QualitativeStage1Checkpoint);
     await saveQualitativeQuestionResult(job.report_id, result);
+    // 문항별 '응답 요약'(긍정·부정·중립 총평 / 4대 가치 요약)을 그 문항 분석 직후 만든다. 예전엔 담당자가
+    // 문항마다 'AI 요약 생성'을 눌러야 했고, 안 누르면 보고서 칸이 비어 나갔다(2026-10-26 케어클 8곳).
+    // 마지막 단계에 몰아 만들면 300초 제한에 걸릴 수 있어 문항마다 나눠 둔다. 실패해도 분석 결과는 지킨다.
+    try {
+      await runPolaritySummariesForQuestion(job.report_id, result.id);
+    } catch (summaryError) {
+      console.warn(`[qualitative-job] ${result.id} 응답 요약 생성 건너뜀:`, summaryError instanceof Error ? summaryError.message : summaryError);
+    }
     await completeQualitativeJobItem(item.id);
 
     // 새 4개 섹션 분석은 정성 분석의 별도 기능이 아니라, 모든 문항 분석이 정상 저장된 뒤
