@@ -178,6 +178,33 @@ export function ReportStudio({
   // `발행 PDF` 탭으로 전환한다. 이전처럼 PDF를 기본값으로 두면, 사용자는 편집 가능한 보고서가
   // 없는 것처럼 느끼고 별도 전환을 해야 했다.
   const [workspaceMode, setWorkspaceMode] = useState<"web" | "pdf">("web");
+  /** PDF 저장 직전 확인 — 표지·개요의 '입력 필요' 칸이 남아 있으면 바로 채우러 갈 수 있게 한다(2026-10-26 담당자). */
+  // DOM 요소는 상태에 담지 않고 개수만 둔다 — 이동할 때 다시 찾는다(편집 중 바뀌었을 수 있다).
+  const [emptyFields, setEmptyFields] = useState<number | null>(null);
+  const findEmptyFields = () => {
+    const doc = document.querySelector("article") ?? document.body;
+    const found: HTMLElement[] = [];
+    const walker = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent?.trim() ?? "";
+      if ((text === "입력 필요" || text === "기업명 입력") && node.parentElement && !node.parentElement.closest("[data-copy-ignore]")) found.push(node.parentElement);
+    }
+    return found;
+  };
+  const savePdf = () => {
+    const found = findEmptyFields();
+    if (found.length === 0) window.print();
+    else setEmptyFields(found.length);
+  };
+  const goToEmptyField = () => {
+    const first = findEmptyFields()[0];
+    setEmptyFields(null);
+    if (!first) return;
+    first.scrollIntoView({ behavior: "smooth", block: "center" });
+    first.style.outline = "2px solid #f59e0b";
+    first.style.outlineOffset = "2px";
+    window.setTimeout(() => { first.style.outline = ""; first.style.outlineOffset = ""; }, 4000);
+  };
   // 이어진 편집기가 떠 있으면 되돌리기/다시 실행은 편집기 기록을 쓰므로 버튼을 늘 켜 둔다(legacy 화면에선 블록 스택만).
   const [editorReady] = useState(() => typeof window === "undefined" || !new URLSearchParams(window.location.search).has("legacy"));
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -464,7 +491,19 @@ export function ReportStudio({
               <button type="button" onClick={() => setWorkspaceMode("web")} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${workspaceMode === "web" ? "bg-white text-[#1473e6] shadow-sm" : "text-[#667085]"}`}>보고서 편집</button>
               {pdfUrl && <button type="button" onClick={() => setWorkspaceMode("pdf")} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${workspaceMode === "pdf" ? "bg-white text-[#1473e6] shadow-sm" : "text-[#667085]"}`}>PDF 미리보기</button>}
             </div>
-            <button type="button" onClick={() => window.print()} disabled={workspaceStatus !== "ready"} className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-semibold text-[#475467] hover:bg-[#f7f9fc] disabled:opacity-50">PDF 저장</button>
+            <div className="relative">
+              <button type="button" onClick={savePdf} disabled={workspaceStatus !== "ready"} className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-semibold text-[#475467] hover:bg-[#f7f9fc] disabled:opacity-50">PDF 저장</button>
+              {emptyFields !== null && (
+                <div role="dialog" className="absolute right-0 top-full z-50 mt-2 w-[300px] rounded-xl border border-amber-300 bg-white p-4 text-sm shadow-[0_10px_30px_rgba(31,48,78,0.18)]">
+                  <p className="font-semibold text-[#1d2433]">⚠ 비어 있는 칸 {emptyFields}개</p>
+                  <p className="mt-1 text-[13px] text-[#6b778a]">‘입력 필요’로 표시된 칸이 그대로 PDF에 나갑니다.</p>
+                  <div className="mt-3 flex gap-2">
+                    <button type="button" onClick={goToEmptyField} className="flex-1 rounded-lg bg-[#356df3] px-3 py-2 text-[13px] font-semibold text-white hover:bg-[#2a5bd6]">채우러 가기</button>
+                    <button type="button" onClick={() => { setEmptyFields(null); window.print(); }} className="flex-1 rounded-lg bg-[#f0f0f2] px-3 py-2 text-[13px] font-semibold text-[#4a566b] hover:bg-[#e6e7ea]">그대로 저장</button>
+                  </div>
+                </div>
+              )}
+            </div>
             <Link href="/new" className="rounded-lg border border-[#d9e0e9] px-3 py-2 text-sm font-medium text-[#475467] hover:bg-[#f7f9fc]">나가기</Link>
           </div>
         </div>
