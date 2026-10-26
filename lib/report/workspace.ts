@@ -208,7 +208,8 @@ export function responseSummaryHtml(ps: PolaritySummaryText | null | undefined, 
   add("negative", "부정");
   add("neutral", "중립");
   const content = rows.length === 0
-    ? `<p style="margin:0;color:#9ca3af">정성 요약이 아직 없습니다. 이 박스의 AI 요약 생성 버튼으로 채울 수 있습니다.</p>`
+    // 화면 전용 안내 — 인쇄·복사·편집 문서에는 들어가지 않는다(data-copy-ignore). PDF에 찍혀 미완성 문서처럼 보였다(2026-10-26).
+    ? `<p data-copy-ignore="true" style="margin:0;color:#9ca3af">정성 요약이 아직 없습니다. 이 박스의 AI 요약 생성 버튼으로 채울 수 있습니다.</p>`
     : rows.join("");
   // 별도 툴바가 아니라 실제 "응답 요약" 셀 안에서만 실행한다. contenteditable=false로
   // 본문 편집 중 버튼이 지워지는 일을 막고, data-copy-ignore로 한글 복사 대상에서도 제외한다.
@@ -667,7 +668,7 @@ export function valueSummaryBoxHtml(label: string, summaries: PolaritySummaryTex
   return (
     `<table style="${CSS.table};margin:0 0 14pt"><tbody>` +
     `<tr><td style="${CSS.header};color:#000000">${action}[ ${escapeHtml(label)} 조사 결과 ]</td></tr>` +
-    `<tr><td style="${CSS.cellLeft};padding:8pt">${text ? formattedText : "이 항목의 정성 요약이 아직 생성되지 않았습니다. 의견 분석을 다시 실행하면 함께 채워집니다."}</td></tr>` +
+    `<tr><td style="${CSS.cellLeft};padding:8pt">${text ? formattedText : `<p data-copy-ignore="true" style="margin:0;color:#9ca3af">이 항목의 정성 요약이 아직 생성되지 않았습니다. 의견 분석을 다시 실행하면 함께 채워집니다.</p>`}</td></tr>` +
     `</tbody></table>`
   );
 }
