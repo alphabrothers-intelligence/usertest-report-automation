@@ -203,21 +203,29 @@ export function UploadStep({
  * (lib/agent/profile.ts GROUP_PREFIX, lib/agent/classify.ts ENTERPRISE_HEADER). 올린 뒤의 경고는 아래 노란 상자가 따로 띄운다.
  */
 function RawDataHeaderGuide() {
-  // 한눈에 읽고 바로 고칠 수 있게 — 무엇에 / 무엇을 붙이는지 두 줄만(2026-10-26 담당자: 글이 너무 많다).
+  // 한눈에 읽고 바로 고칠 수 있게 — 무엇에 / 무엇을 붙이는지 + 붙인 모습 예시 한 줄(2026-10-26 담당자).
+  // 표시가 없어도 보고서 생성이 멈추지는 않는다 — 문항이 엉뚱한 장에 섞여 '제대로' 만들어지지 않는 것이다.
   const rules = [
-    { target: "기업 요청 문항", add: "기업 요청 질문 - ", miss: "기능 그래프에 섞임" },
-    { target: "[불편하다 / 편하다] 문항", add: "실용성1)", miss: "그래프 안 나옴" },
+    { target: "기업 요청 문항", add: "기업 요청 질문 - ", example: "‘약물안전리포트’의 내용을 이해하기 쉬웠나요?", or: null },
+    { target: "[불편하다 / 편하다] 문항", add: "실용성1) ", example: "필톡의 조작은 [불편하다 / 편하다]", or: "또는 그 문항의 질문·답변 열을 지우고 올리세요" },
   ];
+  const tag = "whitespace-pre rounded bg-white px-1.5 py-0.5 font-semibold text-[#b25e00] ring-1 ring-amber-200";
   return (
     <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-[#1d2433]">
-      <p className="font-semibold">⚠ 올리기 전, 엑셀 1행 문항 제목 앞에 붙이세요 <span className="font-normal text-[#6b778a]">(해당 문항이 있을 때만)</span></p>
-      <ul className="mt-2 space-y-1.5">
+      <p className="font-semibold">⚠ 올리기 전, 엑셀 1행 문항 제목 앞에 붙이세요</p>
+      <p className="text-[12px] text-[#6b778a]">해당 문항이 있을 때만 · 안 붙이면 보고서가 제대로 생성되지 않습니다</p>
+      <ul className="mt-2.5 space-y-2.5">
         {rules.map((r) => (
-          <li key={r.target} className="flex flex-wrap items-center gap-2">
-            <span className="min-w-[150px] text-[#4a566b]">{r.target}</span>
-            <span aria-hidden className="text-[#94a0b2]">→</span>
-            <span className="whitespace-pre rounded bg-white px-1.5 py-0.5 font-semibold text-[#b25e00] ring-1 ring-amber-200">{r.add}</span>
-            <span className="text-[12px] text-[#94a0b2]">빠뜨리면 {r.miss}</span>
+          <li key={r.target}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium text-[#4a566b]">{r.target}</span>
+              <span aria-hidden className="text-[#94a0b2]">→</span>
+              <span className={tag}>{r.add.trim()}</span>
+              {r.or && <span className="text-[12px] text-[#6b778a]">{r.or}</span>}
+            </div>
+            <p className="mt-1 text-[12px] text-[#6b778a]">
+              예) <mark className="rounded bg-amber-200/70 px-0.5 font-semibold text-[#1d2433]">{r.add.trim()}</mark> {r.example}
+            </p>
           </li>
         ))}
       </ul>
