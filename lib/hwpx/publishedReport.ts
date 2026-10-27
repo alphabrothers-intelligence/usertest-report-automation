@@ -25,17 +25,20 @@ export type HwpCell = {
   borders: [HwpBorder, HwpBorder, HwpBorder, HwpBorder]; // 왼·오른·위·아래
   valign?: "TOP" | "CENTER" | "BOTTOM";
   padPx?: [number, number, number, number]; // 왼·오른·위·아래
-  /** 머리 칸(`<th>`). 머리 행은 첫 본문 행과 같은 쪽에 붙어 다닌다. */
+  /** 머리 칸(`<th>`). */
   header?: boolean;
+  /** 웹 편집기가 쪽 경계에서 병합 칸을 나눠 이어 그린 칸 — 위의 원래 병합 칸에 rowspan으로 되합친다. */
+  cont?: boolean;
 };
+type Spacing = { spaceBeforePt?: number; spaceAfterPt?: number };
 export type HwpNode =
   | { kind: "chapter"; numeral: string; title: string }
   | { kind: "sub"; number: string; text: string }
   | { kind: "question"; text: string; note?: string }
   /** `sizePt`: 빈 줄의 높이(글자 크기). 편집기는 빈 문단을 낮게 그린다. */
-  | { kind: "p"; runs: HwpRun[]; align?: HwpAlign; sizePt?: number }
+  | ({ kind: "p"; runs: HwpRun[]; align?: HwpAlign; sizePt?: number } & Spacing)
   /** `rowHeightsPx`: 화면에서 잰 행 높이 — 표를 통째로 둘지, 어디서 나눌지 정하는 데 쓴다. */
-  | { kind: "table"; widthPx: number; rows: HwpCell[][]; rowHeightsPx?: number[] }
+  | ({ kind: "table"; widthPx: number; rows: HwpCell[][]; rowHeightsPx?: number[] } & Spacing)
   | { kind: "img"; png: Uint8Array; widthPx: number; heightPx: number };
 
 export type HwpDoc = {
@@ -109,15 +112,17 @@ class Styles {
     }
     return this.chars.get(key)!;
   }
-  para(align: HwpAlign = "JUSTIFY", lineSpacing = 160, keep = false): string {
-    const key = `${align}|${lineSpacing}|${keep}`;
+  para(align: HwpAlign = "JUSTIFY", lineSpacing = 160, keep = false, before = 0, after = 0): string {
+    const key = `${align}|${lineSpacing}|${keep}|${before}|${after}`;
     if (!this.paras.has(key)) {
       const id = String(this.next.paraPr++);
       this.added.paraPr.push(this.proto("paraPr", BASE_PARA)
         .replace(/id="\d+"/, `id="${id}"`)
         .replace(/<hh:align horizontal="\w+"/, `<hh:align horizontal="${align}"`)
         .replace(/(<hh:lineSpacing type="PERCENT" value=")\d+/g, `$1${lineSpacing}`)
-        .replace(/keepWithNext="\d"/, `keepWithNext="${keep ? 1 : 0}"`));
+        .replace(/keepWithNext="\d"/, `keepWithNext="${keep ? 1 : 0}"`)
+        .replace(/<hc:prev value="\d+"/g, `<hc:prev value="${before}"`)
+        .replace(/<hc:next value="\d+"/g, `<hc:next value="${after}"`));
       this.paras.set(key, id);
     }
     return this.paras.get(key)!;
@@ -173,12 +178,15 @@ class Writer {
   constructor(private s: Styles, private proto: string[], private scale: number) {}
 
   private id = () => String(this.seq++);
+  /** 직전에 놓은 본문 표의 열 폭 — 이어진 표의 세로선을 맞출 때 쓴다. */
+  private lastWidths: number[] | null = null;
   private hwp = (px: number) => Math.max(1, Math.round(px * this.scale));
 
-  paragraph(runs: HwpRun[], align: HwpAlign = "JUSTIFY", lineSpacing = 160, keep = false, sizePt?: number): string {
+  paragraph(runs: HwpRun[], align: HwpAlign = "JUSTIFY", lineSpacing = 160, keep = false, sizePt?: number, space: Spacing = {}): string {
     const body = runs.filter((r) => r.text).map((r) => `<hp:run charPrIDRef="${this.s.char(r)}"><hp:t>${esc(r.text)}</hp:t></hp:run>`).join("")
       || `<hp:run charPrIDRef="${this.s.char({ sizePt })}"/>`;
-    return `<hp:p id="0" paraPrIDRef="${this.s.para(align, lineSpacing, keep)}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">${body}</hp:p>`;
+    const pt = (v?: number) => Math.min(3000, Math.round((v ?? 0) * 100));
+    return `<hp:p id="0" paraPrIDRef="${this.s.para(align, lineSpacing, keep, pt(space.spaceBeforePt), pt(space.spaceAfterPt))}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">${body}</hp:p>`;
   }
   /** 표·그림 하나만 든 문단. */
   private holder(obj: string, align: HwpAlign = "LEFT", keep = false, lineSpacing = 160): string {
@@ -240,6 +248,14 @@ class Writer {
       let c = 0;
       for (const cell of row) {
         while (grid[r][c]) c++;
+        const above = cell.cont ? placed.find((p) => p.c === c && p.r + p.cell.rowSpan === r) : undefined;
+        if (above) {
+          // 쪽 경계에서 나뉘어 그려진 병합 칸 — 원래 칸을 늘려 되합친다.
+          for (let dr = 0; dr < cell.rowSpan; dr++) for (let dc = 0; dc < above.cell.colSpan; dc++) (grid[r + dr] ??= [])[c + dc] = true;
+          above.cell = { ...above.cell, rowSpan: above.cell.rowSpan + cell.rowSpan };
+          c += above.cell.colSpan;
+          continue;
+        }
         for (let dr = 0; dr < cell.rowSpan; dr++) for (let dc = 0; dc < cell.colSpan; dc++) (grid[r + dr] ??= [])[c + dc] = true;
         placed.push({ cell, r, c });
         c += cell.colSpan;
@@ -275,6 +291,12 @@ class Writer {
     let widths = cols.map((w) => this.hwp(w || fallback));
     const total = widths.reduce((a, b) => a + b, 0);
     if (total > maxWidth) widths = widths.map((w) => Math.floor((w * maxWidth) / total));
+    // 바로 위 표와 열 수·전체 폭이 같으면 열 경계를 그 표에 맞춘다 — 화면에서 1~2px 다르게 잰 값 때문에
+    // 평균표와 의견표의 가운데 세로선이 어긋났다(4대 가치, 2026-10-27).
+    const prev = this.lastWidths;
+    const sumW = widths.reduce((a, b) => a + b, 0);
+    if (prev && prev.length === widths.length && Math.abs(prev.reduce((a, b) => a + b, 0) - sumW) <= sumW * 0.03
+      && prev.every((w, i) => Math.abs(w - widths[i]) <= sumW * 0.08)) widths = [...prev];
     placed.sort((a, b) => a.r - b.r || a.c - b.c);
     return { placed, widths, rowCnt };
   }
@@ -314,40 +336,24 @@ class Writer {
   }
 
   /**
-   * 표의 쪽 넘김 — **어떤 raw data로 만든 보고서든** 같은 규칙으로 정한다(웹뷰 쪽 묶기와 같은 원칙).
-   * - 쪽의 30% 이하인 표는 통째로 둔다(글자처럼 취급 → 남은 자리가 모자라면 다음 쪽으로 같이 간다).
-   * - 그보다 큰 표는 **머리 행 + 첫 본문 행(쪽의 25% 이내)** 을 통째 조각으로 떼고, 나머지를
-   *   쪽 경계에서 나뉘는 표로 바로 잇는다 — 제목·머리 행만 쪽 끝에 홀로 남는 일이 구조적으로 없다.
-   *   병합 칸이 걸친 자리면 그 칸을 둘로 나눠 뒤 조각에 빈 칸으로 잇는다(renderRows).
-   * - 한 행짜리 표(그래프 틀 등)는 통째로 둔다.
-   * - 나뉘는 표는 행 단위로 넘긴다(셀 단위 나눔). 한 행이 쪽의 45%를 넘을 때만 행 안에서도 나눈다
-   *   (웹뷰의 "반 쪽보다 큰 행은 흘린다"와 같다) — 안 그러면 그 행이 통째로 밀려 큰 빈자리가 생긴다.
-   * 칸 안의 표는 한글이 쪽 경계에서 나누지 못하므로 늘 통째로 둔다.
+   * 표의 쪽 넘김 — **어떤 raw data로 만든 보고서든** 같은 규칙으로 정한다(화면에서 잰 행 높이만 본다).
+   * - 쪽의 30% 이하인 표, 그리고 한 쪽에 들어가는 한 행짜리 표(그래프 틀)는 통째로 둔다(글자처럼 취급).
+   *   남은 자리가 모자라면 다음 쪽으로 같이 간다.
+   * - 그보다 큰 표는 **한 표 그대로** 쪽 경계에서 나눈다(`쪽 경계에서 나눔`) — 표를 조각으로 쪼개 두면
+   *   열 폭·병합이 조각마다 달라져 깨져 보였다(2026-10-27 담당자). 머리 행은 반복하지 않는다(원본과 같다).
+   * 칸 안의 표는 한글이 쪽 경계에서 나누지 못하므로 늘 통째로 둔다 — 그래서 큰 표를 상자 칸에 넣지 않는다(domToHwp).
    */
   table(node: TableNode, maxWidth: number, nested: boolean, keep = false): string {
     const g = this.grid(node, maxWidth);
     const n = g.rowCnt;
     if (nested) return this.holder(this.renderRows(g, 0, n, { inline: true, pageBreak: "CELL", top: 141, bottom: 141 }), "CENTER");
-    const heights = node.rows.map((_, i) => this.hwp(node.rowHeightsPx?.[i] ?? 30));
-    const sum = (a: number, b: number) => heights.slice(a, b).reduce((x, y) => x + y, 0);
-    const atomic = (from: number, to: number, bottom: number) =>
-      this.renderRows(g, from, to, { inline: true, pageBreak: "CELL", top: 141, bottom });
-    if (sum(0, n) <= BODY_HEIGHT * 0.3) return this.holder(atomic(0, n, 141), "CENTER", keep);
-
-    const isHead = (r: number) => g.placed.filter((p) => p.r === r).every((p) => p.cell.header || p.cell.colSpan === g.widths.length);
-    let k = 0;
-    while (k < n && isHead(k)) k++;
-    const body = k;
-    if (k < n && sum(0, k + 1) <= BODY_HEIGHT * 0.25) k++;
-    const pageBreak = heights.some((h) => h > BODY_HEIGHT * 0.45) ? "TABLE" : "CELL";
-    const flowing = (from: number, top: number) => this.renderRows(g, from, n, { inline: false, pageBreak, top, bottom: 141 });
-    if (k === body || k >= n) {
-      // 한 행짜리 표(그래프 틀 등)는 어차피 나눌 자리가 없으니 통째로 둔다 — 앞 제목과도 붙어 다닌다.
-      if (n === 1 && pageBreak === "CELL") return this.holder(atomic(0, n, 141), "CENTER", keep);
-      return this.holder(flowing(0, 141), "CENTER", keep);
-    }
-    // 두 조각 사이가 벌어지지 않게 머리 조각 문단은 줄 간격 100%·아래 여백 0으로 둔다.
-    return this.holder(atomic(0, k, 0), "CENTER", true, 100) + this.holder(flowing(k, 0), "CENTER");
+    const total = node.rows.map((_, i) => this.hwp(node.rowHeightsPx?.[i] ?? 30)).reduce((a, b) => a + b, 0);
+    const top = Math.max(141, Math.round((node.spaceBeforePt ?? 0) * 100));
+    const bottom = Math.max(141, Math.round((node.spaceAfterPt ?? 0) * 100));
+    const atomic = total <= BODY_HEIGHT * 0.3 || (n === 1 && total <= BODY_HEIGHT * 0.95);
+    const xml = this.holder(this.renderRows(g, 0, n, { inline: atomic, pageBreak: atomic ? "CELL" : "TABLE", top, bottom }), "CENTER", keep);
+    this.lastWidths = g.widths; // 칸 안 내용을 다 그린 뒤에 기억한다(칸 안 문단이 지우지 않게)
+    return xml;
   }
 
   /** 다음 것과 같은 쪽에 붙어 있어야 하는가 — 제목 구실을 하는 것들. */
@@ -367,29 +373,11 @@ class Writer {
     return text && !text.includes("\u0000") && text.length <= 60 && cell.nodes.length <= 2 ? cell : null;
   }
 
-  /** 위 상자의 아래 테두리나 아래 상자의 위 테두리가 비어 있으면 화면에서 한 상자로 이어 그린 것이다. */
-  private static stacks(a: TableNode, b: TableNode): boolean {
-    const single = (t: TableNode) => t.rows.every((r) => r.length === 1 && (r[0].colSpan || 1) === 1);
-    if (!single(a) || !single(b) || Math.abs(a.widthPx - b.widthPx) > 2) return false;
-    return !a.rows[a.rows.length - 1][0].borders[3] || !b.rows[0][0].borders[2];
-  }
-
   nodes(list: HwpNode[], width: number, inCell = false): string {
     const out: string[] = [];
     for (let i = 0; i < list.length; i++) {
       const n = list[i];
       const next = list[i + 1];
-      // 같은 폭의 한 열짜리 상자가 이어지면(화면에서 문단마다 테두리를 그린 상자 — 4대 가치 종합 해석 등)
-      // 한 표로 쌓는다. 따로 두면 상자 사이가 벌어지고 쪽 경계에서 문단 단위로 흩어진다.
-      if (n.kind === "table" && next?.kind === "table" && Writer.stacks(n, next)) {
-        const head = Writer.titleCell(n) ? [{ ...n.rows[0][0], header: true }] : null;
-        list = [...list.slice(0, i + 1), {
-          ...next,
-          rows: [...(head ? [head] : n.rows), ...next.rows],
-          rowHeightsPx: [...(n.rowHeightsPx ?? n.rows.map(() => 30)), ...(next.rowHeightsPx ?? next.rows.map(() => 30))],
-        }, ...list.slice(i + 2)];
-        continue;
-      }
       // 표 제목 띠 바로 뒤에 표가 오면 제목을 그 표의 첫 행으로 합친다 — 따로 두면 쪽 끝에 제목만 남는다.
       if (n.kind === "table" && next?.kind === "table" && Writer.titleCell(n) && !Writer.titleCell(next) && next.widthPx >= n.widthPx * 0.8) {
         const title = { ...Writer.titleCell(n)!, colSpan: 0, header: true };
@@ -397,11 +385,12 @@ class Writer {
         continue;
       }
       const keep = !inCell && !!next && Writer.isTitle(n);
+      if (!inCell && n.kind !== "table" && !(n.kind === "p" && !n.runs.length)) this.lastWidths = null;
       switch (n.kind) {
         case "chapter": out.push(this.keepProto(this.chapter(n.numeral, n.title))); break;
         case "sub": out.push(this.keepProto(this.sub(n.number, n.text))); break;
         case "question": out.push(this.keepProto(this.question(n.text, n.note))); break;
-        case "p": out.push(this.paragraph(n.runs, n.align, inCell ? 130 : 160, keep, n.sizePt)); break;
+        case "p": out.push(this.paragraph(n.runs, n.align, inCell ? 130 : 160, keep, n.sizePt, inCell ? {} : n)); break;
         case "img": out.push(this.image(n.png, n.widthPx, n.heightPx, width, false, keep)); break;
         case "table": out.push(this.table(n, width, inCell, keep)); break;
       }

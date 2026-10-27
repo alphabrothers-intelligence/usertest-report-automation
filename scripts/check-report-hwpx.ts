@@ -42,23 +42,24 @@ const nodes: HwpNode[] = [
   ], [
     { ...cell(""), widthPx: 680, nodes: [{ kind: "table", widthPx: 600, rows: [[cell("안쪽 표"), cell("값")]] }] },
   ]] },
-  // 쪽 넘김 규칙: 표 제목 띠 + 긴 표(머리 행 + 본문 40행, 행마다 30px) → 제목은 표 첫 행으로 합쳐지고,
-  // 머리 2행 + 첫 본문 행이 통째 조각(글자처럼 취급), 나머지가 쪽 경계에서 나뉘는 표가 된다.
+  // 쪽 넘김 규칙: 표 제목 띠 + 긴 표(머리 행 + 본문 40행, 행마다 30px) → 제목이 표 첫 행으로 합쳐지고,
+  // 쪽의 30%를 넘으니 한 표 그대로 쪽 경계에서 나뉜다(TABLE, 글자처럼 취급 안 함).
   { kind: "table", widthPx: 680, rows: [[{ ...cell("[ 기능별 만족도 순위 종합 ]"), widthPx: 680 }]], rowHeightsPx: [30] },
   { kind: "table", widthPx: 680, rowHeightsPx: new Array(41).fill(30), rows: [
     [cell("순위", { header: true }), cell("기능", { header: true })],
     ...Array.from({ length: 40 }, (_, i) => [cell(String(i + 1)), cell(`기능 ${i + 1}`)]),
   ] },
-  // 병합 칸이 머리 조각 경계에 걸친 표(인사이트 종합 표 모양) → 그 칸을 둘로 나눠도 격자가 맞아야 한다
-  { kind: "table", widthPx: 680, rowHeightsPx: new Array(31).fill(30), rows: [
-    [cell("구분", { header: true }), cell("액션", { header: true })],
-    [cell("긍정 의견", { rowSpan: 30 }), cell("액션 1")],
-    ...Array.from({ length: 29 }, (_, i) => [cell(`액션 ${i + 2}`)]),
+  // 웹 편집기가 쪽 경계에서 병합 칸을 나눠 그린 모양(rowspan 줄임 + 이어 그린 빈 칸) → 원래 병합으로 되합쳐야 한다
+  { kind: "table", widthPx: 680, rowHeightsPx: [30, 30, 30, 30], rows: [
+    [cell("부정 의견", { rowSpan: 2 }), cell("액션 1")],
+    [cell("액션 2")],
+    [{ ...cell(""), cont: true, rowSpan: 2 }, cell("액션 3")],
+    [cell("액션 4")],
   ] },
-  // 문단마다 따로 그린 상자(위 상자는 아래 테두리 없음) → 한 표로 쌓여야 한다
-  { kind: "table", widthPx: 680, rows: [[{ ...cell("상자 문단 1"), widthPx: 680, borders: [line, line, line, null] }]], rowHeightsPx: [40] },
-  { kind: "table", widthPx: 680, rows: [[{ ...cell("상자 문단 2"), widthPx: 680, borders: [line, line, null, line] }]], rowHeightsPx: [40] },
-  // 한 행이 쪽의 절반보다 큰 표 → 행 안에서도 나눈다(TABLE)
+  // 바로 위 표와 열 수·폭이 같은 표 → 가운데 세로선이 위 표에 맞춰진다
+  { kind: "table", widthPx: 680, rowHeightsPx: [30], rows: [[cell("평균", { widthPx: 330 }), cell("표준편차", { widthPx: 350 })]] },
+  { kind: "table", widthPx: 680, rowHeightsPx: [30], rows: [[cell("긍정 의견", { widthPx: 340 }), cell("부정 의견", { widthPx: 340 })]] },
+  // 쪽 절반보다 큰 행이 있는 표 → 한 표 그대로 쪽 경계에서 나뉜다
   { kind: "table", widthPx: 680, rowHeightsPx: [30, 700], rows: [[cell("긍정", { header: true }), cell("부정", { header: true })], [cell("긴 의견"), cell("긴 의견")]] },
 ];
 
@@ -120,19 +121,15 @@ async function main() {
   const toc = s1.match(/<hp:stringParam name="Command">\?([^;]*)/g) ?? [];
   if (!file) {
     ok(tables >= 8, `표가 너무 적다(${tables})`);
-    // 표 제목이 다음 표의 첫 행으로 들어갔는가(따로 남은 제목 띠 표가 없어야 한다)
-    const titleIdx = s1.indexOf("[ 기능별 만족도 순위 종합 ]");
-    const titleTbl = s1.lastIndexOf("<hp:tbl ", titleIdx);
-    ok(/rowCnt="3"/.test(s1.slice(titleTbl, titleTbl + 400)), "표 제목 띠가 표의 첫 행으로 합쳐지지 않았다(머리 조각 = 제목 + 머리 + 첫 본문 행 = 3행이어야 한다)");
-    ok(/treatAsChar="1"/.test(s1.slice(titleTbl, s1.indexOf("</hp:pos>", titleTbl) + 10)) || /<hp:pos treatAsChar="1"/.test(s1.slice(titleTbl, titleTbl + 1200)), "머리 조각이 통째(글자처럼 취급)가 아니다");
-    const rest = s1.indexOf("<hp:tbl ", s1.indexOf("</hp:tbl>", titleIdx));
-    ok(/pageBreak="CELL" repeatHeader="0" rowCnt="39"/.test(s1.slice(rest, rest + 300)) && /<hp:pos treatAsChar="0"/.test(s1.slice(rest, rest + 800)), "나머지 행이 셀 단위로 나뉘는 표(39행)가 아니다");
-    ok(/pageBreak="TABLE"/.test(s1.slice(s1.lastIndexOf("<hp:tbl ", s1.lastIndexOf("긴 의견")), s1.lastIndexOf("긴 의견"))), "반 쪽보다 큰 행이 있는 표가 행 안 나눔(TABLE)이 아니다");
-    const posIdx = s1.indexOf("긍정 의견");
-    const posTbl = s1.slice(s1.lastIndexOf("<hp:tbl ", posIdx), posIdx);
-    ok(/rowCnt="2"/.test(posTbl) && /treatAsChar="1"/.test(posTbl), "병합 칸이 걸친 표의 머리 조각(머리 + 첫 행)이 떨어지지 않았다");
-    const stackIdx = s1.indexOf("상자 문단 2");
-    ok(s1.slice(s1.lastIndexOf("<hp:tbl ", stackIdx), stackIdx).includes("상자 문단 1"), "이어 그린 한 열 상자들이 한 표로 쌓이지 않았다");
+    const tblAt = (text: string) => s1.slice(s1.lastIndexOf("<hp:tbl ", s1.indexOf(text)), s1.indexOf(text));
+    const head = tblAt("[ 기능별 만족도 순위 종합 ]");
+    ok(/rowCnt="42"/.test(head), "표 제목 띠가 표의 첫 행으로 합쳐지지 않았다(제목 + 머리 + 40행 = 42행)");
+    ok(/pageBreak="TABLE"/.test(head) && /<hp:pos treatAsChar="0"/.test(head), "큰 표가 한 표 그대로 쪽 경계에서 나뉘지 않는다");
+    const merged = tblAt("부정 의견");
+    ok(/rowCnt="4"/.test(merged) && /rowSpan="4"/.test(s1.slice(s1.indexOf("부정 의견"), s1.indexOf("부정 의견") + 600)), "쪽 경계에서 나뉘어 그려진 병합 칸이 되합쳐지지 않았다");
+    const w = (text: string) => [...s1.slice(s1.indexOf(text), s1.indexOf(text) + 1500).matchAll(/<hp:cellSz width="(\d+)"/g)].map((m) => m[1])[0];
+    ok(w("평균") === w("긍정 의견</"), `이어진 표의 열 경계가 맞지 않는다(${w("평균")} ≠ ${w("긍정 의견</")})`);
+    ok(/pageBreak="TABLE"/.test(tblAt("긴 의견")), "반 쪽보다 큰 행이 있는 표가 쪽 경계에서 나뉘지 않는다");
     // 제목 구실(장·절·문항 머리)은 다음 문단과 함께
     const keepIds = new Set([...header.matchAll(/<hh:paraPr id="(\d+)"(?:(?!<\/hh:paraPr>).)*keepWithNext="1"/g)].map((m) => m[1]));
     const qPara = blocks(s1, "p").map((b) => s1.slice(b.start, b.end)).find((p) => p.includes("Q1. 나이를")) ?? "";

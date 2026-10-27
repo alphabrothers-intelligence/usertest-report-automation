@@ -33,6 +33,7 @@ function skip(el: Element): boolean {
   if (el.hasAttribute("hidden") || el.getAttribute("aria-hidden") === "true" && !MEDIA.has(el.tagName)) return true;
   if (el.hasAttribute("data-copy-ignore") && !el.hasAttribute("data-print-keep")) return true;
   if (el.classList.contains("ProseMirror-widget") || el.hasAttribute("data-page-gap") || el.classList.contains("ProseMirror-gapcursor")) return true;
+  if (el.hasAttribute("data-cut-line")) return true;
   const cs = getComputedStyle(el);
   return cs.display === "none" || cs.visibility === "hidden";
 }
@@ -139,14 +140,24 @@ async function rasterize(el: Element): Promise<HwpNode | null> {
   return { kind: "img", png: new Uint8Array(await blob.arrayBuffer()), widthPx: r.width, heightPx: r.height };
 }
 
+/**
+ * 웹 편집기는 쪽 경계에서 표를 **화면용으로** 고쳐 그린다(lib/editor/pagination.ts): 빈 간격 행을 끼우고,
+ * 경계에 걸친 병합 칸의 rowspan을 줄인 뒤 다음 쪽에 같은 색의 빈 칸(`td[data-page-gap]`)을 얹는다.
+ * 그 모양을 그대로 옮기면 칸이 밀리고 표가 쪽마다 따로 놀았다(2026-10-27 담당자: 액션 플랜 표 대부분이
+ * 깨짐). 그래서 간격 행은 버리고, 이어 그린 칸은 원래 병합 칸의 rowspan으로 **되돌린다**(`cont`).
+ */
 async function table(el: HTMLTableElement): Promise<HwpNode> {
   const rows: HwpCell[][] = [];
   const rowHeightsPx: number[] = [];
   for (const tr of Array.from(el.rows)) {
-    if (skip(tr)) continue;
+    if (tr.hasAttribute("data-page-gap") || skip(tr)) continue;
     const trBg = hex(getComputedStyle(tr).backgroundColor);
     const cells: HwpCell[] = [];
     for (const td of Array.from(tr.cells)) {
+      if (td.hasAttribute("data-page-gap")) {
+        cells.push({ nodes: [], colSpan: td.colSpan || 1, rowSpan: td.rowSpan || 1, widthPx: td.getBoundingClientRect().width, borders: [null, null, null, null], cont: true });
+        continue;
+      }
       if (skip(td)) continue;
       const cs = getComputedStyle(td);
       cells.push({
@@ -161,9 +172,21 @@ async function table(el: HTMLTableElement): Promise<HwpNode> {
         header: td.tagName === "TH",
       });
     }
-    if (cells.length) { rows.push(cells); rowHeightsPx.push(tr.getBoundingClientRect().height); }
+    if (cells.length) { rows.push(cells); rowHeightsPx.push(realHeight(tr)); }
   }
-  return { kind: "table", widthPx: el.getBoundingClientRect().width, rows, rowHeightsPx };
+  return { kind: "table", widthPx: el.getBoundingClientRect().width, rows, rowHeightsPx, ...spacing(el) };
+}
+
+/** 화면 높이에서 쪽 사이 간격(웹 편집기가 끼운 빈 상자)을 뺀 값 — 원래 내용의 높이. */
+function realHeight(el: Element): number {
+  const gaps = Array.from(el.querySelectorAll("[data-page-gap]")).filter((g) => !g.parentElement?.closest("[data-page-gap]"));
+  return Math.max(0, el.getBoundingClientRect().height - gaps.reduce((sum, g) => sum + g.getBoundingClientRect().height, 0));
+}
+/** 위·아래 바깥 여백(pt). */
+function spacing(el: Element): { spaceBeforePt?: number; spaceAfterPt?: number } {
+  const cs = getComputedStyle(el);
+  const pt = (v: string) => Math.round(Math.max(0, parseFloat(v) || 0) * 0.75);
+  return { spaceBeforePt: pt(cs.marginTop) || undefined, spaceAfterPt: pt(cs.marginBottom) || undefined };
 }
 
 /** 상자 요소의 테두리·배경·여백을 칸 하나로. */
@@ -216,25 +239,74 @@ async function convert(el: Element): Promise<HwpNode[]> {
   if (!isBox(el)) return inner(el);
 
   const rect = el.getBoundingClientRect();
-  // 긴 상자를 칸 하나로 만들면 한글이 쪽 경계에서 그 안을 못 나눈다(칸 안의 표·그림은 통째로 움직인다).
-  // 그래서 쪽의 30%를 넘는 상자는 **자식마다 한 행**인 표로 펼친다 — 테두리는 바깥만 그려 한 상자로 보인다.
-  if (rect.height > PAGE_BODY_PX * 0.3 && !sideBySide(el)) {
-    const gs = (await groups(el)).filter((g) => g.nodes.length);
-    if (gs.length > 1) {
-      const base = boxCell(el, []);
-      const [l, r, t, b] = base.borders;
-      const [pl, pr, pt, pb] = base.padPx!;
-      const last = gs.length - 1;
-      return [{
-        kind: "table",
-        widthPx: rect.width,
-        rows: gs.map((g, i) => [{ ...base, nodes: g.nodes, valign: "TOP", borders: [l, r, i === 0 ? t : null, i === last ? b : null], padPx: [pl, pr, i === 0 ? pt : 0, i === last ? pb : 0] }]),
-        rowHeightsPx: gs.map((g) => g.heightPx),
-      }];
-    }
-  }
+  const height = realHeight(el);
+  const solid = (nodes: HwpNode[]) => nodes.some((n) => n.kind === "img" || n.kind === "table");
   const nodes = await inner(el);
-  return nodes.length ? [{ kind: "table", widthPx: rect.width, rows: [[boxCell(el, nodes)]], rowHeightsPx: [rect.height] }] : [];
+  if (!nodes.length) return [];
+  const one = (): HwpNode[] => [{ kind: "table", widthPx: rect.width, rows: [[boxCell(el, nodes)]], rowHeightsPx: [height], ...spacing(el) }];
+  // 작은 상자, 그리고 그림·표가 든 상자(그래프 틀)는 칸 하나로 통째 둔다 — 그래프는 쪽에서 나눌 수 없다.
+  if (height <= PAGE_BODY_PX * 0.3 || (solid(nodes) && height <= PAGE_BODY_PX * 0.95)) return one();
+  // 한 쪽보다 큰 상자에 표가 들었으면 상자를 벗긴다. 칸 안의 표는 한글이 쪽 경계에서 나누지 못해
+  // 넘친 부분이 꼬리말 위로 겹쳐 찍혔다(Ⅸ 결과 요약, 2026-10-27).
+  if (solid(nodes)) return nodes;
+  // 긴 글 상자는 **자식마다 한 행**인 표로 펼친다 — 행 사이에서 쪽이 나뉘고, 테두리는 바깥만 그려 한 상자로 보인다.
+  const gs = (await groups(el)).filter((g) => g.nodes.length);
+  if (gs.length < 2 || sideBySide(el)) return one();
+  return [boxRows(boxCell(el, []), gs.map((g) => g.nodes), gs.map((g) => g.heightPx), rect.width, spacing(el))];
+}
+
+/** 세로로 쌓인 칸들을 한 상자처럼 보이는 표로 — 바깥 테두리만, 안쪽 가로선 없이. */
+function boxRows(base: HwpCell, bodies: HwpNode[][], heights: number[], widthPx: number, space: { spaceBeforePt?: number; spaceAfterPt?: number }, head?: HwpCell): HwpNode {
+  const [l, r, t, b] = base.borders;
+  const [pl, pr, pt, pb] = base.padPx ?? [6, 6, 3, 3];
+  const last = bodies.length - 1;
+  const rows: HwpCell[][] = bodies.map((nodes, i) => [{
+    ...base, nodes, valign: "TOP",
+    borders: [l, r, i === 0 && !head ? t : null, i === last ? b : null],
+    padPx: [pl, pr, i === 0 ? pt : 0, i === last ? pb : 0],
+  }]);
+  return { kind: "table", widthPx, rows: head ? [[head], ...rows] : rows, rowHeightsPx: head ? [30, ...heights] : heights, ...space };
+}
+
+/**
+ * 편집기의 상자 문단(`p[data-box]`, 종합 해석 같은 테두리 상자)을 한 표로. 화면은 문단마다 좌우 선을 긋고
+ * 쪽 경계에서 아래·위 선을 덧그리는데(ChapterEditor 서식), 그 계산값을 옮기면 상자가 쪽 중간에서 닫히고
+ * 새로 열렸다. 그래서 **문단 묶음 자체**를 보고 제목 행 + 문단마다 한 행으로 다시 만든다.
+ */
+async function dataBox(ps: Element[]): Promise<HwpNode> {
+  const titleEl = ps[0].getAttribute("data-box") === "panel-title" ? ps[0] : null;
+  const body = titleEl ? ps.slice(1) : ps;
+  const sample = getComputedStyle(body[0] ?? ps[0]);
+  const side = border(sample, "Left");
+  const titleCs = titleEl ? getComputedStyle(titleEl) : null;
+  const head: HwpCell | undefined = titleEl ? {
+    nodes: await inner(titleEl), colSpan: 1, rowSpan: 1, widthPx: titleEl.getBoundingClientRect().width,
+    bg: hex(titleCs!.backgroundColor), borders: [side, side, border(titleCs!, "Top"), border(titleCs!, "Bottom") ?? side],
+    padPx: pad(titleCs!), valign: "CENTER", header: true,
+  } : undefined;
+  const base: HwpCell = { nodes: [], colSpan: 1, rowSpan: 1, widthPx: ps[0].getBoundingClientRect().width, borders: [side, side, side, side], padPx: [parseFloat(sample.paddingLeft) || 12, parseFloat(sample.paddingRight) || 12, 10, 10] };
+  const bodies = await Promise.all(body.map((p) => inner(p)));
+  return boxRows(base, bodies.map((b) => (b.length ? b : [{ kind: "p", runs: [] }])), body.map((p) => realHeight(p)), ps[0].getBoundingClientRect().width, {}, head);
+}
+
+/** 형제 요소들을 순서대로 노드로 — 이어진 상자 문단은 한 상자로 묶는다. */
+async function siblings(children: Element[], each: (el: Element) => Promise<HwpNode[]>): Promise<HwpNode[]> {
+  const out: HwpNode[] = [];
+  for (let i = 0; i < children.length; i++) {
+    if (children[i].tagName === "P" && children[i].hasAttribute("data-box")) {
+      const run: Element[] = [];
+      while (i < children.length && (children[i].hasAttribute("data-box") || children[i].hasAttribute("data-page-gap"))) {
+        if (children[i].hasAttribute("data-box") && !(run.length && children[i].getAttribute("data-box") === "panel-title")) run.push(children[i]);
+        else if (children[i].getAttribute("data-box") === "panel-title") break;
+        i++;
+      }
+      i--;
+      out.push(await dataBox(run));
+      continue;
+    }
+    out.push(...await each(children[i]));
+  }
+  return out;
 }
 
 type Group = { nodes: HwpNode[]; heightPx: number };
@@ -242,7 +314,11 @@ type Group = { nodes: HwpNode[]; heightPx: number };
 /** 자식 단위 묶음(블록 요소 하나 또는 그 사이에 낀 글 한 덩어리)과 화면 높이. */
 async function groups(el: Element): Promise<Group[]> {
   const cs = getComputedStyle(el);
-  const paragraphs = (nodes: Element | Node[]): HwpNode[] => runsOf(nodes).map((runs) => ({ kind: "p", runs, align: align(cs), sizePt: runs.length ? undefined : px2pt(cs.fontSize) }));
+  const space = el.tagName === "P" ? spacing(el) : {};
+  const paragraphs = (nodes: Element | Node[]): HwpNode[] => runsOf(nodes).map((runs, i, all) => ({
+    kind: "p", runs, align: align(cs), sizePt: runs.length ? undefined : px2pt(cs.fontSize),
+    spaceBeforePt: i === 0 ? space.spaceBeforePt : undefined, spaceAfterPt: i === all.length - 1 ? space.spaceAfterPt : undefined,
+  }));
   if (!hasBlockContent(el)) return [{ nodes: paragraphs(el), heightPx: el.getBoundingClientRect().height }];
   const out: Group[] = [];
   let loose: Node[] = [];
@@ -256,13 +332,26 @@ async function groups(el: Element): Promise<Group[]> {
     }
     loose = [];
   };
-  for (const node of Array.from(el.childNodes)) {
+  const kids = Array.from(el.childNodes);
+  for (let i = 0; i < kids.length; i++) {
+    const node = kids[i];
     if (node.nodeType === Node.ELEMENT_NODE) {
       const child = node as Element;
+      if (child.tagName === "P" && child.hasAttribute("data-box")) {
+        flush();
+        const run: Element[] = [];
+        while (i < kids.length && kids[i].nodeType === Node.ELEMENT_NODE && ((kids[i] as Element).hasAttribute("data-box") || (kids[i] as Element).hasAttribute("data-page-gap"))) {
+          if ((kids[i] as Element).hasAttribute("data-box")) run.push(kids[i] as Element);
+          i++;
+        }
+        i--;
+        out.push({ nodes: await siblings(run, convert), heightPx: run.reduce((sum, p) => sum + realHeight(p), 0) });
+        continue;
+      }
       if (skip(child)) continue;
       if (!BLOCKISH.has(getComputedStyle(child).display) && !MEDIA.has(child.tagName) && child.tagName !== "TABLE" && !hasBlockContent(child)) { loose.push(child); continue; }
       flush();
-      out.push({ nodes: await convert(child), heightPx: child.getBoundingClientRect().height });
+      out.push({ nodes: await convert(child), heightPx: realHeight(child) });
     } else if (node.nodeType === Node.TEXT_NODE) loose.push(node);
   }
   flush();
@@ -278,7 +367,19 @@ async function chapterNodes(root: HTMLElement, section: ReportSectionContent): P
   const index = (list: ReportSectionContent["blocks"]) => list.forEach((b) => { byId.set(b.id, b); if (b.kind === "row-group") b.rows.forEach((r) => index(r.blocks)); });
   index(section.blocks);
   const out: HwpNode[] = [];
-  for (const child of Array.from(pm.children)) {
+  const children = Array.from(pm.children);
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    if (child.tagName === "P" && child.hasAttribute("data-box")) {
+      const run: Element[] = [];
+      while (i < children.length && (children[i].hasAttribute("data-box") || children[i].hasAttribute("data-page-gap"))) {
+        if (children[i].hasAttribute("data-box")) run.push(children[i]);
+        i++;
+      }
+      i--;
+      out.push(...await siblings(run, convert));
+      continue;
+    }
     // 원자 블록: node-reportAtom > [data-node-view-wrapper]. 장 배너만 data-atom-id가 없다(extensions.tsx).
     const wrapper = child.classList.contains("node-reportAtom") ? child.querySelector("[data-node-view-wrapper]") : null;
     const atomId = wrapper ? wrapper.getAttribute("data-atom-id") ?? BANNER_ATOM_ID : null;
