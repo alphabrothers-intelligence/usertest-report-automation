@@ -7,7 +7,7 @@
  *
  * - 장 배너 원자 → 발행본 장 배너, 번호 소제목 → 절 배너, 문항 제목(h3) → 문항 머리(원형 복제)
  * - `<table>` → 한글 표(병합·칸 색·테두리 유지, 편집 가능)
- * - 가로로 나란한 칸(flex/grid 행) → 한 줄짜리 표, 테두리·배경이 있는 상자 → 1×1 표
+ * - 가로로 나란한 칸(flex/grid 행) → 한 줄짜리 표, 테두리·배경이 있는 상자 → 1×1 표(길면 자식마다 한 행)
  * - SVG·canvas·img(그래프) → PNG 그림
  * - 화면 전용(`data-copy-ignore`, 버튼, 쪽 사이 띄움)은 뺀다 — PDF 인쇄에서 빠지는 것과 같다.
  */
@@ -85,7 +85,8 @@ function runsOf(el: Element | Node[]): HwpRun[][] {
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
     const el = node as Element;
-    if (el.tagName === "BR") { lines.push([]); return; }
+    // 편집기가 빈 줄 끝에 붙이는 자리표시 <br>은 줄이 아니다(남기면 상자 안 빈 줄이 두 배가 된다).
+    if (el.tagName === "BR") { if (!el.classList.contains("ProseMirror-trailingBreak")) lines.push([]); return; }
     if (skip(el) || (MEDIA.has(el.tagName) && isChart(el))) return;
     el.childNodes.forEach(walk);
   };
@@ -140,6 +141,7 @@ async function rasterize(el: Element): Promise<HwpNode | null> {
 
 async function table(el: HTMLTableElement): Promise<HwpNode> {
   const rows: HwpCell[][] = [];
+  const rowHeightsPx: number[] = [];
   for (const tr of Array.from(el.rows)) {
     if (skip(tr)) continue;
     const trBg = hex(getComputedStyle(tr).backgroundColor);
@@ -148,7 +150,7 @@ async function table(el: HTMLTableElement): Promise<HwpNode> {
       if (skip(td)) continue;
       const cs = getComputedStyle(td);
       cells.push({
-        nodes: await children(td),
+        nodes: await inner(td),
         colSpan: td.colSpan || 1,
         rowSpan: td.rowSpan || 1,
         widthPx: td.getBoundingClientRect().width,
@@ -156,14 +158,15 @@ async function table(el: HTMLTableElement): Promise<HwpNode> {
         borders: borders(cs),
         valign: cs.verticalAlign === "top" ? "TOP" : cs.verticalAlign === "bottom" ? "BOTTOM" : "CENTER",
         padPx: pad(cs),
+        header: td.tagName === "TH",
       });
     }
-    if (cells.length) rows.push(cells);
+    if (cells.length) { rows.push(cells); rowHeightsPx.push(tr.getBoundingClientRect().height); }
   }
-  return { kind: "table", widthPx: el.getBoundingClientRect().width, rows };
+  return { kind: "table", widthPx: el.getBoundingClientRect().width, rows, rowHeightsPx };
 }
 
-/** 칸 하나로 묶을 상자의 칸 정보. */
+/** 상자 요소의 테두리·배경·여백을 칸 하나로. */
 function boxCell(el: Element, nodes: HwpNode[]): HwpCell {
   const cs = getComputedStyle(el);
   const bg = hex(cs.backgroundColor);
@@ -187,6 +190,19 @@ function sideBySide(el: Element): Element[] | null {
   return sameRow ? kids : null;
 }
 
+/** A4 본문 높이(px, ChapterEditor의 PAGE: 297mm − 위 18mm − 아래 26mm). 상자를 펼칠지 정하는 기준. */
+const PAGE_BODY_PX = (253 * 96) / 25.4;
+
+/** 요소 자신의 상자(테두리·배경)는 빼고 안쪽만. 칸에 넣을 때 쓴다 — 칸이 이미 그 테두리를 그린다. */
+async function inner(el: Element): Promise<HwpNode[]> {
+  const row = sideBySide(el);
+  if (row) {
+    const cells = await Promise.all(row.map(async (k) => boxCell(k, await inner(k))));
+    return [{ kind: "table", widthPx: el.getBoundingClientRect().width, rows: [cells], rowHeightsPx: [el.getBoundingClientRect().height] }];
+  }
+  return (await groups(el)).flatMap((g) => g.nodes);
+}
+
 async function convert(el: Element): Promise<HwpNode[]> {
   if (skip(el)) return [];
   if (MEDIA.has(el.tagName)) { if (!isChart(el)) return []; const img = await rasterize(el); return img ? [img] : []; }
@@ -197,46 +213,62 @@ async function convert(el: Element): Promise<HwpNode[]> {
     if (!text) return [];
     if (parseFloat(getComputedStyle(el).fontSize) >= 15.5 && /^Q\d+/.test(text)) return [{ kind: "question", text }];
   }
+  if (!isBox(el)) return inner(el);
 
-  const row = sideBySide(el);
-  if (row) {
-    const cells = await Promise.all(row.map(async (k) => boxCell(k, await convert(k))));
-    const node: HwpNode = { kind: "table", widthPx: el.getBoundingClientRect().width, rows: [cells] };
-    return isBox(el) ? [{ kind: "table", widthPx: node.widthPx, rows: [[boxCell(el, [node])]] }] : [node];
+  const rect = el.getBoundingClientRect();
+  // 긴 상자를 칸 하나로 만들면 한글이 쪽 경계에서 그 안을 못 나눈다(칸 안의 표·그림은 통째로 움직인다).
+  // 그래서 쪽의 30%를 넘는 상자는 **자식마다 한 행**인 표로 펼친다 — 테두리는 바깥만 그려 한 상자로 보인다.
+  if (rect.height > PAGE_BODY_PX * 0.3 && !sideBySide(el)) {
+    const gs = (await groups(el)).filter((g) => g.nodes.length);
+    if (gs.length > 1) {
+      const base = boxCell(el, []);
+      const [l, r, t, b] = base.borders;
+      const [pl, pr, pt, pb] = base.padPx!;
+      const last = gs.length - 1;
+      return [{
+        kind: "table",
+        widthPx: rect.width,
+        rows: gs.map((g, i) => [{ ...base, nodes: g.nodes, valign: "TOP", borders: [l, r, i === 0 ? t : null, i === last ? b : null], padPx: [pl, pr, i === 0 ? pt : 0, i === last ? pb : 0] }]),
+        rowHeightsPx: gs.map((g) => g.heightPx),
+      }];
+    }
   }
-
-  const inner = hasBlockContent(el)
-    ? await children(el)
-    : runsOf(el).map((runs): HwpNode => ({ kind: "p", runs, align: align(getComputedStyle(el)) }));
-  if (!inner.length) return [];
-  return isBox(el) ? [{ kind: "table", widthPx: el.getBoundingClientRect().width, rows: [[boxCell(el, inner)]] }] : inner;
+  const nodes = await inner(el);
+  return nodes.length ? [{ kind: "table", widthPx: rect.width, rows: [[boxCell(el, nodes)]], rowHeightsPx: [rect.height] }] : [];
 }
 
-async function children(el: Element): Promise<HwpNode[]> {
-  if (!hasBlockContent(el)) {
-    const cs = getComputedStyle(el);
-    return runsOf(el).map((runs) => ({ kind: "p", runs, align: align(cs) }));
-  }
-  const out: HwpNode[] = [];
+type Group = { nodes: HwpNode[]; heightPx: number };
+
+/** 자식 단위 묶음(블록 요소 하나 또는 그 사이에 낀 글 한 덩어리)과 화면 높이. */
+async function groups(el: Element): Promise<Group[]> {
+  const cs = getComputedStyle(el);
+  const paragraphs = (nodes: Element | Node[]): HwpNode[] => runsOf(nodes).map((runs) => ({ kind: "p", runs, align: align(cs), sizePt: runs.length ? undefined : px2pt(cs.fontSize) }));
+  if (!hasBlockContent(el)) return [{ nodes: paragraphs(el), heightPx: el.getBoundingClientRect().height }];
+  const out: Group[] = [];
   let loose: Node[] = [];
   // 블록 사이에 낀 글(텍스트 노드·인라인 요소)은 한 문단으로 모은다.
   const flush = () => {
-    const a = align(getComputedStyle(el));
-    for (const runs of runsOf(loose)) if (runs.length) out.push({ kind: "p", runs, align: a });
+    if (loose.length && loose.some((n) => (n.textContent ?? "").trim())) {
+      const range = document.createRange();
+      range.setStartBefore(loose[0]);
+      range.setEndAfter(loose[loose.length - 1]);
+      out.push({ nodes: paragraphs(loose).filter((n) => n.kind !== "p" || n.runs.length), heightPx: range.getBoundingClientRect().height });
+    }
     loose = [];
   };
   for (const node of Array.from(el.childNodes)) {
     if (node.nodeType === Node.ELEMENT_NODE) {
       const child = node as Element;
-      const display = skip(child) ? "" : getComputedStyle(child).display;
-      if (!skip(child) && !BLOCKISH.has(display) && !MEDIA.has(child.tagName) && child.tagName !== "TABLE" && !hasBlockContent(child)) { loose.push(child); continue; }
+      if (skip(child)) continue;
+      if (!BLOCKISH.has(getComputedStyle(child).display) && !MEDIA.has(child.tagName) && child.tagName !== "TABLE" && !hasBlockContent(child)) { loose.push(child); continue; }
       flush();
-      out.push(...await convert(child));
+      out.push({ nodes: await convert(child), heightPx: child.getBoundingClientRect().height });
     } else if (node.nodeType === Node.TEXT_NODE) loose.push(node);
   }
   flush();
   return out;
 }
+const px2pt = (px: string) => Math.round(parseFloat(px) * 0.75 * 2) / 2;
 
 /** 장 하나(`[data-chapter]`)의 편집기 내용을 노드로. 원자 블록은 블록 데이터로 장·절 배너를 안다. */
 async function chapterNodes(root: HTMLElement, section: ReportSectionContent): Promise<HwpNode[]> {
@@ -263,9 +295,10 @@ async function chapterNodes(root: HTMLElement, section: ReportSectionContent): P
       prev.note = child.textContent!.trim();
       continue;
     }
-    // 빈 문단은 Word식 문단 간격 — 한 줄 띄움으로 옮긴다(연속된 빈 줄은 하나만).
-    if (child.tagName === "P" && !(child.textContent ?? "").trim() && !child.querySelector("img,svg,canvas")) {
-      if (prev && !(prev.kind === "p" && !prev.runs.length)) out.push({ kind: "p", runs: [] });
+    // 빈 문단은 Word식 문단 간격 — 화면 높이만큼의 빈 줄로 옮긴다(편집기는 빈 문단을 낮게 그린다).
+    if (child.tagName === "P" && !(child.textContent ?? "").trim() && !child.querySelector("svg,canvas")) {
+      const height = child.getBoundingClientRect().height;
+      out.push({ kind: "p", runs: [], sizePt: Math.max(1, Math.min(10, Math.round((height * 0.75) / 1.6))) });
       continue;
     }
     out.push(...await convert(child));
