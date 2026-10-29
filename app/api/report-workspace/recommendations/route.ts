@@ -1,7 +1,12 @@
 import { z } from "zod";
-import { getAllRecommendations, getQuestionsWithAllCategories, getReportByFileUrl, saveRecommendation } from "@/lib/db/reports";
+import { getAllRecommendations, getQuestionsWithAllCategories, getReportByFileUrl } from "@/lib/db/reports";
 import { runFeatureCustomerRecommendations } from "@/lib/pipeline/customerRecommendations";
-import { combineDevPriorityText, runAllFeatureImprovementRecommendations, runDevPriorityRecommendation } from "@/lib/pipeline/recommendation";
+import { runAllFeatureImprovementRecommendations, runDevPriorityRecommendation } from "@/lib/pipeline/recommendation";
+import {
+  saveCustomerRecommendations,
+  saveFeatureImprovementRecommendations,
+  saveStrategyRecommendations,
+} from "@/lib/pipeline/recommendationPersistence";
 import { buildReportWorkspaceSeed } from "@/lib/report/workspace";
 import { detectProductType } from "@/lib/report/productType";
 
@@ -27,22 +32,11 @@ export async function POST(request: Request) {
         runDevPriorityRecommendation(report.quant_stats, qualitative, productType),
         runAllFeatureImprovementRecommendations(report.quant_stats, qualitative),
       ]);
-      await Promise.all([
-        saveRecommendation({
-          reportId: report.id,
-          section: "dev_priority",
-          draft: combineDevPriorityText(priority.overallDirection, priority.devPriority),
-        }),
-        saveRecommendation({ reportId: report.id, section: "overall_direction", draft: priority.overallDirection }),
-      ]);
-      await Promise.all(features.map((feature) => saveRecommendation({
-        reportId: report.id,
-        section: `feature_improvement:${feature.featureName}`,
-        draft: feature.draft,
-      })));
+      await saveStrategyRecommendations(report.id, priority);
+      await saveFeatureImprovementRecommendations(report.id, features);
     } else {
       const customer = await runFeatureCustomerRecommendations(report.quant_stats, qualitative);
-      await saveRecommendation({ reportId: report.id, section: "feature_customer_recommendations", draft: JSON.stringify(customer) });
+      await saveCustomerRecommendations(report.id, customer);
     }
 
     const recommendations = await getAllRecommendations(report.id);

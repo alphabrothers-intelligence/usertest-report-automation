@@ -6,6 +6,8 @@ raw data(xlsx)를 업로드하면 채팅으로 대화하며 사용성테스트 �
 솔루션입니다. 전체 요구사항은 [PRD.md](./PRD.md)를, 코드베이스 고유의 결정·주의사항은
 [CLAUDE.md](./CLAUDE.md)를 참고하세요.
 
+코드 흐름과 모듈 책임은 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)에 정리했습니다.
+
 ## 스택
 
 Next.js(App Router) 단일 스택 · AI SDK + Claude(Sonnet 5) · Supabase(Postgres) · Vercel Blob ·
@@ -33,8 +35,9 @@ npm run dev
 |---|---|---|
 | `npm run dev` / `build` / `start` | Next.js 개발/빌드/실행 | - |
 | `npm run lint` | ESLint | - |
+| `npm run check:types` | 배포 앱 코드 TypeScript 검사(`tsconfig.build.json`) | - |
 | `npm run db:migrate` | `lib/db/schema.sql` 적용 | - |
-| `npm run check:golden` | 정량 통계 골든 회귀 테스트(리바랩스 raw data 기준 89개 값 대조) | 무료 |
+| `npm run check:golden` | 정량 통계 골든 회귀 테스트(리바랩스 raw data 기준 93개 값 대조) | 무료 |
 | `npm run check:stage1` | Stage1 few-shot 재현 검증 | Claude API 과금 |
 | `npm run check:qualitative` | 14문항 정성 파이프라인 전체 실행·검증 | Claude API 과금(수십 회 호출) |
 | `npm run check:qualitative-fidelity` | 극성 판정 일치율 측정(실제 보고서 인용문 기준) | Claude API 과금(약 6회 호출) |

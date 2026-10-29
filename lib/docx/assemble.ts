@@ -1,14 +1,8 @@
 import { Packer } from "docx";
 import { put } from "@vercel/blob";
 import { buildReportDocx } from "./ReportDocx";
-import {
-  getReportByFileUrl,
-  getQuestionsWithAllCategories,
-  getAllRecommendations,
-  getStrategicInput,
-  saveReportResultSummary,
-} from "@/lib/db/reports";
-import { runResultSummary } from "@/lib/pipeline/summary";
+import { loadAssemblyData } from "@/lib/report/assemblyData";
+import { resolveAssemblyResultSummary } from "@/lib/report/assemblySummary";
 
 export interface AssembleDocxResult {
   ok: boolean;
@@ -29,22 +23,16 @@ export async function assembleReportDocx(
   fileUrl: string,
   { resultSummary: suppliedResultSummary }: { resultSummary?: string } = {},
 ): Promise<AssembleDocxResult> {
-  const report = await getReportByFileUrl(fileUrl);
-  if (!report || !report.quant_stats) {
+  const data = await loadAssemblyData(fileUrl);
+  if (!data) {
     return { ok: false, error: "정량 통계가 없습니다. computeQuantStats를 먼저 호출하세요." };
   }
-
-  const [questions, recommendations, strategicInput] = await Promise.all([
-    getQuestionsWithAllCategories(report.id),
-    getAllRecommendations(report.id),
-    getStrategicInput(report.id),
-  ]);
+  const { report, questions, recommendations, strategicInput } = data;
 
   // PDF 조립이 바로 앞에서 만든 동일한 요약을 받으면 재사용한다. PDF/DOCX를 동시에
   // 요청해 같은 Claude 요약을 두 번 만드는 낭비를 막되, 보고서 본문 내용은 바꾸지 않는다.
   // PDF를 거치지 않고 DOCX만 다시 만들 때도 저장된 요약을 우선 사용한다.
-  const resultSummary = suppliedResultSummary ?? report.result_summary ?? (await runResultSummary({ quantStats: report.quant_stats, qualitative: questions, sectionAnalyses: report.section_analyses, productType: report.product_type }));
-  if (!suppliedResultSummary && !report.result_summary) await saveReportResultSummary(report.id, resultSummary);
+  const resultSummary = await resolveAssemblyResultSummary(data, suppliedResultSummary);
 
   const doc = await buildReportDocx({
     fileName: report.file_name,

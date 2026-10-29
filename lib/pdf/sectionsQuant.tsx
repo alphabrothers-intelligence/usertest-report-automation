@@ -8,7 +8,6 @@ import { styles, colors } from "./theme";
 import { RichText } from "./richText";
 import {
   VerticalBarChart,
-  VerticalBarChartWithAverage,
   RadarChart,
   RankCompositionChart,
   CanvasQuadrantChart,
@@ -21,7 +20,6 @@ import {
   CrossTabStackedBar,
   AGE_BRACKET_COLORS,
   computeNiceRadarRange,
-  computeBarWithAverageRange,
   computeRadarLabelMargins,
   mergeRadarLabelMargins,
   maxRadarSizeForColumn,

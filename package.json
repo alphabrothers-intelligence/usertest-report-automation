@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "check:types": "tsc --noEmit -p tsconfig.build.json",
     "check:golden": "tsx scripts/check-golden-sample.ts",
     "check:workspace-characterization": "tsx scripts/check-workspace-characterization.ts",
     "check:sentence-fragment": "tsx scripts/check-sentence-fragment.ts",

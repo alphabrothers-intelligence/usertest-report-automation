@@ -1,6 +1,6 @@
 import { sql } from "./client";
 import type { QuantStats } from "@/lib/quant/compute";
-import type { PipelineResult, QuestionResult } from "@/lib/pipeline/orchestrate";
+import type { PipelineResult, QuestionResult, StandardQuestionResult } from "@/lib/pipeline/orchestrate";
 import type { Polarity } from "@/lib/pipeline/stage1";
 import type { ProductInfo } from "@/lib/productInfo/types";
 import type { SectionPlan } from "@/lib/agent/sectionPlan";
@@ -22,6 +22,43 @@ function improvementCategoryRows(questionId: string, stage2: Stage2ImprovementOu
       insight_draft: "",
     })),
   );
+}
+
+function questionSummaries(question: QuestionResult) {
+  return question.kind === "standard" && question.npsJudgment
+    ? { nps_judgment: question.npsJudgment }
+    : null;
+}
+
+function standardClauseRows(questionId: string, clauses: StandardQuestionResult["clauses"]) {
+  return clauses.map((clause) => ({
+    question_id: questionId,
+    respondent_id: clause.respondent_id,
+    clause: clause.clause,
+    raw_clause: clause.raw_clause,
+    polarity: clause.polarity,
+    rationale: clause.rationale,
+    confidence: clause.confidence,
+    needs_review: clause.needs_review,
+  }));
+}
+
+function standardCategoryRows(questionId: string, byPolarity: StandardQuestionResult["stage2ByPolarity"]) {
+  return (Object.keys(byPolarity) as Polarity[]).flatMap((polarity) => {
+    const stage2 = byPolarity[polarity];
+    if (!stage2) return [];
+    return stage2.categories.map((category) => ({
+      question_id: questionId,
+      polarity,
+      label: category.label,
+      clause_count: category.clause_count,
+      respondents: category.respondents?.length ? category.respondents : null,
+      quotes: category.quotes,
+      quotes_display: category.quotesDisplay,
+      insight_draft: category.insight,
+      field_actions: sql.json(category.fieldActions ?? []),
+    }));
+  });
 }
 
 export interface ReportRow {
@@ -270,9 +307,7 @@ export async function saveQualitativeResults(
     for (const q of pipeline.questions) {
       // 극성 요약은 별도 opt-in으로 비워 둔다. 다만 NPS 판단문은 NPS 문항의 기존 고속
       // 분석 1회에 함께 생성되는 선택 산출물이므로 이 JSON에만 보관한다.
-      const persistedSummaries = q.kind === "standard" && q.npsJudgment
-        ? { nps_judgment: q.npsJudgment }
-        : null;
+      const persistedSummaries = questionSummaries(q);
       const [questionRow] = await tx<{ id: string }[]>`
         insert into questions (report_id, question_key, label, kind, polarity_summaries)
         values (${reportId}, ${q.id}, ${q.label}, ${q.kind}, ${persistedSummaries ? tx.json(persistedSummaries) : null})
@@ -287,34 +322,10 @@ export async function saveQualitativeResults(
       }
 
       if (q.clauses.length > 0) {
-        const clauseRows = q.clauses.map((c) => ({
-          question_id: questionId,
-          respondent_id: c.respondent_id,
-          clause: c.clause,
-          raw_clause: c.raw_clause,
-          polarity: c.polarity,
-          rationale: c.rationale,
-          confidence: c.confidence,
-          needs_review: c.needs_review,
-        }));
-        await tx`insert into clauses ${tx(clauseRows)}`;
+        await tx`insert into clauses ${tx(standardClauseRows(questionId, q.clauses))}`;
       }
 
-      const categoryRows = (Object.keys(q.stage2ByPolarity) as Polarity[]).flatMap((polarity) => {
-        const stage2 = q.stage2ByPolarity[polarity];
-        if (!stage2) return [];
-        return stage2.categories.map((c) => ({
-          question_id: questionId,
-          polarity,
-          label: c.label,
-          clause_count: c.clause_count,
-          respondents: c.respondents?.length ? c.respondents : null,
-          quotes: c.quotes,
-          quotes_display: c.quotesDisplay,
-          insight_draft: c.insight,
-          field_actions: sql.json(c.fieldActions ?? []),
-        }));
-      });
+      const categoryRows = standardCategoryRows(questionId, q.stage2ByPolarity);
       if (categoryRows.length > 0) {
         await tx`insert into categories ${tx(categoryRows)}`;
       }
@@ -334,9 +345,7 @@ export async function saveQualitativeQuestionResult(
   q: QuestionResult,
 ): Promise<void> {
   await sql.begin(async (tx) => {
-    const persistedSummaries = q.kind === "standard" && q.npsJudgment
-      ? { nps_judgment: q.npsJudgment }
-      : null;
+    const persistedSummaries = questionSummaries(q);
     const [questionRow] = await tx<{ id: string }[]>`
       insert into questions (report_id, question_key, label, kind, polarity_summaries)
       values (${reportId}, ${q.id}, ${q.label}, ${q.kind}, ${persistedSummaries ? tx.json(persistedSummaries) : null})
@@ -357,32 +366,9 @@ export async function saveQualitativeQuestionResult(
     }
 
     if (q.clauses.length > 0) {
-      await tx`insert into clauses ${tx(q.clauses.map((c) => ({
-        question_id: questionId,
-        respondent_id: c.respondent_id,
-        clause: c.clause,
-        raw_clause: c.raw_clause,
-        polarity: c.polarity,
-        rationale: c.rationale,
-        confidence: c.confidence,
-        needs_review: c.needs_review,
-      })))}`;
+      await tx`insert into clauses ${tx(standardClauseRows(questionId, q.clauses))}`;
     }
-    const categoryRows = (Object.keys(q.stage2ByPolarity) as Polarity[]).flatMap((polarity) => {
-      const stage2 = q.stage2ByPolarity[polarity];
-      if (!stage2) return [];
-      return stage2.categories.map((c) => ({
-        question_id: questionId,
-        polarity,
-        label: c.label,
-        clause_count: c.clause_count,
-        respondents: c.respondents?.length ? c.respondents : null,
-        quotes: c.quotes,
-        quotes_display: c.quotesDisplay,
-        insight_draft: c.insight,
-        field_actions: sql.json(c.fieldActions ?? []),
-      }));
-    });
+    const categoryRows = standardCategoryRows(questionId, q.stage2ByPolarity);
     if (categoryRows.length > 0) await tx`insert into categories ${tx(categoryRows)}`;
   });
 }

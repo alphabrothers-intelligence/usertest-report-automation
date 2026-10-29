@@ -1,11 +1,6 @@
 import { put } from "@vercel/blob";
 import { buildReportHwpx } from "./ReportHwpx";
-import {
-  getAllRecommendations,
-  getQuestionsWithAllCategories,
-  getReportByFileUrl,
-  getStrategicInput,
-} from "@/lib/db/reports";
+import { loadAssemblyData } from "@/lib/report/assemblyData";
 
 export interface AssembleHwpxResult {
   ok: boolean;
@@ -15,11 +10,11 @@ export interface AssembleHwpxResult {
 
 /** PDF에서 이미 확정한 resultSummary를 받아 HWPX만 추가 생성한다. 이 함수 자체는 AI를 호출하지 않는다. */
 export async function assembleReportHwpx(fileUrl: string, resultSummary: string): Promise<AssembleHwpxResult> {
-  const report = await getReportByFileUrl(fileUrl);
-  if (!report || !report.quant_stats) return { ok: false, error: "정량 통계가 없습니다. computeQuantStats를 먼저 호출하세요." };
+  const data = await loadAssemblyData(fileUrl);
+  if (!data) return { ok: false, error: "정량 통계가 없습니다. computeQuantStats를 먼저 호출하세요." };
+  const { report } = data;
   // HWPX의 현재 텍스트 출력은 PDF와 동일한 초안 포함 정량/요약 데이터를 사용한다. 아래 조회는
   // 향후 HWPX 표·인용문 블록 확장 시의 동일한 데이터 계약을 유지하기 위한 사전 로드다.
-  await Promise.all([getQuestionsWithAllCategories(report.id), getAllRecommendations(report.id), getStrategicInput(report.id)]);
   const buffer = await buildReportHwpx({
     fileName: report.file_name,
     generatedAt: new Date().toISOString().slice(0, 10),

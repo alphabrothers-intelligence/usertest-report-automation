@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { BlockLayoutFields, ReportPropertyPanel, type BlockLayoutControls } from "@/components/ReportPropertyPanel";
 import { SidebarIcon } from "@/components/report-web-document/ReportBlockView";
 import type { ReportBlock, ReportSectionContent } from "@/lib/report/sections";

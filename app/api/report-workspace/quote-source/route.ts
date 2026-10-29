@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { loadQuestionSpecs } from "@/lib/pipeline/questionSource";
+import type { QuestionSpec } from "@/lib/pipeline/questions";
 import { needsReportQuoteEndingReview } from "@/lib/report/quoteEnding";
 
 export const runtime = "nodejs";
@@ -32,6 +33,21 @@ function normalized(value: string) {
 function findSpec<T extends { id: string }>(specs: T[], questionKey: string): T | undefined {
   return specs.find((spec) => spec.id === questionKey)
     ?? specs.find((spec) => normalized(spec.id) === normalized(questionKey));
+}
+
+async function resolveQuestion(sourceUrl: string, questionKey: string): Promise<
+  { spec: QuestionSpec; error?: never } | { spec?: never; error: string }
+> {
+  // 분석 단계와 같은 문항 추출 경로를 쓴다. 저장된 옛 키의 공백 차이도 허용한다.
+  const source = await loadQuestionSpecs(sourceUrl, null);
+  if (!source.ok) return { error: source.error };
+  const spec = findSpec(source.specs, questionKey);
+  return spec ? { spec } : { error: "인용문이 사용된 문항을 찾지 못했습니다." };
+}
+
+function findQuoteInput(spec: QuestionSpec, quote: string) {
+  const quoteKey = normalized(quote);
+  return spec.inputs.find((candidate) => normalized(candidate.reason).includes(quoteKey));
 }
 
 function findNormalizedRange(source: string, quote: string) {
@@ -66,15 +82,11 @@ export async function GET(request: Request) {
   });
   if (!parsed.success) return NextResponse.json({ ok: false, error: "인용문 출처 정보가 올바르지 않습니다." }, { status: 400 });
 
-  // 문항 추출은 분석 때와 **같은 자리**를 쓴다(lib/pipeline/questionSource.ts) — 여기만 고정
-  // 스키마로 읽으면 리바랩스가 아닌 raw data에서 원문 대조가 통째로 안 된다(2026-09-09 실측).
-  const source = await loadQuestionSpecs(parsed.data.source, null);
-  if (!source.ok) return NextResponse.json({ ok: false, error: source.error }, { status: 404 });
-  const spec = findSpec(source.specs, parsed.data.questionKey);
-  if (!spec) return NextResponse.json({ ok: false, error: "인용문이 사용된 문항을 찾지 못했습니다." }, { status: 404 });
+  const resolved = await resolveQuestion(parsed.data.source, parsed.data.questionKey);
+  if (!resolved.spec) return NextResponse.json({ ok: false, error: resolved.error }, { status: 404 });
+  const { spec } = resolved;
 
-  const quoteKey = normalized(parsed.data.quote);
-  const input = spec.inputs.find((candidate) => normalized(candidate.reason).includes(quoteKey));
+  const input = findQuoteInput(spec, parsed.data.quote);
   if (!input) return NextResponse.json({ ok: false, error: "원본 응답에서 해당 인용문을 찾지 못했습니다." }, { status: 404 });
   const range = findNormalizedRange(input.reason, parsed.data.quote);
 
@@ -94,12 +106,9 @@ export async function POST(request: Request) {
   const parsed = BodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, error: "인용문 출처 정보가 올바르지 않습니다." }, { status: 400 });
 
-  // 문항 추출은 분석 때와 **같은 자리**를 쓴다(lib/pipeline/questionSource.ts) — 여기만 고정
-  // 스키마로 읽으면 리바랩스가 아닌 raw data에서 원문 대조가 통째로 안 된다(2026-09-09 실측).
-  const source = await loadQuestionSpecs(parsed.data.source, null);
-  if (!source.ok) return NextResponse.json({ ok: false, error: source.error }, { status: 404 });
-  const spec = findSpec(source.specs, parsed.data.questionKey);
-  if (!spec) return NextResponse.json({ ok: false, error: "인용문이 사용된 문항을 찾지 못했습니다." }, { status: 404 });
+  const resolved = await resolveQuestion(parsed.data.source, parsed.data.questionKey);
+  if (!resolved.spec) return NextResponse.json({ ok: false, error: resolved.error }, { status: 404 });
+  const { spec } = resolved;
 
   const grouped = new Map<number, {
     respondentId: number;
@@ -108,8 +117,7 @@ export async function POST(request: Request) {
   }>();
 
   for (const quote of [...new Set(parsed.data.quotes)]) {
-    const quoteKey = normalized(quote);
-    const input = spec.inputs.find((candidate) => normalized(candidate.reason).includes(quoteKey));
+    const input = findQuoteInput(spec, quote);
     if (!input) continue;
     const range = findNormalizedRange(input.reason, quote);
     const entry = grouped.get(input.respondent_id) ?? {

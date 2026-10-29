@@ -2,14 +2,8 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { put } from "@vercel/blob";
 import { registerFonts } from "./fonts";
 import { ReportDocument } from "./ReportDocument";
-import {
-  getReportByFileUrl,
-  getQuestionsWithAllCategories,
-  getAllRecommendations,
-  getStrategicInput,
-  saveReportResultSummary,
-} from "@/lib/db/reports";
-import { runResultSummary } from "@/lib/pipeline/summary";
+import { loadAssemblyData } from "@/lib/report/assemblyData";
+import { resolveAssemblyResultSummary } from "@/lib/report/assemblySummary";
 
 export interface AssembleResult {
   ok: boolean;
@@ -26,21 +20,15 @@ export interface AssembleResult {
  * 별도 검수 큐가 남아 있다는 이유로 보고서 생성을 막지 않는다.
  */
 export async function assembleReport(fileUrl: string): Promise<AssembleResult> {
-  const report = await getReportByFileUrl(fileUrl);
-  if (!report || !report.quant_stats) {
+  const data = await loadAssemblyData(fileUrl);
+  if (!data) {
     return { ok: false, error: "정량 통계가 없습니다. computeQuantStats를 먼저 호출하세요." };
   }
-
-  const [questions, recommendations, strategicInput] = await Promise.all([
-    getQuestionsWithAllCategories(report.id),
-    getAllRecommendations(report.id),
-    getStrategicInput(report.id),
-  ]);
+  const { report, questions, recommendations, strategicInput } = data;
 
   // 재렌더링은 Claude 분석이 아니라 순수 PDF 레이아웃 작업이다. 이미 생성·확정된 요약이
   // 있으면 그대로 사용하고, 없을 때만 한 번 생성해 reports에 캐시한다.
-  const resultSummary = report.result_summary ?? (await runResultSummary({ quantStats: report.quant_stats, qualitative: questions, sectionAnalyses: report.section_analyses, productType: report.product_type }));
-  if (!report.result_summary) await saveReportResultSummary(report.id, resultSummary);
+  const resultSummary = await resolveAssemblyResultSummary(data);
 
   registerFonts();
   const buffer = await renderToBuffer(

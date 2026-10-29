@@ -1,34 +1,65 @@
 import { NextResponse } from "next/server";
-import { runPolaritySummariesForQuestion } from "@/lib/pipeline/generatePolaritySummaries";
 import {
   claimNextQualitativeJobItem,
   completeQualitativeJobItem,
   completeQualitativeJobStage1,
   failQualitativeJobItem,
   getQualitativeJob,
-  startQualitativeSectionAnalysisRun,
-  completeQualitativeSectionAnalysisRun,
-  failQualitativeSectionAnalysisRun,
-  saveQualitativeJobUsage,
+  type QualitativeJobItemRow,
+  type QualitativeJobRow,
 } from "@/lib/db/qualitativeJobs";
-import { getReportById, getQuestionsWithAllCategories, saveQualitativeQuestionResult, saveRecommendation, saveReportResultSummary } from "@/lib/db/reports";
-import { detectProductType } from "@/lib/report/productType";
+import { saveQualitativeQuestionResult } from "@/lib/db/reports";
+import { runPolaritySummariesForQuestion } from "@/lib/pipeline/generatePolaritySummaries";
+import { runQualitativeStage1, runQualitativeStage2 } from "@/lib/pipeline/orchestrate";
 import { loadQuestionSpecs } from "@/lib/pipeline/questionSource";
-import {
-  runQualitativeStage1,
-  runQualitativeStage2,
-  type QualitativeStage1Checkpoint,
-} from "@/lib/pipeline/orchestrate";
-import { runSectionAnalysesForReport } from "@/lib/pipeline/sectionAnalysis";
-import { runResultSummary } from "@/lib/pipeline/summary";
-import { toClaudeUsageRecord } from "@/lib/claudeUsage";
-import { runDevPriorityRecommendation, runAllFeatureImprovementRecommendations, combineDevPriorityText } from "@/lib/pipeline/recommendation";
-import { runFeatureCustomerRecommendations } from "@/lib/pipeline/customerRecommendations";
-import { runPolaritySummariesForReport } from "@/lib/pipeline/generatePolaritySummaries";
+import { runCompletedJobFollowups } from "@/lib/pipeline/qualitativeJobFollowups";
+import { recordQualitativeJobUsage } from "@/lib/pipeline/qualitativeJobUsage";
 import type { ClaudeUsageRecord } from "@/lib/claudeUsage";
 
 // 한 호출은 Stage1 또는 Stage2 하나만 처리한다. Vercel의 요청 제한보다 작은 작업 단위다.
 export const maxDuration = 300;
+
+async function runStage1(job: QualitativeJobRow, item: QualitativeJobItemRow) {
+  // 작업 등록과 실행은 같은 문항 추출 경로를 사용해야 한다.
+  const source = await loadQuestionSpecs(job.file_url, null);
+  if (!source.ok) throw new Error(source.error);
+  const spec = source.specs.find((candidate) => candidate.id === item.question_key);
+  if (!spec) throw new Error(`원본 raw data에서 ${item.question_key} 문항을 찾지 못했습니다.`);
+
+  const usages: ClaudeUsageRecord[] = [];
+  const checkpoint = await runQualitativeStage1(spec, { onUsage: (usage) => usages.push(usage) });
+  await recordQualitativeJobUsage({
+    jobId: job.id, itemId: item.id, phase: "stage1", usages,
+    errorLabel: "[qualitative-job] Stage1 사용량 저장 실패",
+  });
+  await completeQualitativeJobStage1(item.id, checkpoint);
+  return { ok: true, item: { id: item.id, questionKey: item.question_key, phase: "stage1", nextPhase: "stage2" } };
+}
+
+async function runStage2(job: QualitativeJobRow, item: QualitativeJobItemRow) {
+  if (!item.checkpoint) throw new Error("Stage2 실행에 필요한 Stage1 체크포인트가 없습니다.");
+  const result = await runQualitativeStage2(item.checkpoint);
+  await saveQualitativeQuestionResult(job.report_id, result);
+
+  // 문항 요약 실패는 이미 생성된 정성 분석을 취소하지 않는다.
+  try {
+    await runPolaritySummariesForQuestion(job.report_id, result.id);
+  } catch (error) {
+    console.warn(`[qualitative-job] ${result.id} 응답 요약 생성 건너뜀:`, error instanceof Error ? error.message : error);
+  }
+  await completeQualitativeJobItem(item.id);
+
+  // 작업 전체가 완료된 마지막 Stage2에서만 보고서 후속 생성을 실행한다.
+  const completedJob = await getQualitativeJob(job.id);
+  const sectionAnalyses = completedJob?.status === "completed"
+    ? await runCompletedJobFollowups(job)
+    : { status: "skipped" as const };
+  return {
+    ok: true,
+    item: { id: item.id, questionKey: item.question_key, phase: "stage2", completed: true },
+    sectionAnalyses,
+  };
+}
 
 export async function POST(_request: Request, context: RouteContext<"/api/qualitative-jobs/[jobId]/run-next">) {
   const { jobId } = await context.params;
@@ -42,235 +73,8 @@ export async function POST(_request: Request, context: RouteContext<"/api/qualit
   if (!item) return NextResponse.json({ job, message: "현재 처리할 문항이 없습니다. 다른 작업자가 처리 중일 수 있습니다." });
 
   try {
-    if (item.phase === "stage1") {
-      // 문항 추출 경로는 작업 등록과 **같은 자리**를 쓴다(lib/pipeline/questionSource.ts) —
-      // 등록과 실행이 다른 방식으로 뽑으면 실행이 문항을 못 찾아 작업이 통째로 막힌다.
-      const source = await loadQuestionSpecs(job.file_url, null);
-      if (!source.ok) throw new Error(source.error);
-      const spec = source.specs.find((candidate) => candidate.id === item.question_key);
-      if (!spec) throw new Error(`원본 raw data에서 ${item.question_key} 문항을 찾지 못했습니다.`);
-      const usages: ClaudeUsageRecord[] = [];
-      const checkpoint = await runQualitativeStage1(spec, { onUsage: (usage) => usages.push(usage) });
-      // 사용량 저장 실패가 이미 성공한 분석 결과를 다시 API 호출하게 만들어서는 안 된다.
-      // 따라서 로그만 남기고, 정성 결과 완료 자체는 보장한다.
-      try {
-        await Promise.all(usages.map((usage) => saveQualitativeJobUsage({
-          jobId,
-          itemId: item.id,
-          phase: "stage1",
-          usage,
-        })));
-      } catch (usageError) {
-        console.error("[qualitative-job] Stage1 사용량 저장 실패", usageError);
-      }
-      await completeQualitativeJobStage1(item.id, checkpoint);
-      return NextResponse.json({ ok: true, item: { id: item.id, questionKey: item.question_key, phase: "stage1", nextPhase: "stage2" } });
-    }
-
-    if (!item.checkpoint) throw new Error("Stage2 실행에 필요한 Stage1 체크포인트가 없습니다.");
-    const result = await runQualitativeStage2(item.checkpoint as QualitativeStage1Checkpoint);
-    await saveQualitativeQuestionResult(job.report_id, result);
-    // 문항별 '응답 요약'(긍정·부정·중립 총평 / 4대 가치 요약)을 그 문항 분석 직후 만든다. 예전엔 담당자가
-    // 문항마다 'AI 요약 생성'을 눌러야 했고, 안 누르면 보고서 칸이 비어 나갔다(2026-10-26 케어클 8곳).
-    // 마지막 단계에 몰아 만들면 300초 제한에 걸릴 수 있어 문항마다 나눠 둔다. 실패해도 분석 결과는 지킨다.
-    try {
-      await runPolaritySummariesForQuestion(job.report_id, result.id);
-    } catch (summaryError) {
-      console.warn(`[qualitative-job] ${result.id} 응답 요약 생성 건너뜀:`, summaryError instanceof Error ? summaryError.message : summaryError);
-    }
-    await completeQualitativeJobItem(item.id);
-
-    // 새 4개 섹션 분석은 정성 분석의 별도 기능이 아니라, 모든 문항 분석이 정상 저장된 뒤
-    // 이어지는 최종 결과 해석 단계다. 다만 기존 Stage1·Stage2 실패 결과를 덮거나, 실패
-    // 작업에 추가 비용을 발생시키지 않도록 작업 전체가 `completed`일 때만 실행한다.
-    // 한 작업의 마지막 Stage2만 이 조건을 만족하므로 중복 실행되지 않는다.
-    const completedJob = await getQualitativeJob(jobId);
-    let sectionAnalyses: { status: "skipped" | "completed" | "partial"; completed?: string[]; failed?: string[] } = {
-      status: "skipped",
-    };
-    if (completedJob?.status === "completed") {
-      // 이 후속 단계 실패는 이미 성공한 문항별 Stage1·Stage2 상태를 실패로 되돌리면 안 된다.
-      // 따라서 별도로 격리해 응답 메타데이터에만 남기고, 필요 시 이 단계만 재실행할 수 있게 한다.
-      try {
-        const report = await getReportById(job.report_id);
-        const base = report?.quant_stats && (report.product_type ?? detectProductType(report.quant_stats)) === "physical"
-          ? ["corePurchaseFactor"] as const
-          : ["featureExperience", "corePurchaseFactor", "fourValues", "fourValueItems", "uxQuality", "crossAnalysis"] as const;
-        // 경쟁재 표는 유사 서비스 서술 응답이 있을 때만 만든다 — 없으면 '실패'로 세지 않는다.
-        const requested = report?.quant_stats?.demographics.priorServiceDetail?.responses?.length
-          ? [...base, "competitorTable" as const]
-          : [...base];
-        const sectionUsages: ClaudeUsageRecord[] = [];
-        const sectionRunIds = new Map<string, string>();
-        const generated = await runSectionAnalysesForReport(job.report_id, {
-          concurrency: 2,
-          onUsage: (usage) => sectionUsages.push(usage),
-          // 내부 운영 이력: 사용자에게는 별도 카드/단계를 보이지 않지만, 4개 분석 각각의
-          // 시작·성공·실패와 소요 시간을 남겨 재현성 및 성능을 판단한다.
-          onSectionStart: async (key) => {
-            const run = await startQualitativeSectionAnalysisRun({
-              jobId,
-              reportId: job.report_id,
-              sectionKey: key,
-            });
-            sectionRunIds.set(key, run.id);
-          },
-          onSectionComplete: async (key) => {
-            const runId = sectionRunIds.get(key);
-            if (runId) await completeQualitativeSectionAnalysisRun(runId);
-          },
-          onSectionError: async (key, error) => {
-            const runId = sectionRunIds.get(key);
-            if (runId) await failQualitativeSectionAnalysisRun(
-              runId,
-              error instanceof Error ? error.message : String(error),
-            );
-          },
-        });
-        try {
-          await Promise.all(sectionUsages.map((usage) => saveQualitativeJobUsage({
-            jobId,
-            itemId: null,
-            phase: "section_analysis",
-            usage,
-          })));
-        } catch (usageError) {
-          console.error("[qualitative-job] 섹션 분석 사용량 저장 실패", usageError);
-        }
-        const completed = requested.filter((key) => Boolean(generated[key]));
-        const failed = requested.filter((key) => !generated[key]);
-        sectionAnalyses = { status: failed.length === 0 ? "completed" : "partial", completed, failed };
-
-        // Ⅸ.1 결과요약(result_summary)은 예전엔 PDF/DOCX 내보내기 시점에만 지연 생성·저장됐다
-        // (lib/pdf/assemble.ts 등) — 그래서 내보내기 전 웹뷰는 report.result_summary가 null이라
-        // conclusionEvidenceTableHtml의 규칙 기반 fallback 문구(예: "연령·성별별 차이는 교차
-        // 분석의 정량 차트와 표를 함께 참조합니다")만 보였다. 섹션 분석 직후 여기서 같이
-        // 생성·저장해 웹뷰도 내보내기 전에 실제 해석 문구를 볼 수 있게 한다. 실패해도 이미 저장된
-        // 섹션 분석 상태(sectionAnalyses)는 되돌리지 않도록 별도 try/catch로 격리한다.
-        if (report?.quant_stats) {
-          try {
-            const qualitativeForSummary = await getQuestionsWithAllCategories(job.report_id);
-            const summaryUsages: ClaudeUsageRecord[] = [];
-            const summaryStartedAt = Date.now();
-            const resultSummary = await runResultSummary({
-              quantStats: report.quant_stats,
-              qualitative: qualitativeForSummary,
-              sectionAnalyses: generated,
-              productType: report.product_type ?? detectProductType(report.quant_stats),
-              onUsage: (usage) => summaryUsages.push(toClaudeUsageRecord("result-summary", usage, {
-                elapsedMs: Date.now() - summaryStartedAt,
-                attempt: 1,
-              })),
-            });
-            await saveReportResultSummary(job.report_id, resultSummary);
-            try {
-              await Promise.all(summaryUsages.map((usage) => saveQualitativeJobUsage({
-                jobId,
-                itemId: null,
-                phase: "section_analysis",
-                usage,
-              })));
-            } catch (usageError) {
-              console.error("[qualitative-job] 결과요약 사용량 저장 실패", usageError);
-            }
-          } catch (summaryError) {
-            console.error("[qualitative-job] Ⅸ.1 결과요약 자동 생성 실패", summaryError);
-          }
-        }
-      } catch (sectionError) {
-        console.error("[qualitative-job] 섹션 분석 후속 단계 실패", sectionError);
-        sectionAnalyses = { status: "partial", completed: [], failed: ["section-analysis"] };
-      }
-
-      // Ⅸ.2 개선 전략 제언 · Ⅸ.3 기능별 고객 제언 종합 — 둘 다 이미 저장된 정량+정성 결과만
-      // 재료로 쓰므로(2026-07-30 신규), 위 섹션 분석과 마찬가지로 실패해도 Stage1·Stage2 상태를
-      // 되돌리지 않도록 별도로 격리한다. 체크포인트 B 대상②라 초안 상태로 저장될 뿐, 승인 전엔
-      // 최종 문서에 반영되지 않는다(assembleReport의 게이트가 그대로 지킨다).
-      try {
-        const report = await getReportById(job.report_id);
-        if (report?.quant_stats) {
-          const qualitative = await getQuestionsWithAllCategories(job.report_id);
-          const productType = report.product_type ?? detectProductType(report.quant_stats);
-          const recUsages: ClaudeUsageRecord[] = [];
-
-          // Promise.all은 한쪽이 스키마 검증 실패 등으로 reject하면 이미 성공해 비용을 지불한
-          // 다른 쪽 결과까지 버린다(2026-07-30 실측 — Ⅸ.3 스키마 실패로 Ⅸ.2가 저장 전에 유실됨).
-          // allSettled로 서로 독립적으로 저장해, 한쪽이 실패해도 다른 쪽 결과는 지킨다.
-          // 2026-08-03: "기능 개선 제안"(feature_improvement:*)도 여기서 같이 자동 생성한다 —
-          // 예전엔 사용자가 채팅에서 기능마다 개별 요청해야만 채워졌는데, 원본 보고서는 이
-          // 항목이 항상 채워져 있어야 한다(담당자 요청). runAllFeatureImprovementRecommendations는
-          // 내부적으로 기능별 allSettled를 이미 하므로 절대 reject하지 않는다.
-          // 2026-08-04: "응답 요약"(긍정/부정/중립 총평, 극성 요약)도 같은 배치에 추가했다 —
-          // 문항당 1회 호출로 줄어든 뒤(예전엔 최대 3회) 실측 시간·비용이 안전한 수준으로
-          // 확인돼(13문항·동시성2 기준 약 80초·$0.14) 자동화했다(lib/pipeline/
-          // generatePolaritySummaries.ts 상단 주석 참고). runPolaritySummariesForReport는
-          // 문항별 try/catch로 이미 격리돼 있어 이 배열 안에서도 절대 reject하지 않는다.
-          const [devPriorityResult, featureCustomerResult, featureImprovementResults, polaritySummaryResult] = await Promise.allSettled([
-            runDevPriorityRecommendation(report.quant_stats, qualitative, productType, (u) => recUsages.push(u)),
-            runFeatureCustomerRecommendations(report.quant_stats, qualitative, (u) => recUsages.push(u)),
-            runAllFeatureImprovementRecommendations(report.quant_stats, qualitative, (u) => recUsages.push(u)),
-            runPolaritySummariesForReport(job.report_id, (u) => recUsages.push(u)),
-          ]);
-
-          if (devPriorityResult.status === "fulfilled") {
-            const { devPriority, overallDirection } = devPriorityResult.value;
-            await Promise.all([
-              saveRecommendation({
-                reportId: job.report_id,
-                section: "dev_priority",
-                draft: combineDevPriorityText(overallDirection, devPriority),
-              }),
-              saveRecommendation({ reportId: job.report_id, section: "overall_direction", draft: overallDirection }),
-            ]);
-          } else {
-            console.error("[qualitative-job] Ⅸ.2 개발우선순위제언 생성 실패", devPriorityResult.reason);
-          }
-          if (featureCustomerResult.status === "fulfilled") {
-            await saveRecommendation({
-              reportId: job.report_id,
-              section: "feature_customer_recommendations",
-              draft: JSON.stringify(featureCustomerResult.value),
-            });
-          } else {
-            console.error("[qualitative-job] Ⅸ.3 기능별 고객 제언 종합 생성 실패", featureCustomerResult.reason);
-          }
-          if (featureImprovementResults.status === "fulfilled") {
-            await Promise.all(featureImprovementResults.value.map(({ featureName, draft }) =>
-              saveRecommendation({ reportId: job.report_id, section: `feature_improvement:${featureName}`, draft }),
-            ));
-          } else {
-            console.error("[qualitative-job] Ⅸ.2 기능 개선 제안 자동 생성 실패", featureImprovementResults.reason);
-          }
-          // runPolaritySummariesForReport는 문항별로 saveQuestionPolaritySummaries를 내부에서
-          // 직접 호출하므로(위 세 항목과 달리 draft 저장을 여기서 또 할 필요 없음), 여기서는
-          // 결과 로그만 남긴다.
-          if (polaritySummaryResult.status === "fulfilled") {
-            console.info("[qualitative-job] 응답 요약 자동 생성 완료", polaritySummaryResult.value);
-          } else {
-            console.error("[qualitative-job] 응답 요약 자동 생성 실패", polaritySummaryResult.reason);
-          }
-
-          try {
-            await Promise.all(recUsages.map((usage) => saveQualitativeJobUsage({
-              jobId,
-              itemId: null,
-              phase: "section_analysis",
-              usage,
-            })));
-          } catch (usageError) {
-            console.error("[qualitative-job] Ⅸ.2/Ⅸ.3 사용량 저장 실패", usageError);
-          }
-        }
-      } catch (recommendationError) {
-        console.error("[qualitative-job] Ⅸ.2/Ⅸ.3 자동 생성 실패", recommendationError);
-      }
-    }
-
-    return NextResponse.json({
-      ok: true,
-      item: { id: item.id, questionKey: item.question_key, phase: "stage2", completed: true },
-      sectionAnalyses,
-    });
+    const response = item.phase === "stage1" ? await runStage1(job, item) : await runStage2(job, item);
+    return NextResponse.json(response);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await failQualitativeJobItem(item.id, message);
